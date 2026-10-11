@@ -1,60 +1,53 @@
 # 🚀 Deploy MedRep Connect Pro — Step-by-Step Guide
 
-The app builds to a pure static bundle (`dist/`) — HTML + JS + CSS + PWA files.
-It runs on **any** static host. The build uses relative paths (`base: './'`),
-so it works at a domain root OR in a sub-folder.
+The app builds to a pure static bundle (`dist/`) — HTML, JavaScript, CSS, and
+PWA files. It runs on any static host. The build uses relative paths
+(`base: './'`), so it works at a domain root or in a sub-folder.
 
 ---
 
-## Option A — GitHub Pages (free, recommended)
+## Primary deployment — Netlify
 
-A ready workflow is included: `.github/workflows/deploy.yml`.
-It builds and publishes the site **automatically on every push to `main`**.
+Netlify is the production host for this app. The live site is
+[https://medrepjob.netlify.app](https://medrepjob.netlify.app), deployed from
+`main`. The repository's `netlify.toml` already sets the build command to
+`npm run build`, the publish directory to `dist`, and Node.js to version 22.
 
-### One-time setup (2 minutes)
+### Connect or verify the Netlify site
 
-1. Push this repository to GitHub (`Divakara99/Medrep-connect-pro`).
-2. On GitHub: **Settings → Pages → Build and deployment → Source: “GitHub Actions”**.
-3. Push anything to `main` (or run the workflow manually:
-   **Actions tab → “Deploy to GitHub Pages” → Run workflow**).
-4. After ~1 minute your app is live at:
-   **https://divakara99.github.io/Medrep-connect-pro/**
+1. In the Netlify dashboard, open the site for MedRep Connect Pro (or choose
+   **Add new site → Import an existing project** and select
+   `Divakara99/Medrep-connect-pro`).
+2. Set the production branch to `main`.
+3. Confirm the build command is `npm run build` and the publish directory is
+   `dist` (these are already configured in `netlify.toml`).
+4. Netlify builds and deploys each new commit to `main`. Use the site's
+   **Deploys → Trigger deploy** action to redeploy manually if needed.
 
-The same page is a full PWA — users can tap **Install app** in Chrome and it runs
-like a native installed app on Android/desktop.
+The GitHub Actions workflow in `.github/workflows/ci.yml` only checks pull
+requests and pushes to `main`; it does not deploy the site.
 
-### Custom domain (optional)
-
-**Settings → Pages → Custom domain** → enter e.g. `medrepconnect.in`,
-then point your DNS (CNAME record) to `divakara99.github.io`. HTTPS is automatic.
-
----
-
-## Option B — Netlify (free, drag & drop)
-
-1. Run `npm run build` locally (or let Netlify build it).
-2. Go to <https://app.netlify.com> → **Add new site → Deploy manually**.
-3. **Drag the `dist` folder** into the drop zone. Live in seconds.
-4. (Better long-term) **Import from GitHub** and set:
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-   Then every push to `main` auto-deploys.
+For a one-off manual Netlify deploy, run `npm run build`, then drag the
+resulting `dist` folder into Netlify's manual deploy area. For regular
+production updates, keep the GitHub integration connected so deploys follow
+`main` automatically.
 
 ---
 
-## Option C — Vercel (free)
+## Optional alternative — Vercel
 
-1. <https://vercel.com> → **Add New → Project** → import the GitHub repo.
-2. Vercel auto-detects Vite — just click **Deploy**.
-3. Every push to `main` auto-deploys. Free `*.vercel.app` domain included.
+1. Go to <https://vercel.com> → **Add New → Project** → import the GitHub repo.
+2. Vercel auto-detects Vite — click **Deploy**.
+3. Every push to `main` can auto-deploy. A free `*.vercel.app` domain is
+   included.
 
 ---
 
-## Option D — Any web server / shared hosting
+## Manual deployment to another static host
 
-1. `npm run build`
+1. Run `npm run build`.
 2. Upload the entire `dist/` folder to `public_html` (cPanel) or your server.
-3. That's it — no server code needed.
+3. No server code is needed.
 
 ---
 
@@ -67,15 +60,24 @@ npm run preview      # serves the exact production build
 
 ---
 
+## Secure Razorpay and UPI billing setup
+
+The browser only asks Supabase to create a server-priced order. Razorpay payment signatures and captured status are verified by Supabase Edge Functions before the server grants the selected plan's exact number of days. A renewal adds its validity after the current expiry. Checkout success on its own never activates access.
+
+1. In Supabase SQL Editor, run `supabase/schema.sql` first, then run [`supabase/payments.sql`](supabase/payments.sql). The second script adds the protected server payment ledger and an own-account subscription-expiry read policy without changing the existing mirror schema.
+2. In Supabase **Project Settings → Edge Functions → Secrets**, add `RAZORPAY_KEY_ID` (use the live key ID supplied for this merchant), `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, and `MERCHANT_UPI_VPA`. The private key secret and webhook secret belong only in Supabase's secure Edge Function secrets. Do not send them in chat or put them in the repository or a `VITE_*`/Netlify variable.
+3. Deploy these functions from the repository with the Supabase CLI: `create-razorpay-order`, `verify-razorpay-payment`, `razorpay-webhook`, `create-upi-intent`, `submit-upi-utr`, and `review-manual-upi-payment`. The webhook is the only function configured without JWT verification; it verifies Razorpay's webhook HMAC itself.
+4. In the Razorpay Dashboard, add the webhook URL `https://<project-ref>.supabase.co/functions/v1/razorpay-webhook` and subscribe to `payment.captured`. Set the webhook secret there to the same value saved as `RAZORPAY_WEBHOOK_SECRET` in Supabase.
+5. Test in Razorpay test mode first, including failed payments, captured payments, duplicate callbacks, and plan renewals. Only then switch the Supabase secrets to the live key pair and enable live payments.
+
+Razorpay checkout offers UPI along with the payment methods enabled on the merchant account. The separate direct-UPI option uses the configured merchant VPA and is intentionally **manual verification**: the user first opens a UPI app and pays, then returns to enter the UTR generated by the bank. The entry stays pending until an admin matches its UTR, amount, and date in the bank account and approves it in Admin → Payments. Never activate a direct-UPI submission from a typed UTR alone.
+
 ## ⚠️ Important notes
 
 - **Supabase Auth/RLS:** configure email/password Auth and allowed callback URLs, then run `supabase/schema.sql` before deployment. The app uses Supabase Auth tokens; RLS permits mirror access only to authenticated admins with trusted `app_metadata.role = 'admin'` (or `app_metadata.is_admin = true`). The schema removes legacy mirror policies and adds a database unique index for normalized Indian phone numbers.
-- **Public frontend configuration:** the Supabase URL and publishable/anon key are public and may be set as Netlify/GitHub build variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The app contains no service-role key. Existing localStorage accounts/passwords are not migrated; `mrc_users_v1` and the former local session are cleared on startup.
+- **Public frontend configuration:** the Supabase URL and publishable/anon key are public and may be set as Netlify build variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The app contains no service-role key. Existing localStorage accounts/passwords are not migrated; old account, demo subscription, simulated payment, and saved payment-method keys are cleared on startup.
 - **Admin setup and deletion:** create the owner account `akhildivakara@gmail.com` in **Authentication → Users** and run `supabase/schema.sql`; the script promotes that account via the trusted `raw_app_meta_data.role` claim and sets its display name (no password is stored in SQL or the repo — set it privately in Supabase Auth), then sign out/in. The script also drops and recreates the dashboard views so an older view shape cannot block a re-run with SQLSTATE `42P16`. Deploy `supabase/functions/admin-delete-user` with `supabase functions deploy admin-delete-user`. The Edge Function checks the caller's Auth JWT/role and reads `SUPABASE_SERVICE_ROLE_KEY` only server-side before deleting an Auth account; never put that secret in Netlify's `VITE_*` variables or the repository.
-- **Mirror behavior:** normal user sessions do not write admin-only mirror tables. Admin writes use the current Supabase Auth bearer token and are rechecked by RLS. Most product data and simulated checkout are still local-first; saved payment methods remain local and do not sync.
+- **Mirror behavior:** normal user sessions do not write admin-only mirror tables. Admin writes use the current Supabase Auth bearer token and are rechecked by RLS. Subscription payment records and paid plan expiry are stored server-side in Supabase; the browser cannot write payment status or activate access.
 - **Netlify:** `netlify.toml` specifies `npm run build` and `dist`. Connect the GitHub repo in Netlify for automatic deploys from `main`; a successful local build alone does not confirm a live Netlify deployment.
-- **Payments:** the Razorpay/UPI checkout is simulated. Wire real Razorpay keys
-  (admin → Payments → Add method) and their checkout SDK for production money.
-- **PWA install:** after deploy, open the site in Chrome on Android →
-  menu ⋮ → **Install app**. The app icon (`icon-512.png`) will appear on the
-  home screen.
+- **Payments:** follow the secure Razorpay/UPI setup below before accepting live payments. Never store Razorpay secrets in the frontend, Netlify `VITE_*` variables, or the repository.
+- **PWA install:** after deploy, open the site in Chrome on Android → menu ⋮ → **Install app**. The app icon (`icon-512.png`) will appear on the home screen.

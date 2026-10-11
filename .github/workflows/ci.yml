@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Supabase Edge Functions
+        run: >-
+          deno check --no-lock
+          supabase/functions/admin-delete-user/index.ts
+          supabase/functions/create-razorpay-order/index.ts
+          supabase/functions/verify-razorpay-payment/index.ts
+          supabase/functions/razorpay-webhook/index.ts
+          supabase/functions/create-upi-intent/index.ts
+          supabase/functions/submit-upi-utr/index.ts
+          supabase/functions/review-manual-upi-payment/index.ts

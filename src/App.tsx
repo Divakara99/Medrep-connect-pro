@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { LoginScreen } from './screens/LoginScreen'
+import { AdminLoginScreen } from './screens/AdminLoginScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { BottomNav, type UserTab } from './components/BottomNav'
 import { TopBar, Button, IconButton } from './components/ui'
@@ -16,10 +17,11 @@ import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { openApplication } from './data/apply'
 import { unreadCount } from './data/notifications'
 
-type View = 'login' | 'user' | 'admin'
+type View = 'login' | 'admin-login' | 'user' | 'admin'
 
 export default function App() {
-  const [view, setView] = useState<View>('login')
+  const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
+  const [view, setView] = useState<View>(adminPortal ? 'admin-login' : 'login')
   const [user, setUser] = useState<User | null>(null)
   const [tab, setTab] = useState<UserTab>('home')
   const [jobs, setJobs] = useState<Job[]>(getJobs)
@@ -33,19 +35,33 @@ export default function App() {
   const [recoveryMode, setRecoveryMode] = useState(false)
   void notifTick
 
-  function applyAuthSnapshot(snapshot: AuthSnapshot, resetTab = false) {
+  const applyAuthSnapshot = useCallback((snapshot: AuthSnapshot, resetTab = false) => {
     if (snapshot.session.kind === 'admin') {
-      setUser(null)
-      setView('admin')
+      if (adminPortal) {
+        setUser(null)
+        setView('admin')
+      } else {
+        setUser(null)
+        setView('login')
+        // An admin session must not open the admin console from the user route.
+        window.setTimeout(() => { void doLogout() }, 0)
+      }
     } else if (snapshot.session.kind === 'user' && snapshot.user) {
-      setUser(snapshot.user)
-      setView('user')
-      if (resetTab) setTab('home')
+      if (adminPortal) {
+        setUser(null)
+        setView('admin-login')
+        // User sessions are not carried into the restricted admin portal.
+        window.setTimeout(() => { void doLogout() }, 0)
+      } else {
+        setUser(snapshot.user)
+        setView('user')
+        if (resetTab) setTab('home')
+      }
     } else {
       setUser(null)
-      setView('login')
+      setView(adminPortal ? 'admin-login' : 'login')
     }
-  }
+  }, [adminPortal])
 
   // Restore and observe the Supabase Auth session; the former localStorage
   // session is intentionally ignored and cleared by the auth module.
@@ -56,13 +72,13 @@ export default function App() {
       if (event === 'PASSWORD_RECOVERY') {
         setRecoveryMode(true)
         setUser(null)
-        setView('login')
+        setView(adminPortal ? 'admin-login' : 'login')
         return
       }
       if (event === 'SIGNED_OUT') {
         setRecoveryMode(false)
         setUser(null)
-        setView('login')
+        setView(adminPortal ? 'admin-login' : 'login')
         return
       }
       if (event === 'USER_UPDATED') setRecoveryMode(false)
@@ -70,13 +86,13 @@ export default function App() {
     })
     void getAuthSnapshot()
       .then((snapshot) => { if (mounted) applyAuthSnapshot(snapshot) })
-      .catch(() => { if (mounted) setView('login') })
+      .catch(() => { if (mounted) setView(adminPortal ? 'admin-login' : 'login') })
 
     return () => {
       mounted = false
       unsubscribe()
     }
-  }, [])
+  }, [adminPortal, applyAuthSnapshot])
 
   const unlocked = isSubscribed(user)
 
@@ -89,7 +105,7 @@ export default function App() {
     setRecoveryMode(false)
     void getAuthSnapshot()
       .then((snapshot) => applyAuthSnapshot(snapshot, true))
-      .catch(() => setView('login'))
+      .catch(() => setView(adminPortal ? 'admin-login' : 'login'))
     setJobs(getJobs())
   }
 
@@ -97,7 +113,7 @@ export default function App() {
     await doLogout()
     setRecoveryMode(false)
     setUser(null)
-    setView('login')
+    setView(adminPortal ? 'admin-login' : 'login')
   }
 
   function openJob(j: Job) {
@@ -111,6 +127,10 @@ export default function App() {
 
   if (view === 'login') {
     return <LoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
+  }
+
+  if (view === 'admin-login') {
+    return <AdminLoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
   }
 
   if (view === 'admin') {
