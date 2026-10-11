@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Wordmark } from '../components/Logo'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
-import { getUsers } from '../data/auth'
+import { currentUser, deleteUserAccount, getUsers, refreshAdminUsers, type User } from '../data/auth'
 import {
   addJob,
   CATEGORIES,
@@ -47,11 +47,33 @@ const TABS: { id: AdminTab; label: string; icon: string }[] = [
 
 type UserFilter = 'all' | 'active' | 'free'
 
+function useCurrentTime() {
+  const [now, setNow] = useState(0)
+  useEffect(() => {
+    const refresh = () => setNow(Date.now())
+    const firstTick = window.setTimeout(refresh, 0)
+    const interval = window.setInterval(refresh, 60_000)
+    return () => {
+      window.clearTimeout(firstTick)
+      window.clearInterval(interval)
+    }
+  }, [])
+  return now
+}
+
 export function AdminScreen({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState<AdminTab>('dashboard')
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
   const [version, setVersion] = useState(0) // re-render trigger after mutations
   const bump = () => setVersion((v) => v + 1)
+
+  useEffect(() => {
+    let active = true
+    void refreshAdminUsers()
+      .then(() => { if (active) setVersion((v) => v + 1) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
 
   // Navigate between admin pages (used by the Dashboard monitor cards)
   function navigate(target: AdminTab, filter?: UserFilter) {
@@ -252,7 +274,7 @@ function ApplicationsTab() {
 
 // -------------------- Vacancies --------------------
 function VacanciesTab({ onMutate }: { onMutate: () => void }) {
-  const jobs = useMemo(() => sortedJobs(getJobs()), [onMutate])
+  const jobs = useMemo(() => sortedJobs(getJobs()), [])
   const [editing, setEditing] = useState<Job | null>(null)
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
@@ -311,7 +333,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
         ))}
       </div>
 
-      <VacancyForm job={editing} open={open} onClose={() => setOpen(false)} onSaved={onSaved} />
+      <VacancyForm key={editing?.id ?? 'new'} job={editing} open={open} onClose={() => setOpen(false)} onSaved={onSaved} />
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -342,21 +364,6 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
   const [experience, setExperience] = useState(job?.experience ?? '')
   const [description, setDescription] = useState(job?.description ?? '')
   const [pinned, setPinned] = useState(job?.pinned ?? false)
-
-  // Reset when job changes
-  useMemoReset(() => {
-    setTitle(job?.title ?? '')
-    setCompany(job?.company ?? '')
-    setManager(job?.manager ?? '')
-    setContact(job?.contact ?? '')
-    setManagerEmail(job?.managerEmail ?? '')
-    setLocation(job?.location ?? '')
-    setCategory(job?.category ?? 'MR')
-    setSalary(job?.salary ?? '')
-    setExperience(job?.experience ?? '')
-    setDescription(job?.description ?? '')
-    setPinned(job?.pinned ?? false)
-  }, [job?.id])
 
   function save() {
     if (!title || !company || !location) {
@@ -428,11 +435,6 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
       </div>
     </Modal>
   )
-}
-
-function useMemoReset(fn: () => void, deps: unknown[]) {
-  // Simple reset helper — runs when deps change
-  useMemo(fn, deps)
 }
 
 // -------------------- Plans --------------------
@@ -754,8 +756,37 @@ function TicketsTab({ onMutate }: { onMutate: () => void }) {
 
 // -------------------- Users --------------------
 function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: UserFilter) => void }) {
-  const all = getUsers()
-  const now = Date.now()
+  const [all, setAll] = useState<User[]>(getUsers)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [target, setTarget] = useState<User | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const currentAdminId = currentUser()?.id
+
+  const refreshList = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setAll(await refreshAdminUsers())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load account records.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void refreshAdminUsers()
+      .then((users) => { if (active) setAll(users) })
+      .catch((err: unknown) => {
+        if (active) setError(err instanceof Error ? err.message : 'Could not load account records.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const now = useCurrentTime()
   const users = all.filter((u) => {
     const active = u.subscribedUntil && u.subscribedUntil > now
     if (filter === 'active') return active
@@ -763,9 +794,31 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
     return true
   })
   const activeCount = all.filter((u) => u.subscribedUntil && u.subscribedUntil > now).length
+
+  async function confirmDelete() {
+    if (!target || deleting) return
+    setDeleting(true)
+    setError(null)
+    const result = await deleteUserAccount(target.id)
+    if (!result.ok) {
+      setError(result.error)
+      setDeleting(false)
+      return
+    }
+    setAll((current) => current.filter((user) => user.id !== target.id))
+    setTarget(null)
+    setDeleting(false)
+  }
+
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold text-slate-900">Registered users ({all.length})</h2>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-lg font-bold text-slate-900">Registered users ({all.length})</h2>
+        <Button variant="secondary" onClick={() => void refreshList()} disabled={loading}>
+          {loading ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </div>
+      {error && <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 ring-1 ring-red-200" role="alert">{error}</div>}
       <div className="flex gap-2 flex-wrap">
         {([['all', `All (${all.length})`], ['active', `Subscribers (${activeCount})`], ['free', `Free (${all.length - activeCount})`]] as const).map(([k, label]) => (
           <button
@@ -780,45 +833,68 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
           </button>
         ))}
       </div>
-      {users.length === 0 ? (
+      {loading && users.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-slate-500">Loading Supabase accounts…</Card>
+      ) : users.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500">No users in this filter.</Card>
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="bg-slate-50 text-slate-600 text-left">
-              <tr>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Phone</th>
-                <th className="px-3 py-2">Joined</th>
-                <th className="px-3 py-2">Subscription</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => {
-                const active = u.subscribedUntil && u.subscribedUntil > now
-                return (
-                  <tr key={u.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-medium text-slate-900">{u.name}</td>
-                    <td className="px-3 py-2 text-slate-700">{u.email}</td>
-                    <td className="px-3 py-2 text-slate-700">{u.phone || '—'}</td>
-                    <td className="px-3 py-2 text-slate-700">{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td className="px-3 py-2">
-                      {active ? (
-                        <Badge color="green">Active until {new Date(u.subscribedUntil!).toLocaleDateString()}</Badge>
-                      ) : (
-                        <Badge color="slate">Free</Badge>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+            <table className="w-full text-sm min-w-[720px]">
+              <thead className="bg-slate-50 text-slate-600 text-left">
+                <tr>
+                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Email</th>
+                  <th className="px-3 py-2">Phone</th>
+                  <th className="px-3 py-2">Joined</th>
+                  <th className="px-3 py-2">Subscription</th>
+                  <th className="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => {
+                  const active = u.subscribedUntil && u.subscribedUntil > now
+                  const protectedAccount = u.isAdmin || u.id === currentAdminId
+                  return (
+                    <tr key={u.id} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        {u.name}{u.isAdmin && <Badge color="red">Admin</Badge>}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{u.email}</td>
+                      <td className="px-3 py-2 text-slate-700">{u.phone || '—'}</td>
+                      <td className="px-3 py-2 text-slate-700">{new Date(u.createdAt).toLocaleDateString()}</td>
+                      <td className="px-3 py-2">
+                        {active ? (
+                          <Badge color="green">Active until {new Date(u.subscribedUntil!).toLocaleDateString()}</Badge>
+                        ) : (
+                          <Badge color="slate">Free</Badge>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {protectedAccount ? (
+                          <span className="text-xs text-slate-400">Protected</span>
+                        ) : (
+                          <Button variant="danger" className="px-3 py-1.5" onClick={() => setTarget(u)}>Delete</Button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
+      <ConfirmDialog
+        open={!!target}
+        title="Delete user account?"
+        message={target ? `Permanently delete ${target.name} (${target.email}) from Supabase Auth? They will no longer be able to sign in. This action cannot be undone.` : ''}
+        confirmLabel={deleting ? 'Deleting…' : 'Delete account'}
+        danger
+        onConfirm={() => { void confirmDelete() }}
+        onCancel={() => { if (!deleting) setTarget(null) }}
+      />
+      <p className="text-xs text-slate-500">Account deletion is handled by a server-side Supabase Edge Function. The browser never receives the service-role key.</p>
     </div>
   )
 }
@@ -831,13 +907,13 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
   const tickets = getTickets()
   const queue = getApplicationQueue()
 
-  const now = Date.now()
+  const now = useCurrentTime()
   const active = users.filter((u) => u.subscribedUntil && u.subscribedUntil > now)
   const free = users.filter((u) => !u.subscribedUntil || u.subscribedUntil <= now)
   const expiringSoon = active.filter((u) => u.subscribedUntil && u.subscribedUntil - now < 7 * 24 * 3600_000)
   const revenue = payments.filter((p) => p.status === 'success').reduce((s, p) => s + p.amount, 0)
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const newToday = users.filter((u) => u.createdAt >= today.getTime()).length
+  const todayStart = now ? new Date(now).setHours(0, 0, 0, 0) : 0
+  const newToday = users.filter((u) => u.createdAt >= todayStart).length
   const openTickets = tickets.filter((t) => t.status !== 'resolved').length
 
   return (
@@ -930,7 +1006,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
       <Card className="p-4 bg-gradient-to-br from-indigo-50 to-brand-50 ring-1 ring-brand-200 text-sm text-slate-700">
         <div className="font-bold text-slate-900 mb-1">☁️ Supabase write mirror</div>
         <p>
-          Local data stays the app's source of truth. New and updated records are mirrored to Supabase in the background; this is not a read sync or a migration of existing localStorage records. Apply <code className="text-xs bg-white px-1 rounded">supabase/schema.sql</code> in the Supabase SQL Editor to create the tables.
+          Most product data remains local-first. Selected Admin writes use the current Supabase Auth token and are checked again by RLS; ordinary user sessions cannot write these mirror tables. The registered-account list is read from the Auth-backed account table. Apply <code className="text-xs bg-white px-1 rounded">supabase/schema.sql</code> in the Supabase SQL Editor to configure the tables and policies.
         </p>
         <SupabaseSyncStatus />
       </Card>

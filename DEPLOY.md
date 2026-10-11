@@ -69,19 +69,11 @@ npm run preview      # serves the exact production build
 
 ## ⚠️ Important notes
 
-- **Supabase write mirror:** users/jobs/payments still live in each visitor's
-  browser `localStorage`; selected new and updated records are asynchronously
-  mirrored to the configured Supabase project. The app does not read remote data
-  back or migrate existing localStorage records. The default project URL and
-  public publishable/anon key are configured in `src/data/supabase.ts`; set
-  `VITE_SUPABASE_URL` and/or `VITE_SUPABASE_ANON_KEY` in your host's build
-  environment to override them. Run `supabase/schema.sql` in the Supabase SQL
-  Editor before deployment. The admin dashboard cloud card reports mirror status.
-- **Supabase security:** the provided schema grants `anon` and `authenticated`
-  full access to these tables so browser upserts work. The anon key is public in
-  the client bundle, so do not mirror private/production data with those policies;
-  tighten RLS and authorization rules first. Local plaintext passwords and saved
-  payment methods are excluded from the mirror.
+- **Supabase Auth/RLS:** configure email/password Auth and allowed callback URLs, then run `supabase/schema.sql` before deployment. The app uses Supabase Auth tokens; RLS permits mirror access only to authenticated admins with trusted `app_metadata.role = 'admin'` (or `app_metadata.is_admin = true`). The schema removes legacy mirror policies and adds a database unique index for normalized Indian phone numbers.
+- **Public frontend configuration:** the Supabase URL and publishable/anon key are public and may be set as Netlify/GitHub build variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The app contains no service-role key. Existing localStorage accounts/passwords are not migrated; `mrc_users_v1` and the former local session are cleared on startup.
+- **Admin setup and deletion:** create an Auth user, set the trusted `raw_app_meta_data.role` claim through the SQL Editor or another trusted admin tool, then sign out/in. Deploy `supabase/functions/admin-delete-user` with `supabase functions deploy admin-delete-user`. The Edge Function checks the caller's Auth JWT/role and reads `SUPABASE_SERVICE_ROLE_KEY` only server-side before deleting an Auth account; never put that secret in Netlify's `VITE_*` variables or the repository.
+- **Mirror behavior:** normal user sessions do not write admin-only mirror tables. Admin writes use the current Supabase Auth bearer token and are rechecked by RLS. Most product data and simulated checkout are still local-first; saved payment methods remain local and do not sync.
+- **Netlify:** `netlify.toml` specifies `npm run build` and `dist`. Connect the GitHub repo in Netlify for automatic deploys from `main`; a successful local build alone does not confirm a live Netlify deployment.
 - **Payments:** the Razorpay/UPI checkout is simulated. Wire real Razorpay keys
   (admin → Payments → Add method) and their checkout SDK for production money.
 - **PWA install:** after deploy, open the site in Chrome on Android →

@@ -1,15 +1,28 @@
+import { createClient, type User as SupabaseUser } from '@supabase/supabase-js'
+
 /**
- * Write-only Supabase mirror for records stored in localStorage.
- *
- * Vite variables override the project's public defaults at build time. The
- * publishable/anon key is intended for browser use; never put a service-role
- * key here.
+ * Public browser configuration. The publishable/anon key is expected to be in
+ * the bundle; RLS is the security boundary. Never add a service-role key here.
  */
 const DEFAULT_SUPABASE_URL = 'https://lmhmbrusjizncumrufsx.supabase.co'
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4uiy6UZHkIjzAZssMfLWKQ_TwG6x7fC'
 
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL).replace(/\/+$/, '')
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_ANON_KEY
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    persistSession: true,
+    storageKey: 'mrc_supabase_auth_v1',
+  },
+})
+
+export function hasAdminRole(user: Pick<SupabaseUser, 'app_metadata'> | null | undefined): boolean {
+  const metadata = user?.app_metadata
+  return metadata?.role === 'admin' || metadata?.is_admin === true || metadata?.is_admin === 'true'
+}
 
 export type SupabaseSyncState = 'off' | 'idle' | 'ok' | 'error'
 
@@ -32,9 +45,14 @@ export function isSupabaseConfigured(): boolean {
   return SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY.length > 20
 }
 
-/** Insert or replace one mirrored row using its stable id. */
+/** Upsert a mirrored record using the current Supabase Auth session. */
 export async function syncToSupabase(table: string, row: Record<string, unknown>): Promise<boolean> {
   if (!isSupabaseConfigured()) return false
+
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  // The mirror is deliberately admin-only. Normal users keep personal/demo
+  // state on this device; their publishable key cannot write any mirror table.
+  if (sessionError || !session || !hasAdminRole(session.user)) return false
 
   const request = ++latestRequest
   lastAt = Date.now()
@@ -42,23 +60,16 @@ export async function syncToSupabase(table: string, row: Record<string, unknown>
   lastHttpStatus = null
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=id`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        Prefer: 'return=minimal,resolution=merge-duplicates',
-      },
-      body: JSON.stringify(row),
-    })
+    const { error, status } = await supabase
+      .from(table)
+      .upsert(row, { onConflict: 'id' })
 
     if (request === latestRequest) {
       lastAt = Date.now()
-      lastHttpStatus = response.status
-      syncState = response.ok ? 'ok' : 'error'
+      lastHttpStatus = error ? status : 200
+      syncState = error ? 'error' : 'ok'
     }
-    return response.ok
+    return !error
   } catch {
     if (request === latestRequest) {
       lastAt = Date.now()
@@ -70,8 +81,8 @@ export async function syncToSupabase(table: string, row: Record<string, unknown>
 }
 
 /**
- * Start a mirror write without blocking the local-first UI. The payload keeps
- * the record intact in `data` while the outer id is the table primary key.
+ * Admin-authenticated writes only. Supabase Auth supplies the bearer token to
+ * PostgREST; RLS independently verifies its trusted app_metadata role.
  */
 export function mirror<T extends { id: string }>(table: string, record: T): void {
   if (!isSupabaseConfigured()) return
