@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LoginScreen } from './screens/LoginScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { BottomNav, type UserTab } from './components/BottomNav'
@@ -10,7 +10,7 @@ import { PlansScreen } from './screens/PlansScreen'
 import { AccountScreen } from './screens/AccountScreen'
 import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
-import { currentUser, getSession, isSubscribed, logout as doLogout, type User } from './data/auth'
+import { currentUser, getAuthSnapshot, isSubscribed, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
 import { getJobs, type Job } from './data/jobs'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { openApplication } from './data/apply'
@@ -22,7 +22,7 @@ export default function App() {
   const [view, setView] = useState<View>('login')
   const [user, setUser] = useState<User | null>(null)
   const [tab, setTab] = useState<UserTab>('home')
-  const [jobs, setJobs] = useState<Job[]>([])
+  const [jobs, setJobs] = useState<Job[]>(getJobs)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [applyJob, setApplyJob] = useState<Job | null>(null)
   const [applyChannel, setApplyChannel] = useState<'email' | 'whatsapp'>('email')
@@ -30,51 +30,72 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifTick, setNotifTick] = useState(0)
-  const [tick, setTick] = useState(0) // refreshes UI after subscription change
+  const [recoveryMode, setRecoveryMode] = useState(false)
   void notifTick
 
-  // Initialize auth
-  useEffect(() => {
-    const s = getSession()
-    if (s.kind === 'admin') {
+  function applyAuthSnapshot(snapshot: AuthSnapshot, resetTab = false) {
+    if (snapshot.session.kind === 'admin') {
+      setUser(null)
       setView('admin')
-    } else if (s.kind === 'user') {
-      const u = currentUser()
-      if (u) {
-        setUser(u)
-        setView('user')
-      }
+    } else if (snapshot.session.kind === 'user' && snapshot.user) {
+      setUser(snapshot.user)
+      setView('user')
+      if (resetTab) setTab('home')
     } else {
+      setUser(null)
       setView('login')
     }
-    setJobs(getJobs())
+  }
+
+  // Restore and observe the Supabase Auth session; the former localStorage
+  // session is intentionally ignored and cleared by the auth module.
+  useEffect(() => {
+    let mounted = true
+    const unsubscribe = onAuthStateChange((event, snapshot) => {
+      if (!mounted) return
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryMode(true)
+        setUser(null)
+        setView('login')
+        return
+      }
+      if (event === 'SIGNED_OUT') {
+        setRecoveryMode(false)
+        setUser(null)
+        setView('login')
+        return
+      }
+      if (event === 'USER_UPDATED') setRecoveryMode(false)
+      applyAuthSnapshot(snapshot, event === 'SIGNED_IN')
+    })
+    void getAuthSnapshot()
+      .then((snapshot) => { if (mounted) applyAuthSnapshot(snapshot) })
+      .catch(() => { if (mounted) setView('login') })
+
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
   }, [])
 
-  const unlocked = useMemo(() => isSubscribed(user), [user, tick])
+  const unlocked = isSubscribed(user)
 
   function refreshUser() {
     const u = currentUser()
-    if (u) setUser(u)
-    setTick((t) => t + 1)
+    if (u) setUser({ ...u })
   }
 
   function onAuthed() {
-    const s = getSession()
-    if (s.kind === 'admin') {
-      setView('admin')
-    } else {
-      const u = currentUser()
-      if (u) {
-        setUser(u)
-        setView('user')
-        setTab('home')
-      }
-    }
+    setRecoveryMode(false)
+    void getAuthSnapshot()
+      .then((snapshot) => applyAuthSnapshot(snapshot, true))
+      .catch(() => setView('login'))
     setJobs(getJobs())
   }
 
-  function onLogout() {
-    doLogout()
+  async function onLogout() {
+    await doLogout()
+    setRecoveryMode(false)
     setUser(null)
     setView('login')
   }
@@ -89,7 +110,7 @@ export default function App() {
   }
 
   if (view === 'login') {
-    return <LoginScreen onAuthed={onAuthed} />
+    return <LoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
   }
 
   if (view === 'admin') {

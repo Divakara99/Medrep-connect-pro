@@ -9,18 +9,14 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Vite 8** (dev server, build)
 - **Tailwind CSS 4** (via `@tailwindcss/vite`)
 - Single-file PWA (`manifest.json` + `sw.js`)
-- `localStorage` source of truth with a write-only Supabase mirror for selected records
+- Supabase Auth for account identity and sessions
+- `localStorage` for device-local demo/app state, with an admin-authenticated Supabase mirror for selected records
 
 ## Auth
-- Login screen is shown first — no app content until signed in.
-- Users can **Create account**, **Sign in**, **Forgot password**, **Logout**.
-- **Admin secret:** tap the **MedRep logo 5 times** on the login screen → admin login.
-- No demo credentials published.
-
-**Admin credentials (admin-only, never shown to users):**
-- Email: `Akhildivakara@gmail.com`
-- Password: `9959827826Dd@`
-- Mobile: `9676728619` (admin panel only — no WhatsApp/calling from user app)
+- Supabase Auth provides account creation, sign-in, persisted sessions, email password recovery, and sign-out.
+- The former localStorage username/password store (which contained plaintext demo passwords) is removed on startup; old local demo accounts must be recreated or migrated out-of-band.
+- **Admin sign-in:** tap the **MedRep logo 5 times**, then sign in with a Supabase Auth account carrying the trusted `app_metadata.role = "admin"` claim. The app bundle contains no admin password, and user-editable metadata never grants admin access.
+- Admin accounts must be provisioned and promoted by a trusted Supabase administrator; see the Supabase setup below.
 
 ## User app
 - **Home** — search, filters, hero, MR-first feed, live stats.
@@ -43,7 +39,7 @@ Horizontally scrollable tabs: **Vacancies · Plans · Payments · Tickets · Use
 - **Plans** — edit titles, prices, taglines, popularity.
 - **Payments** — Razorpay key + webhook secret, UPI VPA; **Save → saved methods list** (Load / Default / Delete).
 - **Tickets** — AI-escaped and manual support tickets with replies & status.
-- **Users** — registered users list (no plaintext passwords surfaced).
+- **Users** — Auth-backed registered-user list; delete non-admin accounts through the verified server-side Edge Function (administrator accounts are protected).
 - **Profile** — frozen creator identity + hidden admin mobile.
 
 Only admin can post vacancies.
@@ -51,22 +47,40 @@ Only admin can post vacancies.
 ## Data (localStorage keys)
 | Concept | Key |
 | --- | --- |
-| Users / session | `mrc_users_v1`, `mrc_session_v1` |
+| Supabase Auth session | `mrc_supabase_auth_v1` (managed by Supabase Auth) |
+| Admin account cache / local demo entitlement | `mrc_admin_users_cache_v1`, `mrc_user_state_v1` |
 | Jobs | `mrc_jobs_v1` |
 | Plans | `mrc_plans_v1` |
 | Tickets | `mrc_tickets_v1` |
 | Payments + saved methods | `mrc_payments_v1`, `mrc_payment_methods_v1` |
 | User bios / profiles | `mrc_profiles_v1` |
 
-## Supabase mirror
+The obsolete `mrc_users_v1` and `mrc_session_v1` keys are deleted at startup; the old plaintext passwords are never imported into Supabase.
 
-The app remains local-first: it reads from `localStorage` and asynchronously mirrors selected writes to Supabase. The mirror does **not** import existing local data, read remote changes back into the app, or synchronize devices. Vacancy deletes are mirrored as `{ deleted: true, deletedAt }` tombstones; the local vacancy is removed immediately.
+## Supabase Auth and database security
 
-The default project is configured in `src/data/supabase.ts` with a browser-safe publishable/anon key. Build-time `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` values override those defaults. To set up the database, run [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor. The script creates the eight mirror tables, JSON-field indexes, permissive RLS policies, and `users_view`, `payments_view`, `vacancies_view`, and `applications_view`.
+Accounts and sessions use Supabase Auth (`@supabase/supabase-js`); localStorage is no longer an authentication source. The browser contains only the Supabase URL and publishable/anon key, which are public by design. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` override the public defaults in `src/data/supabase.ts` at build time.
 
-Writes mirrored include users (only `id`, `email`, `name`, `phone`, `createdAt`, `subscribedUntil`, `isAdmin`), profiles, vacancies, plans, payment records, support tickets, applications, and broadcast notifications. The local user's plaintext password and saved payment methods (which may contain gateway secrets) are never mirrored. The Admin dashboard's cloud card reports the last mirror result and points to the schema setup when the API responds with HTTP 404.
+### One-time Supabase setup
 
-> **Security:** the supplied schema intentionally grants `anon` and `authenticated` roles full access to mirror tables to support browser upserts. The anon key is public in the built bundle, so these policies also make mirrored data readable and writable to clients that can reach the project. Do not use this permissive setup for private/production data; restrict the policies and add suitable authentication/authorization before storing personal or financial information.
+1. In Supabase, enable email/password Auth and configure the app URL plus allowed redirect URLs for the production site and local development. Email confirmation can remain enabled; new users then verify before signing in.
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL Editor. It creates the Auth-backed `user_accounts` projection and existing mirror tables, adds database-enforced normalized Indian mobile uniqueness, installs the Auth sync trigger, and applies admin-only RLS. The script removes legacy policies on the eight mirror tables (including the old `mirror_all` policy) and creates policies for `authenticated` sessions whose **trusted** `app_metadata.role` is `admin` (or `app_metadata.is_admin` is `true`). It creates no `anon` policies. Account records are readable by admins but cannot be changed/deleted directly by browser clients.
+3. Create the administrator in **Authentication → Users**. Promote that account from the SQL Editor using trusted `app_metadata` (replace the address):
+
+   ```sql
+   UPDATE auth.users
+   SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
+   WHERE lower(email) = lower('admin@example.com');
+   ```
+
+   Then sign out and back in so the new role claim is present in the Auth token. Never put an admin password or service-role key in the frontend or `VITE_*` variables. Do not grant admin through `user_metadata`, which users can edit themselves.
+4. Deploy the account-deletion Edge Function from this repository with the Supabase CLI: `supabase functions deploy admin-delete-user`. The hosted function reads `SUPABASE_SERVICE_ROLE_KEY` only from its server environment. It verifies the caller's Auth JWT and protected admin claim, rejects self/admin deletion, and uses the Auth Admin API. Never commit or expose that key.
+
+The SQL normalizer treats `9876543210`, `09876543210`, and `+91 98765 43210` as the same phone number. A unique partial index is the enforcement point for signup and profile changes; browser checks are only validation. On account deletion, Supabase Auth deletes the account projection by foreign-key cascade and the trigger scrubs legacy identity/profile mirror rows.
+
+The app's other job, plan, payment, ticket, application, and notification data still has the existing local-first/demo behavior. Selected mirror writes are sent only while a Supabase Auth session has the trusted admin role; ordinary user sessions cannot write the admin-only mirror and never fall back to anonymous writes. The account list is read from `user_accounts` under RLS. Saved payment methods (which may contain gateway secrets) remain local. The Admin dashboard's cloud card reports mirror request status.
+
+**Local-account migration:** existing `mrc_users_v1` entries contained plaintext passwords. The app deletes that key and the old `mrc_session_v1` on startup instead of trusting/importing them. Users must create Supabase Auth accounts; if existing account migration is required, do it through a controlled server-side import with a password-reset flow.
 
 ## Important source files
 ```
@@ -121,4 +135,4 @@ npm run preview  # preview production build
 
 ## Quick test paths
 1. **User:** Create account → Account shows **Job Seeker** → edit profile bio → browse (blurred jobs) → Plans → pay → unlock → Apply.
-2. **Admin:** Login screen → **tap logo 5×** → admin credentials → panel (payments save list, multi-category posting, scrollable tabs).
+2. **Admin:** Provision a Supabase Auth user with the trusted admin `app_metadata` claim → login screen → **tap logo 5×** → sign in → Admin panel (users, account deletion, payments, and scrollable tabs).

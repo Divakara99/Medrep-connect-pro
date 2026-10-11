@@ -38,7 +38,7 @@ export function AccountScreen({
         </div>
       </Card>
 
-      <ProfileEditor ref={editorRef} email={user.email} onSaved={() => onSubscribed({ ...user })} />
+      <ProfileEditor ref={editorRef} email={user.email} phone={user.phone} onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })} />
 
       {/* About card: same brand mark that ships as the PWA icon, plus the
           released version (package.json → build-time constant, never typed twice). */}

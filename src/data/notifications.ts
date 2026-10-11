@@ -1,5 +1,4 @@
 import { CREATOR } from './creator'
-import { getUsers, type User } from './auth'
 import { mirror } from './supabase'
 import { read, write } from './storage'
 
@@ -133,8 +132,6 @@ function generateCopy(ev: EventKind): { title: string; body: string } {
 
 export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' | string[]; type?: Notification['type']; meta?: Record<string, unknown> }): Notification {
   const copy = generateCopy(ev)
-  const users = getUsers()
-  const allEmails = users.map((u: User) => u.email.toLowerCase())
   const typeMap: Record<EventKind['kind'], Notification['type']> = {
     'job-posted': 'job',
     'job-edited': 'job',
@@ -161,7 +158,6 @@ export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' 
   mirror('notifications', notif)
   // Targeting is implicit since all users read the global feed; per-user read state
   // is stored separately.
-  void allEmails
   // Audible alert for every new notification
   playNotifSound()
   return notif

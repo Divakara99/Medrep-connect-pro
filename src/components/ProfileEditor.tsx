@@ -1,17 +1,22 @@
-import { forwardRef, useImperativeHandle, useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
 import { getProfile, newEducation, newExperience, saveProfile, type Education, type Experience, type Profile } from '../data/profile'
+import { updateCurrentPhone } from '../data/auth'
 
 export type ProfileEditorHandle = {
-  save: () => Profile
+  save: () => Promise<Profile | null>
 }
 
-export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; onSaved?: (p: Profile) => void }>(function ProfileEditor(
-  { email, onSaved },
+export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; phone?: string; onSaved?: (p: Profile) => void }>(function ProfileEditor(
+  { email, phone, onSaved },
   ref,
 ) {
-  const [p, setP] = useState<Profile>(() => getProfile(email))
+  const [p, setP] = useState<Profile>(() => {
+    const saved = getProfile(email)
+    return { ...saved, phone: saved.phone || phone }
+  })
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   function update(patch: Partial<Profile>) {
     setP((prev) => ({ ...prev, ...patch }))
@@ -37,16 +42,24 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; on
     update({ experience: p.experience.filter((e) => e.id !== id) })
   }
 
-  function save(): Profile {
-    const saved = saveProfile({ ...p, email })
+  const save = useCallback(async (): Promise<Profile | null> => {
+    setSaveError(null)
+    setSavedMsg(null)
+    const phoneResult = await updateCurrentPhone(p.phone)
+    if (!phoneResult.ok) {
+      setSaveError(phoneResult.error)
+      return null
+    }
+
+    const saved = saveProfile({ ...p, email, phone: phoneResult.phone })
     setP(saved)
     setSavedMsg('Profile saved.')
-    setTimeout(() => setSavedMsg(null), 1500)
+    setTimeout(() => setSavedMsg(null), 2000)
     onSaved?.(saved)
     return saved
-  }
+  }, [p, email, onSaved])
 
-  useImperativeHandle(ref, () => ({ save }), [p, email, onSaved])
+  useImperativeHandle(ref, () => ({ save }), [save])
 
   const split = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
   const join = (arr: string[] = []) => arr.join(', ')
@@ -163,6 +176,9 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; on
       </Card>
 
       {/* Inline save status message above the sticky bar */}
+      {saveError && (
+        <div className="text-center text-sm text-red-700 font-semibold py-1" role="alert">{saveError}</div>
+      )}
       {savedMsg && (
         <div className="text-center text-sm text-emerald-700 font-semibold py-1">{savedMsg}</div>
       )}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getDefaultPaymentMethod, getPaymentMethods, getPaymentsByUser, recordPayment, type PaymentMethod, type PaymentRecord } from '../data/payments'
 import { getPlans, type Plan } from '../data/plans'
-import { getUsers, isSubscribed, type User } from '../data/auth'
+import { currentUser, isSubscribed, type User } from '../data/auth'
 
 export function PlansScreen({
   user,
@@ -21,7 +21,7 @@ export function PlansScreen({
   const [success, setSuccess] = useState(false)
   const unlocked = isSubscribed(user)
   const activeUntil = user.subscribedUntil ? new Date(user.subscribedUntil).toLocaleDateString() : null
-  const myPayments = useMemo(() => getPaymentsByUser(user.id), [success])
+  const myPayments = getPaymentsByUser(user.id)
 
   function openCheckout(p: Plan) {
     setSelected(p)
@@ -47,7 +47,7 @@ export function PlansScreen({
         utr: utr.trim() || undefined,
       })
       // recordPayment already auto-activated the plan with the per-plan expiry.
-      const updated = getUsers().find((u) => u.id === user.id) ?? null
+      const updated = currentUser()
       setProcessing(false)
       setSuccess(true)
       if (updated) {

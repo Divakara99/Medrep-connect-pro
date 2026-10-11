@@ -6,7 +6,6 @@ import { CREATOR } from './creator'
  * dynamic user-facing text passes through `sanitizeSecrets()` first.
  */
 export const APP_SECRETS: string[] = [
-  CREATOR.adminPassword,
   CREATOR.adminMobile,
   CREATOR.adminEmail,
 ].filter(Boolean)
@@ -14,7 +13,6 @@ export const APP_SECRETS: string[] = [
 /** Also scrub digit-spaced variants of the admin mobile (e.g. 96767 28619). */
 const SECRET_PATTERNS: RegExp[] = [
   /96\s?76\s?72\s?86\s?19/g, // admin mobile, spaced or not
-  /9\s?9\s?5\s?9\s?8\s?2\s?7\s?8\s?2\s?6\s?[Dd]{1,2}\s?@?/g, // admin password, lightly spaced
 ]
 
 export function sanitizeSecrets(text: string): string {
@@ -33,7 +31,6 @@ const BENIGN_PASSWORD = /(forgot|reset|change|update|recover|set)\s+(my\s+)?(pas
 const GENERIC_CREDENTIAL = /password|passcode|passwd|credential/i
 const SECRET_PROBES: RegExp[] = [
   /96\s?76\s?72\s?86\s?19/,
-  /9\s?9\s?5\s?9\s?8\s?2\s?7/,
   /admin\s?(id|login|password|pass|number|mobile|phone|contact|email|panel|access)/i,
   /(password|number|mobile|phone|contact|email|login)\s?(of|for)\s?(the\s?)?admin/i,
   /who\s+(is|created|owns)\s+(the\s?)?(admin|owner)/i,

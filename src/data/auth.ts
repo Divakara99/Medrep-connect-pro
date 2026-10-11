@@ -1,7 +1,6 @@
-import { CREATOR } from './creator'
-import { broadcast } from './notifications'
-import { mirror } from './supabase'
-import { read, write } from './storage'
+import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
+import { mirror, hasAdminRole, supabase } from './supabase'
+import { read, remove, write } from './storage'
 
 export type User = {
   id: string
@@ -9,7 +8,7 @@ export type User = {
   name: string
   phone?: string
   createdAt: number
-  subscribedUntil?: number // epoch ms
+  subscribedUntil?: number // epoch ms; simulated plans remain device-local
   isAdmin?: boolean
 }
 
@@ -18,152 +17,338 @@ export type Session =
   | { kind: 'user'; userId: string }
   | { kind: 'admin' }
 
-const USERS_KEY = 'mrc_users_v1'
-const SESSION_KEY = 'mrc_session_v1'
+export type AuthSnapshot = { session: Session; user: User | null }
 
-// The local demo user also stores a plaintext password; only this explicit
-// field whitelist is ever copied to the remote mirror.
-function mirrorUser(user: User) {
-  mirror('users', {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    phone: user.phone,
-    createdAt: user.createdAt,
-    subscribedUntil: user.subscribedUntil,
-    isAdmin: user.isAdmin,
-  })
+const USERS_CACHE_KEY = 'mrc_admin_users_cache_v1'
+const USER_STATE_KEY = 'mrc_user_state_v1'
+const LEGACY_USERS_KEY = 'mrc_users_v1'
+const LEGACY_SESSION_KEY = 'mrc_session_v1'
+
+// Remove the former localStorage credentials/session immediately. Those demo
+// passwords were plaintext and are not a safe source for account migration.
+remove(LEGACY_USERS_KEY)
+remove(LEGACY_SESSION_KEY)
+
+let activeUser: User | null = null
+
+function normalizeLocalPhone(raw?: string | null): string | undefined {
+  if (!raw?.trim()) return undefined
+  const digits = raw.replace(/\D/g, '')
+  const local = digits.length === 14 && digits.startsWith('0091')
+    ? digits.slice(4)
+    : digits.length === 12 && digits.startsWith('91')
+      ? digits.slice(2)
+      : digits.length === 11 && digits.startsWith('0')
+        ? digits.slice(1)
+        : digits
+  return /^[6-9]\d{9}$/.test(local) ? local : undefined
 }
 
-function uid() {
-  return 'u_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+/** Canonical Indian mobile format used by the database's unique index. */
+export function normalizeIndianPhone(raw?: string | null): string | null {
+  if (!raw?.trim()) return null
+  return normalizeLocalPhone(raw) ?? null
+}
+
+function localUserState(): Record<string, { subscribedUntil?: number }> {
+  return read<Record<string, { subscribedUntil?: number }>>(USER_STATE_KEY, {})
+}
+
+function toUser(authUser: SupabaseUser): User {
+  const metadata = authUser.user_metadata ?? {}
+  const state = localUserState()[authUser.id]
+  const name = typeof metadata.name === 'string'
+    ? metadata.name
+    : typeof metadata.full_name === 'string'
+      ? metadata.full_name
+      : authUser.email?.split('@')[0] ?? 'Job Seeker'
+  const phone = typeof metadata.phone === 'string' ? normalizeLocalPhone(metadata.phone) : undefined
+
+  return {
+    id: authUser.id,
+    email: authUser.email ?? '',
+    name,
+    phone,
+    createdAt: authUser.created_at ? new Date(authUser.created_at).getTime() : Date.now(),
+    subscribedUntil: state?.subscribedUntil,
+    isAdmin: hasAdminRole(authUser),
+  }
+}
+
+function snapshotFromSession(session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']): AuthSnapshot {
+  if (!session?.user) {
+    activeUser = null
+    return { session: { kind: 'none' }, user: null }
+  }
+
+  const user = toUser(session.user)
+  activeUser = user
+  return {
+    session: user.isAdmin ? { kind: 'admin' } : { kind: 'user', userId: user.id },
+    user,
+  }
+}
+
+export async function getAuthSnapshot(): Promise<AuthSnapshot> {
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  return snapshotFromSession(data.session)
+}
+
+export function onAuthStateChange(
+  callback: (event: AuthChangeEvent, snapshot: AuthSnapshot) => void,
+): () => void {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const snapshot = snapshotFromSession(session)
+    callback(event, snapshot)
+  })
+  return () => subscription.unsubscribe()
 }
 
 export function getUsers(): User[] {
-  return read<User[]>(USERS_KEY, [])
+  return read<User[]>(USERS_CACHE_KEY, [])
 }
 
-export function getSession(): Session {
-  return read<Session>(SESSION_KEY, { kind: 'none' })
-}
+export async function refreshAdminUsers(): Promise<User[]> {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
+  if (!session || !hasAdminRole(session.user)) {
+    throw new Error('Only a signed-in administrator can view account records.')
+  }
 
-export function saveSession(s: Session) {
-  write(SESSION_KEY, s)
+  const { data, error } = await supabase
+    .from('user_accounts')
+    .select('user_id,email,name,phone,created_at,subscribed_until,is_admin')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+
+  type AccountRow = {
+    user_id: string
+    email: string
+    name: string
+    phone: string | null
+    created_at: string
+    subscribed_until: string | null
+    is_admin: boolean
+  }
+  const rows = (data ?? []) as unknown as AccountRow[]
+  const localState = localUserState()
+  const users = rows.map((row): User => ({
+    id: row.user_id,
+    email: row.email,
+    name: row.name,
+    phone: row.phone ?? undefined,
+    createdAt: new Date(row.created_at).getTime(),
+    subscribedUntil: row.subscribed_until
+      ? new Date(row.subscribed_until).getTime()
+      : localState[row.user_id]?.subscribedUntil,
+    isAdmin: row.is_admin,
+  }))
+  write(USERS_CACHE_KEY, users)
+  return users
 }
 
 export function findUserByEmail(email: string): User | undefined {
-  const e = email.trim().toLowerCase()
-  return getUsers().find((u) => u.email.toLowerCase() === e)
+  const normalizedEmail = email.trim().toLowerCase()
+  return getUsers().find((user) => user.email.toLowerCase() === normalizedEmail)
 }
 
-export function registerUser(input: {
+function authErrorMessage(message: string, hasPhone = false): string {
+  if (/user already registered|already been registered|email.*already|duplicate key.*email/i.test(message)) {
+    return 'An account with this email already exists. Sign in instead.'
+  }
+  if (/user_accounts_normalized_phone|normalized_phone|phone.*already|duplicate key/i.test(message)) {
+    return 'That mobile number is already registered. Use a different number or leave it blank.'
+  }
+  if (hasPhone && /database error (saving new user|updating user)|hook|trigger/i.test(message)) {
+    return 'The mobile number may already be registered or invalid. Check it and try again.'
+  }
+  return message
+}
+
+export async function registerUser(input: {
   name: string
   email: string
   phone?: string
   password: string
-}): { ok: true; user: User } | { ok: false; error: string } {
+}): Promise<{ ok: true; user: User; confirmationRequired: boolean } | { ok: false; error: string }> {
+  const name = input.name.trim()
   const email = input.email.trim().toLowerCase()
-  if (!email || !input.password || !input.name) {
+  const phone = normalizeIndianPhone(input.phone)
+  const hasPhone = Boolean(input.phone?.trim())
+
+  if (!name || !email || !input.password) {
     return { ok: false, error: 'Name, email and password are required.' }
   }
   if (input.password.length < 6) {
     return { ok: false, error: 'Password must be at least 6 characters.' }
   }
-  // Prevent regular registration with admin email.
-  if (email === CREATOR.adminEmail.toLowerCase()) {
-    return { ok: false, error: 'That email is reserved. Use admin login.' }
+  if (hasPhone && !phone) {
+    return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }
   }
-  if (findUserByEmail(email)) {
-    return { ok: false, error: 'An account with this email already exists.' }
-  }
-  // NOTE: In a real app, never store plaintext passwords. This is a local-only demo.
-  const user: User & { password?: string } = {
-    id: uid(),
+
+  const { data, error } = await supabase.auth.signUp({
     email,
-    name: input.name.trim(),
-    phone: input.phone?.trim(),
-    createdAt: Date.now(),
-  }
-  // We persist password ONLY because this is a local-storage demo without backend.
-  const users = getUsers()
-  users.push({ ...user, password: input.password } as User)
-  write(USERS_KEY, users)
-  mirrorUser(user)
-  saveSession({ kind: 'user', userId: user.id })
-  // Welcome notification — AI-generated from Mr. Divakar Reddy to the new user.
-  broadcast({ kind: 'welcome', userName: user.name }, { type: 'system' })
+    password: input.password,
+    options: {
+      data: { name, phone },
+    },
+  })
+  if (error) return { ok: false, error: authErrorMessage(error.message, hasPhone) }
+  if (!data.user) return { ok: false, error: 'Supabase Auth did not return an account. Please try again.' }
+
+  const user = toUser(data.user)
+  activeUser = data.session ? user : null
+  return { ok: true, user, confirmationRequired: !data.session }
+}
+
+export async function loginUser(
+  email: string,
+  password: string,
+): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  })
+  if (error) return { ok: false, error: authErrorMessage(error.message) }
+  if (!data.user) return { ok: false, error: 'Sign-in did not return an account. Please try again.' }
+
+  const user = toUser(data.user)
+  activeUser = user
   return { ok: true, user }
 }
 
-export function loginUser(
+export async function loginAdmin(
   email: string,
   password: string,
-): { ok: true; user: User } | { ok: false; error: string } {
-  const e = email.trim().toLowerCase()
-  const users = getUsers()
-  const u = users.find((x) => x.email.toLowerCase() === e) as
-    | (User & { password?: string })
-    | undefined
-  if (!u || u.password !== password) {
-    return { ok: false, error: 'Invalid email or password.' }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  })
+  if (error) return { ok: false, error: authErrorMessage(error.message) }
+  if (!data.user || !hasAdminRole(data.user)) {
+    await supabase.auth.signOut()
+    return { ok: false, error: 'This account is not an administrator.' }
   }
-  saveSession({ kind: 'user', userId: u.id })
-  return { ok: true, user: u }
-}
 
-export function loginAdmin(
-  email: string,
-  password: string,
-): { ok: true } | { ok: false; error: string } {
-  if (
-    email.trim().toLowerCase() === CREATOR.adminEmail.toLowerCase() &&
-    password === CREATOR.adminPassword
-  ) {
-    saveSession({ kind: 'admin' })
-    return { ok: true }
-  }
-  return { ok: false, error: 'Invalid admin credentials.' }
-}
-
-export function resetPassword(email: string, newPassword: string): { ok: true } | { ok: false; error: string } {
-  const e = email.trim().toLowerCase()
-  const users = getUsers()
-  const idx = users.findIndex((x) => x.email.toLowerCase() === e)
-  if (idx === -1) return { ok: false, error: 'No account found for that email.' }
-  if (newPassword.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
-  ;(users[idx] as User & { password?: string }).password = newPassword
-  write(USERS_KEY, users)
+  activeUser = toUser(data.user)
   return { ok: true }
 }
 
-export function logout() {
-  saveSession({ kind: 'none' })
+export async function resetPassword(email: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const redirectTo = `${window.location.origin}${window.location.pathname}`
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
 }
 
+export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (password.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+  const { data, error } = await supabase.auth.updateUser({ password })
+  if (error) return { ok: false, error: error.message }
+  if (data.user) activeUser = toUser(data.user)
+  return { ok: true }
+}
+
+/** Update Auth metadata so the database trigger can enforce phone uniqueness. */
+export async function updateCurrentPhone(
+  rawPhone?: string,
+): Promise<{ ok: true; phone?: string } | { ok: false; error: string }> {
+  const phone = normalizeIndianPhone(rawPhone)
+  if (rawPhone?.trim() && !phone) {
+    return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }
+  }
+
+  const { data, error } = await supabase.auth.updateUser({ data: { phone } })
+  if (error) return { ok: false, error: authErrorMessage(error.message, Boolean(rawPhone?.trim())) }
+  if (data.user) activeUser = toUser(data.user)
+  return { ok: true, phone: phone ?? undefined }
+}
+
+export async function deleteUserAccount(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError) return { ok: false, error: sessionError.message }
+  if (!session || !hasAdminRole(session.user)) {
+    return { ok: false, error: 'Only a signed-in administrator can delete accounts.' }
+  }
+  if (userId === session.user.id) {
+    return { ok: false, error: 'You cannot delete the active administrator account.' }
+  }
+
+  const { error } = await supabase.functions.invoke('admin-delete-user', {
+    body: { userId },
+  })
+  if (error) {
+    const context = (error as Error & { context?: unknown }).context
+    if (context instanceof Response) {
+      try {
+        const payload = await context.clone().json() as { error?: string }
+        if (payload.error) return { ok: false, error: payload.error }
+      } catch {
+        // Keep the SDK's message when the function response is not JSON.
+      }
+    }
+    return { ok: false, error: error.message }
+  }
+
+  write(USERS_CACHE_KEY, getUsers().filter((user) => user.id !== userId))
+  return { ok: true }
+}
+
+export async function logout(): Promise<void> {
+  activeUser = null
+  remove(USERS_CACHE_KEY)
+  await supabase.auth.signOut()
+}
+
+/** The current session user, refreshed by Auth events and getAuthSnapshot(). */
 export function currentUser(): User | null {
-  const s = getSession()
-  if (s.kind !== 'user') return null
-  const users = getUsers()
-  return users.find((u) => u.id === s.userId) ?? null
+  return activeUser
 }
 
-export function updateUser(userId: string, patch: Partial<User>) {
-  const users = getUsers()
-  const idx = users.findIndex((u) => u.id === userId)
-  if (idx === -1) return null
-  users[idx] = { ...users[idx], ...patch }
-  write(USERS_KEY, users)
-  mirrorUser(users[idx])
-  return users[idx]
+export function updateUser(userId: string, patch: Partial<User>): User | null {
+  const cachedUsers = getUsers()
+  const fromSession = activeUser?.id === userId
+  const existing = fromSession ? activeUser : cachedUsers.find((user) => user.id === userId)
+  if (!existing) return null
+
+  const updated = { ...existing, ...patch, id: existing.id, email: existing.email }
+  if (patch.subscribedUntil !== undefined) {
+    const state = localUserState()
+    state[userId] = { ...state[userId], subscribedUntil: patch.subscribedUntil }
+    write(USER_STATE_KEY, state)
+  }
+  if (fromSession) activeUser = updated
+
+  const index = cachedUsers.findIndex((user) => user.id === userId)
+  if (index >= 0) {
+    cachedUsers[index] = updated
+    write(USERS_CACHE_KEY, cachedUsers)
+  }
+
+  // Only an administrator may update the old general-purpose mirror table;
+  // syncToSupabase repeats the role check before every request.
+  if (updated.isAdmin) {
+    mirror('users', {
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      phone: updated.phone,
+      createdAt: updated.createdAt,
+      subscribedUntil: updated.subscribedUntil,
+      isAdmin: updated.isAdmin,
+    })
+  }
+  return updated
 }
 
-export function subscribeUser(userId: string, days: number) {
+export function subscribeUser(userId: string, days: number): User | null {
   const until = Date.now() + days * 24 * 60 * 60 * 1000
   return updateUser(userId, { subscribedUntil: until })
 }
 
-export function isSubscribed(u: User | null | undefined): boolean {
-  if (!u) return false
-  if (!u.subscribedUntil) return false
-  return u.subscribedUntil > Date.now()
+export function isSubscribed(user: User | null | undefined): boolean {
+  if (!user?.subscribedUntil) return false
+  return user.subscribedUntil > Date.now()
 }

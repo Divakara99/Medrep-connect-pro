@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Input, Label } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
-import { loginAdmin, loginUser, registerUser, resetPassword } from '../data/auth'
+import { loginAdmin, loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 
-type Mode = 'signin' | 'signup' | 'forgot' | 'admin'
+type Mode = 'signin' | 'signup' | 'forgot' | 'admin' | 'update-password'
 
-export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
-  const [mode, setMode] = useState<Mode>('signin')
+export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () => void; recoveryMode?: boolean }) {
+  const [mode, setMode] = useState<Mode>(recoveryMode ? 'update-password' : 'signin')
   const [logoTaps, setLogoTaps] = useState(0)
   const tapTimer = useRef<number | null>(null)
 
@@ -29,6 +29,15 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
     clearFields()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (recoveryMode) {
+      setMode('update-password')
+      setError(null)
+      setSuccess(null)
+      setNewPassword('')
+    }
+  }, [recoveryMode])
 
   function clearFields() {
     setName('')
@@ -61,36 +70,46 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
     clearFields()
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setSuccess(null)
     setLoading(true)
 
-    setTimeout(() => {
+    try {
       if (mode === 'signup') {
-        const r = registerUser({ name, email, phone, password })
-        if (!r.ok) setError(r.error)
-        else onAuthed()
+        const result = await registerUser({ name, email, phone, password })
+        if (!result.ok) setError(result.error)
+        else if (result.confirmationRequired) {
+          setSuccess('Check your email for a confirmation link, then sign in.')
+          setPassword('')
+          setMode('signin')
+        } else onAuthed()
       } else if (mode === 'signin') {
-        const r = loginUser(email, password)
-        if (!r.ok) setError(r.error)
+        const result = await loginUser(email, password)
+        if (!result.ok) setError(result.error)
         else onAuthed()
       } else if (mode === 'admin') {
-        const r = loginAdmin(email, password)
-        if (!r.ok) setError(r.error)
+        const result = await loginAdmin(email, password)
+        if (!result.ok) setError(result.error)
         else onAuthed()
       } else if (mode === 'forgot') {
-        const r = resetPassword(email, newPassword)
-        if (!r.ok) setError(r.error)
+        const result = await resetPassword(email)
+        if (!result.ok) setError(result.error)
+        else setSuccess('If an account uses that email, password reset instructions have been sent.')
+      } else {
+        const result = await updatePassword(newPassword)
+        if (!result.ok) setError(result.error)
         else {
-          setSuccess('Password reset successfully (local demo). You can sign in now.')
-          setMode('signin')
-          setNewPassword('')
+          setSuccess('Password updated. Signing you in…')
+          onAuthed()
         }
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed. Please try again.')
+    } finally {
       setLoading(false)
-    }, 250)
+    }
   }
 
   return (
@@ -126,8 +145,9 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
                 {mode === 'signup' && 'Create your account'}
                 {mode === 'forgot' && 'Reset password'}
                 {mode === 'admin' && 'Admin sign in'}
+                {mode === 'update-password' && 'Choose a new password'}
               </h2>
-              {mode !== 'admin' && mode !== 'forgot' && (
+              {mode !== 'admin' && mode !== 'forgot' && mode !== 'update-password' && (
                 <button
                   type="button"
                   className="text-xs text-brand-600 font-semibold hover:underline"
@@ -146,20 +166,22 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name={mode === 'admin' ? 'ad_em' : 'us_em'}
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={mode === 'admin' ? 'Enter admin email' : 'you@example.com'}
-                  autoComplete="off"
-                  spellCheck={false}
-                  required
-                />
-              </div>
+              {mode !== 'update-password' && (
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name={mode === 'admin' ? 'ad_em' : 'us_em'}
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={mode === 'admin' ? 'Enter admin email' : 'you@example.com'}
+                    autoComplete="off"
+                    spellCheck={false}
+                    required
+                  />
+                </div>
+              )}
 
               {mode === 'signup' && (
                 <div>
@@ -168,7 +190,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
                 </div>
               )}
 
-              {mode !== 'forgot' && (
+              {mode !== 'forgot' && mode !== 'update-password' && (
                 <div>
                   <Label htmlFor="password">Password</Label>
                   <Input
@@ -178,16 +200,16 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="At least 6 characters"
-                    autoComplete={mode === 'admin' ? 'new-password' : 'off'}
+                    autoComplete="current-password"
                     required
                   />
                 </div>
               )}
 
-              {mode === 'forgot' && (
+              {mode === 'update-password' && (
                 <div>
                   <Label htmlFor="newpass">New password</Label>
-                  <Input id="newpass" name="us_np" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 6 characters" required />
+                  <Input id="newpass" name="us_np" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 6 characters" minLength={6} required />
                 </div>
               )}
 
@@ -199,7 +221,7 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
               )}
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Reset password' : 'Enter admin panel'}
+                {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : mode === 'admin' ? 'Enter admin panel' : 'Update password'}
               </Button>
 
               {mode === 'signin' && (
