@@ -1,5 +1,6 @@
 import { read, write } from './storage'
 import { broadcast } from './notifications'
+import { mirror } from './supabase'
 
 export type JobCategory =
   | 'MR'
@@ -291,6 +292,7 @@ export function addJob(j: Omit<Job, 'id' | 'postedAt'> & { id?: string; postedAt
   }
   jobs.unshift(job)
   saveJobs(jobs)
+  mirror('vacancies', job)
   broadcast({
     kind: 'job-posted',
     jobTitle: job.title,
@@ -308,6 +310,7 @@ export function updateJob(id: string, patch: Partial<Job>) {
   if (idx === -1) return null
   jobs[idx] = { ...jobs[idx], ...patch }
   saveJobs(jobs)
+  mirror('vacancies', jobs[idx])
   if (
     patch.title !== undefined ||
     patch.company !== undefined ||
@@ -325,6 +328,7 @@ export function updateJob(id: string, patch: Partial<Job>) {
 export function deleteJob(id: string) {
   const jobs = getJobs().filter((j) => j.id !== id)
   saveJobs(jobs)
+  mirror('vacancies', { id, deleted: true, deletedAt: Date.now() })
 }
 
 export function togglePin(id: string, pinned: boolean) {

@@ -9,7 +9,7 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Vite 8** (dev server, build)
 - **Tailwind CSS 4** (via `@tailwindcss/vite`)
 - Single-file PWA (`manifest.json` + `sw.js`)
-- `localStorage` stand-in for Supabase (shapes match the planned Supabase schema)
+- `localStorage` source of truth with a write-only Supabase mirror for selected records
 
 ## Auth
 - Login screen is shown first — no app content until signed in.
@@ -58,6 +58,16 @@ Only admin can post vacancies.
 | Payments + saved methods | `mrc_payments_v1`, `mrc_payment_methods_v1` |
 | User bios / profiles | `mrc_profiles_v1` |
 
+## Supabase mirror
+
+The app remains local-first: it reads from `localStorage` and asynchronously mirrors selected writes to Supabase. The mirror does **not** import existing local data, read remote changes back into the app, or synchronize devices. Vacancy deletes are mirrored as `{ deleted: true, deletedAt }` tombstones; the local vacancy is removed immediately.
+
+The default project is configured in `src/data/supabase.ts` with a browser-safe publishable/anon key. Build-time `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` values override those defaults. To set up the database, run [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor. The script creates the eight mirror tables, JSON-field indexes, permissive RLS policies, and `users_view`, `payments_view`, `vacancies_view`, and `applications_view`.
+
+Writes mirrored include users (only `id`, `email`, `name`, `phone`, `createdAt`, `subscribedUntil`, `isAdmin`), profiles, vacancies, plans, payment records, support tickets, applications, and broadcast notifications. The local user's plaintext password and saved payment methods (which may contain gateway secrets) are never mirrored. The Admin dashboard's cloud card reports the last mirror result and points to the schema setup when the API responds with HTTP 404.
+
+> **Security:** the supplied schema intentionally grants `anon` and `authenticated` roles full access to mirror tables to support browser upserts. The anon key is public in the built bundle, so these policies also make mirrored data readable and writable to clients that can reach the project. Do not use this permissive setup for private/production data; restrict the policies and add suitable authentication/authorization before storing personal or financial information.
+
 ## Important source files
 ```
 src/App.tsx                 — shell, auth gate, overlays, checkout glue
@@ -96,10 +106,9 @@ injects it at build time as `__APP_VERSION__`, and `src/data/version.ts` exposes
 screen and the admin header. Bumping `package.json` updates every badge —
 nothing else to touch.
 
-## Not live backend yet
-- Real Supabase integration (checkout is simulated; admin keys stored for later wiring).
-- Real Razorpay webhooks.
-- Real email delivery for password reset.
+## Remaining demo integrations
+- Checkout is simulated; there are no real Razorpay webhooks.
+- Password-reset email delivery is not connected.
 
 ## Run locally
 ```bash

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Wordmark } from '../components/Logo'
@@ -30,6 +30,7 @@ import { getTickets, updateTicket, type Ticket } from '../data/tickets'
 import { getApplicationQueue, type ApplicationRecord } from '../data/apply'
 import { broadcast } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
+import { getSyncStatus } from '../data/supabase'
 
 type AdminTab = 'dashboard' | 'vacancies' | 'plans' | 'payments' | 'applications' | 'tickets' | 'users' | 'profile'
 
@@ -927,9 +928,50 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
       </Card>
 
       <Card className="p-4 bg-gradient-to-br from-indigo-50 to-brand-50 ring-1 ring-brand-200 text-sm text-slate-700">
-        <div className="font-bold text-slate-900 mb-1">☁️ Supabase / online backend ready</div>
-        Data shape in <code className="text-xs bg-white px-1 rounded">src/data/*</code> already matches profiles / vacancies / plans / support_tickets / payments schemas — paste your Supabase project URL + anon key into <code className="text-xs bg-white px-1 rounded">src/data/supabase.ts</code> (drop-in) and all transactions, subscriptions, and notifications will sync across devices automatically. Subscription expiry is auto-calculated per plan days and auto-activated on transaction confirmation.
+        <div className="font-bold text-slate-900 mb-1">☁️ Supabase write mirror</div>
+        <p>
+          Local data stays the app's source of truth. New and updated records are mirrored to Supabase in the background; this is not a read sync or a migration of existing localStorage records. Apply <code className="text-xs bg-white px-1 rounded">supabase/schema.sql</code> in the Supabase SQL Editor to create the tables.
+        </p>
+        <SupabaseSyncStatus />
       </Card>
+    </div>
+  )
+}
+
+function SupabaseSyncStatus() {
+  const [status, setStatus] = useState(getSyncStatus)
+
+  useEffect(() => {
+    const refresh = () => setStatus(getSyncStatus())
+    refresh()
+    const intervalId = window.setInterval(refresh, 4000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  const summary = status.state === 'off'
+    ? 'off — Supabase is not configured'
+    : status.state === 'idle'
+      ? 'waiting for first write'
+      : status.state === 'ok'
+        ? `✅ mirroring — last table: ${status.lastTable ?? 'unknown'}`
+        : `⚠️ failed${status.lastHttpStatus === null ? ' — network error' : ` — HTTP ${status.lastHttpStatus}`}`
+
+  return (
+    <div className="mt-3 rounded-xl bg-white/80 p-3 text-xs text-slate-700 ring-1 ring-brand-100" role="status" aria-live="polite">
+      <div className="font-semibold text-slate-900">{summary}</div>
+      {status.configured && <div className="mt-1 break-all text-slate-500">{status.url}</div>}
+      {status.lastAt !== null && (
+        <div className="mt-1 text-slate-500">
+          Last attempt: {new Date(status.lastAt).toLocaleString()}
+          {status.lastTable && status.state !== 'ok' ? ` · table: ${status.lastTable}` : ''}
+        </div>
+      )}
+      {status.state === 'off' && (
+        <div className="mt-1 text-slate-500">Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable mirroring.</div>
+      )}
+      {status.state === 'error' && status.lastHttpStatus === 404 && (
+        <div className="mt-1 font-medium text-amber-800">Table not found — run supabase/schema.sql in the Supabase SQL Editor.</div>
+      )}
     </div>
   )
 }

@@ -1,45 +1,97 @@
 /**
- * Supabase sync (online backend) — drop-in configuration.
+ * Write-only Supabase mirror for records stored in localStorage.
  *
- * The app is fully online-ready: every record written through src/data/* uses
- * stable ids and JSON-serializable shapes matching the Supabase table schemas:
- *
- *   profiles            ← users (auth.ts)
- *   vacancies           ← jobs (jobs.ts)
- *   plans               ← plans (plans.ts)
- *   payments            ← payments.ts (txRef, planDays, expiresAt, activated)
- *   support_tickets     ← tickets.ts
- *   applications        ← apply.ts
- *   notifications       ← notifications.ts
- *
- * Paste your Supabase project credentials below and call `syncToSupabase()`
- * (already a no-op when unconfigured) after any write to mirror data to your
- * project so the admin dashboard sees transactions across every device.
+ * Vite variables override the project's public defaults at build time. The
+ * publishable/anon key is intended for browser use; never put a service-role
+ * key here.
  */
+const DEFAULT_SUPABASE_URL = 'https://lmhmbrusjizncumrufsx.supabase.co'
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4uiy6UZHkIjzAZssMfLWKQ_TwG6x7fC'
 
-export const SUPABASE_URL = '' // e.g. 'https://xxxxx.supabase.co'
-export const SUPABASE_ANON_KEY = '' // Project Settings → API → anon public key
+export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL).replace(/\/+$/, '')
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_ANON_KEY
+
+export type SupabaseSyncState = 'off' | 'idle' | 'ok' | 'error'
+
+export type SupabaseSyncStatus = {
+  configured: boolean
+  url: string
+  state: SupabaseSyncState
+  lastAt: number | null
+  lastTable: string | null
+  lastHttpStatus: number | null
+}
+
+let syncState: Exclude<SupabaseSyncState, 'off'> = 'idle'
+let lastAt: number | null = null
+let lastTable: string | null = null
+let lastHttpStatus: number | null = null
+let latestRequest = 0
 
 export function isSupabaseConfigured(): boolean {
   return SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY.length > 20
 }
 
-/** Insert a row into a Supabase table via the REST API. Safe no-op when unconfigured. */
+/** Insert or replace one mirrored row using its stable id. */
 export async function syncToSupabase(table: string, row: Record<string, unknown>): Promise<boolean> {
   if (!isSupabaseConfigured()) return false
+
+  const request = ++latestRequest
+  lastAt = Date.now()
+  lastTable = table
+  lastHttpStatus = null
+
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=id`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        Prefer: 'return=minimal',
+        Prefer: 'return=minimal,resolution=merge-duplicates',
       },
       body: JSON.stringify(row),
     })
-    return res.ok
+
+    if (request === latestRequest) {
+      lastAt = Date.now()
+      lastHttpStatus = response.status
+      syncState = response.ok ? 'ok' : 'error'
+    }
+    return response.ok
   } catch {
+    if (request === latestRequest) {
+      lastAt = Date.now()
+      lastHttpStatus = null
+      syncState = 'error'
+    }
     return false
+  }
+}
+
+/**
+ * Start a mirror write without blocking the local-first UI. The payload keeps
+ * the record intact in `data` while the outer id is the table primary key.
+ */
+export function mirror<T extends { id: string }>(table: string, record: T): void {
+  if (!isSupabaseConfigured()) return
+
+  void syncToSupabase(table, {
+    id: record.id,
+    data: record,
+    synced_at: new Date().toISOString(),
+  })
+}
+
+/** A snapshot for the admin dashboard's polling status card. */
+export function getSyncStatus(): SupabaseSyncStatus {
+  const configured = isSupabaseConfigured()
+  return {
+    configured,
+    url: SUPABASE_URL,
+    state: configured ? syncState : 'off',
+    lastAt,
+    lastTable,
+    lastHttpStatus,
   }
 }

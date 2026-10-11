@@ -2,6 +2,7 @@ import type { Job } from './jobs'
 import type { User } from './auth'
 import { getProfile, type Profile } from './profile'
 import { CREATOR } from './creator'
+import { mirror } from './supabase'
 import { read, write } from './storage'
 
 export type ApplicationRecord = {
@@ -149,6 +150,7 @@ export function openApplication(user: User, job: Job): { ok: boolean; channel: '
   const queue = read<ApplicationRecord[]>(QUEUE_KEY, [])
   queue.unshift(record)
   write(QUEUE_KEY, queue.slice(0, 300))
+  mirror('applications', record)
 
   window.location.href = href
   return { ok: true, channel, to, record }
