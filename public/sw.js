@@ -1,8 +1,17 @@
 // MedRep Connect Pro — simple service worker (offline shell caching)
 // All paths are relative to the SW scope so the app works from any host or
 // sub-path (e.g. GitHub Pages project sites).
-const CACHE = 'mrc-v2'
-const CORE = ['./', './index.html', './manifest.json', './favicon.svg', './icon-512.png']
+const CACHE = 'mrc-v3'
+const CORE = [
+  './',
+  './index.html',
+  './manifest.json',
+  './favicon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './maskable-512.png',
+  './apple-touch-icon.png',
+]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}))

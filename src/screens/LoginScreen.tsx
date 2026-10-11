@@ -4,6 +4,7 @@ import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
 import { loginAdmin, loginUser, registerUser, resetPassword } from '../data/auth'
 import { CREATOR } from '../data/creator'
+import { APP_VERSION_LABEL } from '../data/version'
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'admin'
 
@@ -106,6 +107,11 @@ export function LoginScreen({ onAuthed }: { onAuthed: () => void }) {
               </div>
               <div className="text-xs text-slate-500 mt-1 px-4">
                 {CREATOR.tagline}
+              </div>
+              <div className="mt-2">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                  Version {APP_VERSION_LABEL}
+                </span>
               </div>
             </div>
             <div className="mt-4">

@@ -3,6 +3,7 @@ import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../c
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Wordmark } from '../components/Logo'
 import { CREATOR } from '../data/creator'
+import { APP_VERSION_LABEL } from '../data/version'
 import { getUsers } from '../data/auth'
 import {
   addJob,
@@ -63,7 +64,12 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       {/* Header */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
-          <Wordmark />
+          <div className="flex items-center gap-2 min-w-0">
+            <Wordmark />
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+              {APP_VERSION_LABEL}
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             <Badge color="red">Admin</Badge>
             <Button variant="secondary" onClick={onExit}>Exit admin</Button>

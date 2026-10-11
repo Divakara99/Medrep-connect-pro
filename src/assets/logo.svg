@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MedRep Connect Pro">
+  <!--
+    SINGLE SOURCE OF TRUTH for the MedRep Connect Pro brand mark.
+
+    Everything icon-shaped in this repo is derived from this one file:
+      • the in-app <Logo /> component (src/components/Logo.tsx imports it)
+      • public/favicon.svg                    → generated copy
+      • public/icon-192.png, icon-512.png     → generated rasters
+      • public/apple-touch-icon.png           → generated full-bleed raster
+      • public/maskable-512.png               → generated safe-zone raster
+
+    Edit the artwork here, then run:  npm run icons
+    scripts/generate-icons.mjs reuses the <g id="mrc-mark"> below, so the glyph
+    can never drift between the app, the favicon and the installed PWA icons.
+  -->
+  <defs>
+    <linearGradient id="mrc-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b7bff"/>
+      <stop offset="55%" stop-color="#1b4efb"/>
+      <stop offset="100%" stop-color="#101a4d"/>
+    </linearGradient>
+    <linearGradient id="mrc-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="62%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Briefcase (jobs) carrying a medical cross (pharma) — drawn once. -->
+    <g id="mrc-mark" fill="none" stroke="#ffffff" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M192 200v-32a48 48 0 0 1 48-48h32a48 48 0 0 1 48 48v32"/>
+      <rect x="112" y="200" width="288" height="192" rx="46"/>
+      <path d="M256 252v88M212 296h88"/>
+    </g>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#mrc-tile)"/>
+  <rect width="512" height="512" rx="112" fill="url(#mrc-gloss)"/>
+  <use href="#mrc-mark"/>
+</svg>

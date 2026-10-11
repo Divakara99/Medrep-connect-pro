@@ -71,8 +71,30 @@ src/data/profile.ts         — Job Seeker bio + education/experience
 src/data/storage.ts         — safe localStorage helpers
 src/screens/*               — Login, Admin, Home, Priority, Plans, Account, AI
 src/components/*            — JobCard (blur), ProfileEditor, PostVacancy, ui primitives
+src/assets/logo.svg         — single source of truth for the brand mark
+scripts/generate-icons.mjs  — derives favicon + all PWA icons from that SVG
 public/manifest.json, sw.js — PWA
 ```
+
+## Branding & app icons (one source of truth)
+`src/assets/logo.svg` is the only place the brand mark is drawn:
+- `src/components/Logo.tsx` imports it directly, so the in-app logo **is** the file.
+- `npm run icons` re-renders it into `public/favicon.svg`, `icon-192.png`,
+  `icon-512.png`, `apple-touch-icon.png` (full-bleed, iOS masks it) and
+  `maskable-512.png` (glyph inside the Android safe zone).
+- `public/manifest.json` and `index.html` reference those generated files only.
+
+Edit the artwork in `logo.svg`, run `npm run icons`, and commit the output —
+the favicon, the installed PWA icon and the in-app logo can never drift apart.
+Rasterising uses `@resvg/resvg-js` (no system fonts), so output is identical
+on any machine, including CI.
+
+## App version in the UI
+The release version lives once, in `package.json` → `"version"`. `vite.config.ts`
+injects it at build time as `__APP_VERSION__`, and `src/data/version.ts` exposes
+`APP_VERSION_LABEL` (e.g. `v1.0.0`), shown on the login screen, the account
+screen and the admin header. Bumping `package.json` updates every badge —
+nothing else to touch.
 
 ## Not live backend yet
 - Real Supabase integration (checkout is simulated; admin keys stored for later wiring).
@@ -84,6 +106,7 @@ public/manifest.json, sw.js — PWA
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # production build to dist/
+npm run icons    # regenerate favicon + PWA icons from src/assets/logo.svg
 npm run preview  # preview production build
 ```
 

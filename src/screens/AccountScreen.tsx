@@ -1,7 +1,10 @@
 import { useRef } from 'react'
 import { Button, Card, Badge } from '../components/ui'
+import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
 import { isSubscribed, type User } from '../data/auth'
+import { CREATOR } from '../data/creator'
+import { APP_VERSION_LABEL } from '../data/version'
 
 export function AccountScreen({
   user,
@@ -36,6 +39,21 @@ export function AccountScreen({
       </Card>
 
       <ProfileEditor ref={editorRef} email={user.email} onSaved={() => onSubscribed({ ...user })} />
+
+      {/* About card: same brand mark that ships as the PWA icon, plus the
+          released version (package.json → build-time constant, never typed twice). */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Logo size={40} />
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-slate-900">MedRep Connect Pro</div>
+              <div className="text-xs text-slate-500 truncate">{CREATOR.tagline}</div>
+            </div>
+          </div>
+          <Badge color="brand">{APP_VERSION_LABEL}</Badge>
+        </div>
+      </Card>
 
       {/* Unified frozen (sticky) action bar: Save primary, Logout secondary.
           Both buttons are anchored together so users don't accidentally hit Logout
