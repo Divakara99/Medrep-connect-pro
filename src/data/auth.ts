@@ -1,5 +1,6 @@
 import { CREATOR } from './creator'
 import { broadcast } from './notifications'
+import { mirror } from './supabase'
 import { read, write } from './storage'
 
 export type User = {
@@ -19,6 +20,20 @@ export type Session =
 
 const USERS_KEY = 'mrc_users_v1'
 const SESSION_KEY = 'mrc_session_v1'
+
+// The local demo user also stores a plaintext password; only this explicit
+// field whitelist is ever copied to the remote mirror.
+function mirrorUser(user: User) {
+  mirror('users', {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    phone: user.phone,
+    createdAt: user.createdAt,
+    subscribedUntil: user.subscribedUntil,
+    isAdmin: user.isAdmin,
+  })
+}
 
 function uid() {
   return 'u_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -73,6 +88,7 @@ export function registerUser(input: {
   const users = getUsers()
   users.push({ ...user, password: input.password } as User)
   write(USERS_KEY, users)
+  mirrorUser(user)
   saveSession({ kind: 'user', userId: user.id })
   // Welcome notification — AI-generated from Mr. Divakar Reddy to the new user.
   broadcast({ kind: 'welcome', userName: user.name }, { type: 'system' })
@@ -137,6 +153,7 @@ export function updateUser(userId: string, patch: Partial<User>) {
   if (idx === -1) return null
   users[idx] = { ...users[idx], ...patch }
   write(USERS_KEY, users)
+  mirrorUser(users[idx])
   return users[idx]
 }
 

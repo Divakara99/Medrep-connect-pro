@@ -1,3 +1,4 @@
+import { mirror } from './supabase'
 import { read, write } from './storage'
 
 export type Education = {
@@ -60,6 +61,7 @@ export function saveProfile(profile: Profile): Profile {
   const next: Profile = { ...profile, tagline: 'Job Seeker', updatedAt: Date.now() }
   all[key] = next
   write(PROFILES_KEY, all)
+  mirror('profiles', { ...next, id: key })
   return next
 }
 

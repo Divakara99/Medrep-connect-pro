@@ -1,5 +1,6 @@
 import { read, write } from './storage'
 import { broadcast } from './notifications'
+import { mirror } from './supabase'
 
 export type Plan = {
   id: string
@@ -28,9 +29,11 @@ export function getPlans(): Plan[] {
 
 export function savePlans(plans: Plan[]) {
   write(PLANS_KEY, plans)
+  plans.forEach((plan) => mirror('plans', plan))
   broadcast({ kind: 'plans-updated' }, { type: 'plan' })
 }
 
 export function resetPlans() {
   write(PLANS_KEY, DEFAULT_PLANS)
+  DEFAULT_PLANS.forEach((plan) => mirror('plans', plan))
 }

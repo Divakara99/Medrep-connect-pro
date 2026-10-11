@@ -69,10 +69,19 @@ npm run preview      # serves the exact production build
 
 ## ⚠️ Important notes
 
-- **Demo data storage:** without Supabase, users/jobs/payments live in each
-  visitor's browser `localStorage` (fine for demos/single-device). For real
-  multi-user online data, paste your Supabase URL + anon key into
-  `src/data/supabase.ts` (drop-in — table schemas are documented in that file).
+- **Supabase write mirror:** users/jobs/payments still live in each visitor's
+  browser `localStorage`; selected new and updated records are asynchronously
+  mirrored to the configured Supabase project. The app does not read remote data
+  back or migrate existing localStorage records. The default project URL and
+  public publishable/anon key are configured in `src/data/supabase.ts`; set
+  `VITE_SUPABASE_URL` and/or `VITE_SUPABASE_ANON_KEY` in your host's build
+  environment to override them. Run `supabase/schema.sql` in the Supabase SQL
+  Editor before deployment. The admin dashboard cloud card reports mirror status.
+- **Supabase security:** the provided schema grants `anon` and `authenticated`
+  full access to these tables so browser upserts work. The anon key is public in
+  the client bundle, so do not mirror private/production data with those policies;
+  tighten RLS and authorization rules first. Local plaintext passwords and saved
+  payment methods are excluded from the mirror.
 - **Payments:** the Razorpay/UPI checkout is simulated. Wire real Razorpay keys
   (admin → Payments → Add method) and their checkout SDK for production money.
 - **PWA install:** after deploy, open the site in Chrome on Android →

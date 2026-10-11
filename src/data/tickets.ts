@@ -1,3 +1,4 @@
+import { mirror } from './supabase'
 import { read, write } from './storage'
 
 export type TicketStatus = 'open' | 'in_progress' | 'resolved'
@@ -45,6 +46,7 @@ export function createTicket(t: Omit<Ticket, 'id' | 'createdAt' | 'status'> & { 
   }
   list.unshift(ticket)
   write(TICKETS_KEY, list)
+  mirror('support_tickets', ticket)
   return ticket
 }
 
@@ -54,5 +56,6 @@ export function updateTicket(id: string, patch: Partial<Ticket>): Ticket | null 
   if (idx === -1) return null
   list[idx] = { ...list[idx], ...patch, updatedAt: Date.now() }
   write(TICKETS_KEY, list)
+  mirror('support_tickets', list[idx])
   return list[idx]
 }

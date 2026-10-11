@@ -2,6 +2,7 @@ import { read, write } from './storage'
 import { broadcast } from './notifications'
 import { subscribeUser } from './auth'
 import { getPlans } from './plans'
+import { mirror } from './supabase'
 
 export type PaymentMethod = {
   id: string
@@ -121,6 +122,7 @@ export function recordPayment(rec: Omit<PaymentRecord, 'id' | 'createdAt' | 'sta
   }
   all.unshift(r)
   write(PAYMENTS_KEY, all)
+  mirror('payments', r)
 
   // AUTO-ACTIVATE the plan with expiry date as per the plan days once the
   // transaction is confirmed — then notify the user and the admin feed.
@@ -151,6 +153,7 @@ export function requestRefund(userId: string): PaymentRecord | null {
   if (idx === -1) return null
   all[idx] = { ...all[idx], refundStatus: 'requested' }
   write(PAYMENTS_KEY, all)
+  mirror('payments', all[idx])
   return all[idx]
 }
 
@@ -175,6 +178,7 @@ export function resolveRefund(
   }
   all[idx] = updated
   write(PAYMENTS_KEY, all)
+  mirror('payments', updated)
   if (opts.approve) {
     broadcast({
       kind: 'refund-processed',

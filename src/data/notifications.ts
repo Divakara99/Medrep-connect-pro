@@ -1,5 +1,6 @@
 import { CREATOR } from './creator'
 import { getUsers, type User } from './auth'
+import { mirror } from './supabase'
 import { read, write } from './storage'
 
 export type Notification = {
@@ -157,6 +158,7 @@ export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' 
   const existing = read<Notification[]>(NOTIF_KEY, [])
   existing.unshift(notif)
   write(NOTIF_KEY, existing.slice(0, 500))
+  mirror('notifications', notif)
   // Targeting is implicit since all users read the global feed; per-user read state
   // is stored separately.
   void allEmails
