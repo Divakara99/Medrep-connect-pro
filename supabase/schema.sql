@@ -305,7 +305,17 @@ REVOKE ALL ON public.user_accounts FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.user_accounts TO authenticated;
 
 -- Dashboard projections must obey the calling user's RLS policies too.
-CREATE OR REPLACE VIEW public.users_view WITH (security_invoker = true) AS
+-- PostgreSQL rejects CREATE OR REPLACE VIEW when the column names or their
+-- order change (SQLSTATE 42P16). Drop the previous definitions first and
+-- recreate them with the current column list. Nothing depends on these views,
+-- and the REVOKE/GRANT block below restores the authenticated-only privileges
+-- after the rebuild.
+DROP VIEW IF EXISTS public.users_view;
+DROP VIEW IF EXISTS public.payments_view;
+DROP VIEW IF EXISTS public.vacancies_view;
+DROP VIEW IF EXISTS public.applications_view;
+
+CREATE VIEW public.users_view WITH (security_invoker = true) AS
 SELECT
   id,
   data ->> 'email' AS email,
@@ -318,7 +328,7 @@ SELECT
   synced_at
 FROM public.users;
 
-CREATE OR REPLACE VIEW public.payments_view WITH (security_invoker = true) AS
+CREATE VIEW public.payments_view WITH (security_invoker = true) AS
 SELECT
   id,
   data ->> 'userId' AS user_id,
@@ -332,7 +342,7 @@ SELECT
   synced_at
 FROM public.payments;
 
-CREATE OR REPLACE VIEW public.vacancies_view WITH (security_invoker = true) AS
+CREATE VIEW public.vacancies_view WITH (security_invoker = true) AS
 SELECT
   id,
   data ->> 'title' AS title,
@@ -346,7 +356,7 @@ SELECT
   synced_at
 FROM public.vacancies;
 
-CREATE OR REPLACE VIEW public.applications_view WITH (security_invoker = true) AS
+CREATE VIEW public.applications_view WITH (security_invoker = true) AS
 SELECT
   id,
   data ->> 'jobId' AS job_id,
@@ -362,9 +372,32 @@ FROM public.applications;
 REVOKE ALL ON public.users_view, public.payments_view, public.vacancies_view, public.applications_view FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.users_view, public.payments_view, public.vacancies_view, public.applications_view TO authenticated;
 
--- Promote an administrator only through trusted app_metadata. After setting
--- this claim, the admin must sign out and back in to refresh the access token.
--- Example (replace the address with the provisioned Auth account):
--- UPDATE auth.users
--- SET raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
--- WHERE lower(email) = lower('admin@example.com');
+-- Promote the owner Auth account to administrator through the trusted
+-- raw_app_meta_data.role claim. Authorization only ever reads app_metadata;
+-- user_metadata stays owner-editable and is used for display data alone.
+-- This block is idempotent. Create or invite akhildivakara@gmail.com in
+-- Supabase Auth (Dashboard -> Authentication -> Users) first, then run this
+-- script; re-running it keeps the claim and display name in place. No
+-- password or secret is set or stored here or anywhere in the repository —
+-- set the password privately in Supabase Auth. The UPDATE below fires the
+-- sync_auth_user_account_update trigger, so public.user_accounts is refreshed
+-- with the new name and is_admin flag. The admin must sign out and back in
+-- afterwards so the access token carries the new claim.
+DO $$
+DECLARE
+  promoted_rows integer;
+BEGIN
+  UPDATE auth.users
+  SET
+    raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
+      || jsonb_build_object('role', 'admin'),
+    raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb)
+      || jsonb_build_object('name', 'M Divakar Reddy')
+  WHERE lower(email) = lower('akhildivakara@gmail.com');
+
+  GET DIAGNOSTICS promoted_rows = ROW_COUNT;
+  IF promoted_rows = 0 THEN
+    RAISE NOTICE 'No Supabase Auth account found for akhildivakara@gmail.com; create it in Authentication -> Users and re-run this script.';
+  END IF;
+END
+$$;
