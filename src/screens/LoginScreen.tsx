@@ -1,19 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Button, Card, Input, Label } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
-import { loginAdmin, loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
+import { loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 
-type Mode = 'signin' | 'signup' | 'forgot' | 'admin' | 'update-password'
+type Mode = 'signin' | 'signup' | 'forgot' | 'update-password'
 
 export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () => void; recoveryMode?: boolean }) {
-  const [mode, setMode] = useState<Mode>(recoveryMode ? 'update-password' : 'signin')
-  const [logoTaps, setLogoTaps] = useState(0)
-  const tapTimer = useRef<number | null>(null)
-
-  // form state
+  const [mode, setMode] = useState<Mode>('signin')
+  const activeMode: Mode = recoveryMode ? 'update-password' : mode
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -23,23 +20,10 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Never allow browser autofill to leak saved admin (or any) credentials
-  // into this form — wipe fields on mount and on every mode switch.
-  useEffect(() => {
-    clearFields()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (recoveryMode) {
-      setMode('update-password')
-      setError(null)
-      setSuccess(null)
-      setNewPassword('')
-    }
-  }, [recoveryMode])
-
-  function clearFields() {
+  function switchMode(next: Mode) {
+    setMode(next)
+    setError(null)
+    setSuccess(null)
     setName('')
     setEmail('')
     setPhone('')
@@ -47,37 +31,14 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
     setNewPassword('')
   }
 
-  function handleLogoTap() {
-    if (mode === 'admin') return
-    const next = logoTaps + 1
-    setLogoTaps(next)
-    if (tapTimer.current) window.clearTimeout(tapTimer.current)
-    tapTimer.current = window.setTimeout(() => setLogoTaps(0), 1500)
-    if (next >= 5) {
-      setLogoTaps(0)
-      setMode('admin')
-      setError(null)
-      setSuccess(null)
-      // Never prefill admin credentials — admin types the email themselves
-      clearFields()
-    }
-  }
-
-  function switchMode(m: Mode) {
-    setMode(m)
-    setError(null)
-    setSuccess(null)
-    clearFields()
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
     setError(null)
     setSuccess(null)
     setLoading(true)
 
     try {
-      if (mode === 'signup') {
+      if (activeMode === 'signup') {
         const result = await registerUser({ name, email, phone, password })
         if (!result.ok) setError(result.error)
         else if (result.confirmationRequired) {
@@ -85,15 +46,11 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
           setPassword('')
           setMode('signin')
         } else onAuthed()
-      } else if (mode === 'signin') {
+      } else if (activeMode === 'signin') {
         const result = await loginUser(email, password)
         if (!result.ok) setError(result.error)
         else onAuthed()
-      } else if (mode === 'admin') {
-        const result = await loginAdmin(email, password)
-        if (!result.ok) setError(result.error)
-        else onAuthed()
-      } else if (mode === 'forgot') {
+      } else if (activeMode === 'forgot') {
         const result = await resetPassword(email)
         if (!result.ok) setError(result.error)
         else setSuccess('If an account uses that email, password reset instructions have been sent.')
@@ -105,77 +62,68 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
           onAuthed()
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed. Please try again.')
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Authentication failed. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 via-white to-white flex flex-col">
+    <main className="min-h-screen bg-gradient-to-b from-brand-50 via-white to-white flex flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
-          <div className="flex flex-col items-center mb-6">
-            <button onClick={handleLogoTap} className="select-none" aria-label="Tap logo">
-              <Logo size={64} />
-            </button>
+          <header className="flex flex-col items-center mb-6">
+            <Logo size={64} />
             <div className="mt-3 text-center">
-              <div className="text-xl font-extrabold text-slate-900">
-                MedRep <span className="text-brand-600">Connect Pro</span>
-              </div>
-              <div className="text-xs text-slate-500 mt-1 px-4">
-                {CREATOR.tagline}
-              </div>
-              <div className="mt-2">
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
-                  Version {APP_VERSION_LABEL}
-                </span>
-              </div>
+              <h1 className="text-xl font-extrabold text-slate-900">
+                MedRep <span className="text-brand-700">Connect Pro</span>
+              </h1>
+              <p className="text-sm text-slate-700 mt-1 px-4">{CREATOR.tagline}</p>
+              <span className="inline-flex mt-2 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-300">
+                Version {APP_VERSION_LABEL}
+              </span>
             </div>
-            <div className="mt-4">
-              <CreatorCredit variant="solid" />
-            </div>
-          </div>
+            <div className="mt-4"><CreatorCredit variant="solid" /></div>
+          </header>
 
           <Card className="p-5 animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">
-                {mode === 'signin' && 'Welcome back'}
-                {mode === 'signup' && 'Create your account'}
-                {mode === 'forgot' && 'Reset password'}
-                {mode === 'admin' && 'Admin sign in'}
-                {mode === 'update-password' && 'Choose a new password'}
+                {activeMode === 'signin' && 'Welcome back'}
+                {activeMode === 'signup' && 'Create your account'}
+                {activeMode === 'forgot' && 'Reset password'}
+                {activeMode === 'update-password' && 'Choose a new password'}
               </h2>
-              {mode !== 'admin' && mode !== 'forgot' && mode !== 'update-password' && (
+              {activeMode !== 'forgot' && activeMode !== 'update-password' && (
                 <button
                   type="button"
-                  className="text-xs text-brand-600 font-semibold hover:underline"
-                  onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
+                  className="text-sm text-brand-700 font-bold hover:underline"
+                  onClick={() => switchMode(activeMode === 'signin' ? 'signup' : 'signin')}
                 >
-                  {mode === 'signin' ? 'Create account' : 'Sign in'}
+                  {activeMode === 'signin' ? 'Create account' : 'Sign in'}
                 </button>
               )}
             </div>
 
-            <form key={mode} onSubmit={submit} className="space-y-3" autoComplete="off">
-              {mode === 'signup' && (
+            <form key={activeMode} onSubmit={submit} className="space-y-3" autoComplete="off">
+              {activeMode === 'signup' && (
                 <div>
                   <Label htmlFor="name">Full name</Label>
-                  <Input id="name" name="us_nm" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" required />
+                  <Input id="name" name="user_name" autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required />
                 </div>
               )}
 
-              {mode !== 'update-password' && (
+              {activeMode !== 'update-password' && (
                 <div>
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
-                    name={mode === 'admin' ? 'ad_em' : 'us_em'}
+                    name="user_email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder={mode === 'admin' ? 'Enter admin email' : 'you@example.com'}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="you@example.com"
                     autoComplete="off"
                     spellCheck={false}
                     required
@@ -183,79 +131,67 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
                 </div>
               )}
 
-              {mode === 'signup' && (
+              {activeMode === 'signup' && (
                 <div>
                   <Label htmlFor="phone">Mobile (optional)</Label>
-                  <Input id="phone" name="us_ph" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile" />
+                  <Input id="phone" name="user_phone" autoComplete="off" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="10-digit mobile" />
                 </div>
               )}
 
-              {mode !== 'forgot' && mode !== 'update-password' && (
+              {activeMode === 'signin' || activeMode === 'signup' ? (
                 <div>
                   <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
-                    name={mode === 'admin' ? 'ad_pw' : 'us_pw'}
+                    name="user_password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="At least 6 characters"
                     autoComplete="current-password"
                     required
                   />
                 </div>
-              )}
+              ) : null}
 
-              {mode === 'update-password' && (
+              {activeMode === 'update-password' && (
                 <div>
-                  <Label htmlFor="newpass">New password</Label>
-                  <Input id="newpass" name="us_np" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 6 characters" minLength={6} required />
+                  <Label htmlFor="new-password">New password</Label>
+                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 6 characters" minLength={6} required />
                 </div>
               )}
 
-              {error && (
-                <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 ring-1 ring-red-200">{error}</div>
-              )}
-              {success && (
-                <div className="rounded-lg bg-emerald-50 text-emerald-700 text-sm px-3 py-2 ring-1 ring-emerald-200">{success}</div>
-              )}
+              {error && <div role="alert" className="rounded-lg bg-red-50 text-red-800 text-sm font-medium px-3 py-2 ring-1 ring-red-300">{error}</div>}
+              {success && <div role="status" className="rounded-lg bg-emerald-50 text-emerald-900 text-sm font-medium px-3 py-2 ring-1 ring-emerald-300">{success}</div>}
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Send reset link' : mode === 'admin' ? 'Enter admin panel' : 'Update password'}
+                {loading ? 'Please wait…' : activeMode === 'signin' ? 'Sign in' : activeMode === 'signup' ? 'Create account' : activeMode === 'forgot' ? 'Send reset link' : 'Update password'}
               </Button>
 
-              {mode === 'signin' && (
+              {activeMode === 'signin' && (
                 <div className="text-center">
-                  <button type="button" className="text-xs text-slate-500 hover:text-brand-600" onClick={() => switchMode('forgot')}>
+                  <button type="button" className="text-sm text-slate-700 font-semibold hover:text-brand-700" onClick={() => switchMode('forgot')}>
                     Forgot password?
                   </button>
                 </div>
               )}
-              {mode === 'forgot' && (
+              {activeMode === 'forgot' && (
                 <div className="text-center">
-                  <button type="button" className="text-xs text-slate-500 hover:text-brand-600" onClick={() => switchMode('signin')}>
+                  <button type="button" className="text-sm text-slate-700 font-semibold hover:text-brand-700" onClick={() => switchMode('signin')}>
                     Back to sign in
-                  </button>
-                </div>
-              )}
-              {mode === 'admin' && (
-                <div className="text-center">
-                  <button type="button" className="text-xs text-slate-500 hover:text-brand-600" onClick={() => switchMode('signin')}>
-                    Back to user sign in
                   </button>
                 </div>
               )}
             </form>
           </Card>
 
-          <div className="mt-6 text-center space-y-2">
-            <CreatorCredit variant="light" />
-            <div className="text-[11px] text-slate-400">
-              App created by <span className="font-semibold text-slate-600">Mr. {CREATOR.name}</span> · {CREATOR.role}
-            </div>
-          </div>
+          <footer className="mt-6 text-center space-y-2">
+            <a href="/?portal=admin" className="text-sm font-semibold text-indigo-800 hover:underline">Administrator? Use the separate Admin Login page</a>
+            <div><CreatorCredit variant="light" /></div>
+            <p className="text-xs text-slate-700">App created by <span className="font-semibold">Mr. {CREATOR.name}</span> · {CREATOR.role}</p>
+          </footer>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

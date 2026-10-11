@@ -1,5 +1,5 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
-import { mirror, hasAdminRole, supabase } from './supabase'
+import { hasAdminRole, supabase } from './supabase'
 import { read, remove, write } from './storage'
 
 export type User = {
@@ -8,7 +8,7 @@ export type User = {
   name: string
   phone?: string
   createdAt: number
-  subscribedUntil?: number // epoch ms; simulated plans remain device-local
+  subscribedUntil?: number // epoch ms; loaded from the server-owned Supabase account row
   isAdmin?: boolean
 }
 
@@ -24,10 +24,12 @@ const USER_STATE_KEY = 'mrc_user_state_v1'
 const LEGACY_USERS_KEY = 'mrc_users_v1'
 const LEGACY_SESSION_KEY = 'mrc_session_v1'
 
-// Remove the former localStorage credentials/session immediately. Those demo
-// passwords were plaintext and are not a safe source for account migration.
+// The former app stored demo passwords and plan entitlements in localStorage.
+// Clear them so neither a local cache nor a simulated payment can grant access.
 remove(LEGACY_USERS_KEY)
 remove(LEGACY_SESSION_KEY)
+remove(USER_STATE_KEY)
+remove(USERS_CACHE_KEY)
 
 let activeUser: User | null = null
 
@@ -50,13 +52,9 @@ export function normalizeIndianPhone(raw?: string | null): string | null {
   return normalizeLocalPhone(raw) ?? null
 }
 
-function localUserState(): Record<string, { subscribedUntil?: number }> {
-  return read<Record<string, { subscribedUntil?: number }>>(USER_STATE_KEY, {})
-}
-
 function toUser(authUser: SupabaseUser): User {
   const metadata = authUser.user_metadata ?? {}
-  const state = localUserState()[authUser.id]
+  const serverExpiry = activeUser?.id === authUser.id ? activeUser.subscribedUntil : undefined
   const name = typeof metadata.name === 'string'
     ? metadata.name
     : typeof metadata.full_name === 'string'
@@ -70,7 +68,7 @@ function toUser(authUser: SupabaseUser): User {
     name,
     phone,
     createdAt: authUser.created_at ? new Date(authUser.created_at).getTime() : Date.now(),
-    subscribedUntil: state?.subscribedUntil,
+    subscribedUntil: serverExpiry,
     isAdmin: hasAdminRole(authUser),
   }
 }
@@ -89,10 +87,41 @@ function snapshotFromSession(session: Awaited<ReturnType<typeof supabase.auth.ge
   }
 }
 
+async function withServerSubscription(user: User): Promise<User> {
+  const { data, error } = await supabase
+    .from('user_accounts')
+    .select('subscribed_until')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (error) return user
+
+  const updated: User = {
+    ...user,
+    subscribedUntil: data?.subscribed_until ? new Date(data.subscribed_until).getTime() : undefined,
+  }
+  if (activeUser?.id === user.id) activeUser = updated
+  return updated
+}
+
 export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   const { data, error } = await supabase.auth.getSession()
   if (error) throw error
-  return snapshotFromSession(data.session)
+  const snapshot = snapshotFromSession(data.session)
+  if (!snapshot.user) return snapshot
+
+  try {
+    const user = await withServerSubscription(snapshot.user)
+    return { ...snapshot, user }
+  } catch {
+    // Auth must remain available if the optional billing migration is pending;
+    // in that case the safe default is no paid entitlement.
+    return snapshot
+  }
+}
+
+export async function refreshCurrentSubscription(): Promise<User | null> {
+  const snapshot = await getAuthSnapshot()
+  return snapshot.user
 }
 
 export function onAuthStateChange(
@@ -132,16 +161,13 @@ export async function refreshAdminUsers(): Promise<User[]> {
     is_admin: boolean
   }
   const rows = (data ?? []) as unknown as AccountRow[]
-  const localState = localUserState()
   const users = rows.map((row): User => ({
     id: row.user_id,
     email: row.email,
     name: row.name,
     phone: row.phone ?? undefined,
     createdAt: new Date(row.created_at).getTime(),
-    subscribedUntil: row.subscribed_until
-      ? new Date(row.subscribed_until).getTime()
-      : localState[row.user_id]?.subscribedUntil,
+    subscribedUntil: row.subscribed_until ? new Date(row.subscribed_until).getTime() : undefined,
     isAdmin: row.is_admin,
   }))
   write(USERS_CACHE_KEY, users)
@@ -212,6 +238,11 @@ export async function loginUser(
   })
   if (error) return { ok: false, error: authErrorMessage(error.message) }
   if (!data.user) return { ok: false, error: 'Sign-in did not return an account. Please try again.' }
+  if (hasAdminRole(data.user)) {
+    activeUser = null
+    await supabase.auth.signOut()
+    return { ok: false, error: 'Admin accounts must sign in from the dedicated Admin Login page.' }
+  }
 
   const user = toUser(data.user)
   activeUser = user
@@ -237,7 +268,7 @@ export async function loginAdmin(
 }
 
 export async function resetPassword(email: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const redirectTo = `${window.location.origin}${window.location.pathname}`
+  const redirectTo = `${window.location.origin}${window.location.pathname}${window.location.search}`
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo })
   if (error) return { ok: false, error: error.message }
   return { ok: true }
@@ -305,47 +336,6 @@ export async function logout(): Promise<void> {
 /** The current session user, refreshed by Auth events and getAuthSnapshot(). */
 export function currentUser(): User | null {
   return activeUser
-}
-
-export function updateUser(userId: string, patch: Partial<User>): User | null {
-  const cachedUsers = getUsers()
-  const fromSession = activeUser?.id === userId
-  const existing = fromSession ? activeUser : cachedUsers.find((user) => user.id === userId)
-  if (!existing) return null
-
-  const updated = { ...existing, ...patch, id: existing.id, email: existing.email }
-  if (patch.subscribedUntil !== undefined) {
-    const state = localUserState()
-    state[userId] = { ...state[userId], subscribedUntil: patch.subscribedUntil }
-    write(USER_STATE_KEY, state)
-  }
-  if (fromSession) activeUser = updated
-
-  const index = cachedUsers.findIndex((user) => user.id === userId)
-  if (index >= 0) {
-    cachedUsers[index] = updated
-    write(USERS_CACHE_KEY, cachedUsers)
-  }
-
-  // Only an administrator may update the old general-purpose mirror table;
-  // syncToSupabase repeats the role check before every request.
-  if (updated.isAdmin) {
-    mirror('users', {
-      id: updated.id,
-      email: updated.email,
-      name: updated.name,
-      phone: updated.phone,
-      createdAt: updated.createdAt,
-      subscribedUntil: updated.subscribedUntil,
-      isAdmin: updated.isAdmin,
-    })
-  }
-  return updated
-}
-
-export function subscribeUser(userId: string, days: number): User | null {
-  const until = Date.now() + days * 24 * 60 * 60 * 1000
-  return updateUser(userId, { subscribedUntil: until })
 }
 
 export function isSubscribed(user: User | null | undefined): boolean {

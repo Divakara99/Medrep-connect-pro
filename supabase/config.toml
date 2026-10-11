@@ -1,2 +1,20 @@
 [functions.admin-delete-user]
 verify_jwt = true
+
+[functions.create-razorpay-order]
+verify_jwt = true
+
+[functions.verify-razorpay-payment]
+verify_jwt = true
+
+[functions.create-upi-intent]
+verify_jwt = true
+
+[functions.submit-upi-utr]
+verify_jwt = true
+
+[functions.review-manual-upi-payment]
+verify_jwt = true
+
+[functions.razorpay-webhook]
+verify_jwt = false

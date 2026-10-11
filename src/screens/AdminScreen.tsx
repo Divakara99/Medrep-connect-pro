@@ -17,13 +17,9 @@ import {
 } from '../data/jobs'
 import { getPlans, savePlans, type Plan } from '../data/plans'
 import {
-  deletePaymentMethod,
-  getPaymentMethods,
   getPayments,
-  resolveRefund,
-  savePaymentMethod,
-  setDefaultPaymentMethod,
-  type PaymentMethod,
+  refreshPayments,
+  reviewManualUpiPayment,
   type PaymentRecord,
 } from '../data/payments'
 import { getTickets, updateTicket, type Ticket } from '../data/tickets'
@@ -70,6 +66,9 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     let active = true
     void refreshAdminUsers()
+      .then(() => { if (active) setVersion((v) => v + 1) })
+      .catch(() => undefined)
+    void refreshPayments()
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     return () => { active = false }
@@ -133,82 +132,6 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
         {tab === 'profile' && <ProfileTab />}
       </div>
     </div>
-  )
-}
-
-// -------------------- Refund approval (admin → Payments tab) --------------------
-function RefundModal({
-  payment,
-  onClose,
-  onDone,
-}: {
-  payment: PaymentRecord | null
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [method, setMethod] = useState<'Razorpay' | 'UPI' | 'Other'>('Razorpay')
-  const [ref, setRef] = useState('')
-  const open = !!payment
-
-  function approve() {
-    if (!payment) return
-    resolveRefund(payment.id, { approve: true, refundRef: ref.trim() || undefined, refundMethod: method })
-    setRef('')
-    setMethod('Razorpay')
-    onDone()
-  }
-  function reject() {
-    if (!payment) return
-    resolveRefund(payment.id, { approve: false })
-    onDone()
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Approve refund">
-      {payment && (
-        <div className="space-y-3">
-          <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 text-sm text-slate-700 space-y-1">
-            <div className="flex justify-between"><span className="text-slate-500">Amount</span><span className="font-bold text-slate-900">₹{payment.amount}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-slate-500">TXN reference</span><span className="font-mono text-xs">{payment.txRef ?? '—'}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-slate-500">UTR</span><span className="font-mono text-xs">{payment.utr || '—'}</span></div>
-            <div className="flex justify-between gap-2"><span className="text-slate-500">Paid on</span><span>{new Date(payment.createdAt).toLocaleString()}</span></div>
-            {payment.refundStatus === 'requested' && (
-              <div className="pt-1"><Badge color="amber">User has requested this refund</Badge></div>
-            )}
-          </div>
-
-          <div>
-            <Label>Refund via</Label>
-            <Select value={method} onChange={(e) => setMethod(e.target.value as 'Razorpay' | 'UPI' | 'Other')}>
-              <option value="Razorpay">Razorpay (original payment)</option>
-              <option value="UPI">UPI (manual transfer)</option>
-              <option value="Other">Other / bank transfer</option>
-            </Select>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Process the money movement in the Razorpay dashboard (Refund against the payment ID) or your UPI/bank app, then save the reference here.
-            </div>
-          </div>
-
-          <div>
-            <Label>Refund reference / UTR (optional)</Label>
-            <Input
-              placeholder="e.g. rfnd_xxxx (Razorpay) or UPI UTR"
-              value={ref}
-              onChange={(e) => setRef(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 justify-end pt-1">
-            <Button variant="secondary" onClick={reject}>Reject request</Button>
-            <Button onClick={approve}>✓ Approve & mark refunded</Button>
-          </div>
-          <div className="text-[11px] text-slate-500">
-            On approval the user is notified instantly (with sound) including the refund reference. The record is marked "Refunded" in the payment monitor.
-          </div>
-        </div>
-      )}
-    </Modal>
   )
 }
 
@@ -457,6 +380,9 @@ function PlansTab({ onMutate }: { onMutate: () => void }) {
         <h2 className="text-lg font-bold text-slate-900">Plans & Pricing</h2>
         <Button onClick={save}>Save changes</Button>
       </div>
+      <p className="rounded-xl bg-indigo-50 p-3 text-sm font-medium text-indigo-950 ring-1 ring-indigo-200">
+        Checkout amounts and plan validity are enforced by the secure server catalog. This page can edit display text only.
+      </p>
       <div className="grid gap-2 sm:grid-cols-2">
         {plans.map((p, i) => (
           <Card key={p.id} className="p-3 space-y-2">
@@ -466,12 +392,12 @@ function PlansTab({ onMutate }: { onMutate: () => void }) {
                 <Input value={p.title} onChange={(e) => update(i, { title: e.target.value })} />
               </div>
               <div>
-                <Label>Price (₹)</Label>
-                <Input type="number" value={p.price} onChange={(e) => update(i, { price: Number(e.target.value) })} />
+                <Label>Checkout amount (₹) · fixed</Label>
+                <Input type="number" value={p.price} disabled aria-label={`Fixed checkout price for ${p.title}`} />
               </div>
               <div>
-                <Label>Days</Label>
-                <Input type="number" value={p.days} onChange={(e) => update(i, { days: Number(e.target.value) })} />
+                <Label>Plan validity (days) · fixed</Label>
+                <Input type="number" value={p.days} disabled aria-label={`Fixed plan validity for ${p.title}`} />
               </div>
               <div className="flex items-end gap-2">
                 <label className="flex items-center gap-2 text-sm pb-2">
@@ -493,136 +419,95 @@ function PlansTab({ onMutate }: { onMutate: () => void }) {
 
 // -------------------- Payments --------------------
 function PaymentsTab({ onMutate }: { onMutate: () => void }) {
-  const methods = getPaymentMethods()
-  const payments = getPayments()
-  const [open, setOpen] = useState(false)
-  const [deleteMethod, setDeleteMethod] = useState<PaymentMethod | null>(null)
-  const [refundTarget, setRefundTarget] = useState<PaymentRecord | null>(null)
+  const [payments, setPayments] = useState<PaymentRecord[]>(() => getPayments())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reviewing, setReviewing] = useState<string | null>(null)
+  const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void refreshPayments()
+      .then((records) => { if (active) setPayments(records) })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Payment records could not be loaded.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  async function review(payment: PaymentRecord, approve: boolean) {
+    setReviewing(payment.id)
+    setError(null)
+    try {
+      await reviewManualUpiPayment(payment.id, approve)
+      setPayments(getPayments())
+      setDecision(null)
+      onMutate()
+    } catch (reviewError) {
+      setError(reviewError instanceof Error ? reviewError.message : 'The UPI request could not be reviewed.')
+    } finally {
+      setReviewing(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-lg font-bold text-slate-900">Payment configuration</h2>
-        <Button onClick={() => setOpen(true)}>+ Add method</Button>
+      <div>
+        <h2 className="text-lg font-bold text-slate-900">Payment transactions</h2>
+        <p className="text-sm text-slate-700 mt-1">Razorpay plans activate after server-side capture verification. Check a manual UPI transfer in the bank account before approving its UTR.</p>
       </div>
 
-      {methods.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500">
-          No payment methods configured. Add Razorpay keys or a UPI VPA.
-        </Card>
+      {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
+
+      {loading && payments.length === 0 ? (
+        <Card className="p-5 text-sm text-slate-700">Loading payment records…</Card>
+      ) : payments.length === 0 ? (
+        <Card className="p-5 text-sm text-slate-700">No payments recorded yet.</Card>
       ) : (
-        <div className="grid gap-2">
-          {methods.map((m) => (
-            <Card key={m.id} className="p-3">
-              {/* Info row */}
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 grid place-items-center text-lg">
-                  {m.mode === 'UPI' ? '📱' : '🔑'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="font-semibold text-slate-900">{m.label}</div>
-                    <Badge color={m.mode === 'UPI' ? 'green' : 'brand'}>{m.mode}</Badge>
-                    {m.isDefault && <Badge color="amber">Default</Badge>}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5 break-all">
-                    {m.mode === 'UPI'
-                      ? `VPA: ${m.upiVpa}`
-                      : `Key: ${m.razorpayKey || '—'} · Secret: ${m.razorpaySecret ? '****' + (m.razorpaySecret.slice(-3) || '') : '—'}`}
-                  </div>
-                </div>
-              </div>
-              {/* Action row — always visible on mobile */}
-              <div className="flex items-center gap-2 mt-3">
-                {!m.isDefault && (
-                  <Button variant="secondary" className="flex-1" onClick={() => { setDefaultPaymentMethod(m.id); onMutate() }}>
-                    ⭐ Make default
-                  </Button>
-                )}
-                <Button variant="danger" className="flex-1" onClick={() => setDeleteMethod(m)}>
-                  🗑 Delete
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <ConfirmDialog
-        open={!!deleteMethod}
-        title="Delete payment method?"
-        message={deleteMethod ? `Remove "${deleteMethod.label}" from the platform's payment options? This cannot be undone.` : ''}
-        confirmLabel="Delete"
-        danger
-        onConfirm={() => {
-          if (deleteMethod) { deletePaymentMethod(deleteMethod.id); onMutate() }
-          setDeleteMethod(null)
-        }}
-        onCancel={() => setDeleteMethod(null)}
-      />
-
-      <MethodForm open={open} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); onMutate() }} />
-
-      <div>
-        <h3 className="text-sm font-bold text-slate-900 mb-2">Payment monitor — all transactions (reference & UTR)</h3>
-        {payments.length === 0 ? (
-          <Card className="p-4 text-sm text-slate-500">No payments recorded yet.</Card>
-        ) : (
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[880px]">
-              <thead className="bg-slate-50 text-slate-600 text-left">
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[900px]">
+              <thead className="bg-slate-100 text-slate-800 text-left">
                 <tr>
-                  <th className="px-3 py-2">Time</th>
+                  <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">User</th>
                   <th className="px-3 py-2">Plan</th>
                   <th className="px-3 py-2">Amount</th>
-                  <th className="px-3 py-2">TXN ref</th>
+                  <th className="px-3 py-2">Reference</th>
                   <th className="px-3 py-2">UTR</th>
-                  <th className="px-3 py-2">Activation</th>
+                  <th className="px-3 py-2">Expiry</th>
                   <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Refund</th>
                   <th className="px-3 py-2">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {payments.slice(0, 25).map((p) => {
-                  const u = getUsers().find((x) => x.id === p.userId)
-                  const plan = getPlans().find((pl) => pl.id === p.planId)
+                {payments.map((payment) => {
+                  const account = getUsers().find((candidate) => candidate.id === payment.userId)
                   return (
-                    <tr key={p.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2 text-slate-700">{new Date(p.createdAt).toLocaleString()}</td>
-                      <td className="px-3 py-2 text-slate-900 font-medium">{u?.name ?? p.userId}</td>
-                      <td className="px-3 py-2 text-slate-700">{plan?.title ?? p.planId}{p.planDays ? ` · ${p.planDays}d` : ''}</td>
-                      <td className="px-3 py-2 text-slate-900 font-bold">₹{p.amount}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-500">{p.txRef ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-500">{p.utr || '—'}</td>
+                    <tr key={payment.id} className="border-t border-slate-200">
+                      <td className="px-3 py-2 text-xs text-slate-700">{new Date(payment.createdAt).toLocaleString()}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-900">{account?.name ?? account?.email ?? payment.userId}</td>
+                      <td className="px-3 py-2 text-slate-800">{payment.planTitle ?? payment.planId} · {payment.planDays}d</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">₹{payment.amount}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.utr || '—'}</td>
+                      <td className="px-3 py-2 text-slate-800">{payment.expiresAt ? new Date(payment.expiresAt).toLocaleDateString() : '—'}</td>
                       <td className="px-3 py-2">
-                        {p.activated && p.expiresAt ? (
-                          <Badge color="green">Active until {new Date(p.expiresAt).toLocaleDateString()}</Badge>
-                        ) : (
-                          <Badge color="slate">—</Badge>
-                        )}
+                        <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
+                          {payment.manualReview ? 'UPI review needed' : payment.status === 'success' ? 'Paid' : payment.status}
+                        </Badge>
                       </td>
                       <td className="px-3 py-2">
-                        <Badge color={p.status === 'success' ? 'green' : p.status === 'pending' ? 'amber' : 'red'}>{p.status}</Badge>
-                      </td>
-                      <td className="px-3 py-2">
-                        {p.refundStatus === 'approved' ? (
-                          <Badge color="green">Refunded{p.refundRef ? ` · ${p.refundRef}` : ''}</Badge>
-                        ) : p.refundStatus === 'requested' ? (
-                          <Badge color="amber">Requested</Badge>
-                        ) : p.refundStatus === 'rejected' ? (
-                          <Badge color="slate">Rejected</Badge>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {p.status === 'success' && p.refundStatus !== 'approved' && (
-                          <Button variant="secondary" onClick={() => setRefundTarget(p)}>
-                            {p.refundStatus === 'requested' ? 'Review refund' : 'Refund'}
-                          </Button>
+                        {payment.manualReview && (
+                          <div className="flex gap-2">
+                            <Button variant="secondary" disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: false })}>
+                              Reject
+                            </Button>
+                            <Button disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: true })}>
+                              Verify & activate
+                            </Button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -630,69 +515,22 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
                 })}
               </tbody>
             </table>
-            </div>
-          </Card>
-        )}
-      </div>
-
-      <RefundModal payment={refundTarget} onClose={() => setRefundTarget(null)} onDone={() => { setRefundTarget(null); onMutate() }} />
-    </div>
-  )
-}
-
-function MethodForm({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
-  const [mode, setMode] = useState<'Razorpay' | 'UPI'>('Razorpay')
-  const [label, setLabel] = useState('')
-  const [key, setKey] = useState('')
-  const [secret, setSecret] = useState('')
-  const [vpa, setVpa] = useState('')
-
-  function save() {
-    savePaymentMethod({
-      mode,
-      label: label || (mode === 'UPI' ? 'UPI' : 'Razorpay'),
-      razorpayKey: mode === 'Razorpay' ? key : undefined,
-      razorpaySecret: mode === 'Razorpay' ? secret : undefined,
-      upiVpa: mode === 'UPI' ? vpa : undefined,
-    })
-    setLabel(''); setKey(''); setSecret(''); setVpa('')
-    onSaved()
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Add payment method">
-      <div className="space-y-3">
-        <div>
-          <Label>Mode</Label>
-          <Select value={mode} onChange={(e) => setMode(e.target.value as 'Razorpay' | 'UPI')}>
-            <option value="Razorpay">Razorpay</option>
-            <option value="UPI">UPI VPA</option>
-          </Select>
-        </div>
-        <div>
-          <Label>Label</Label>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Live Razorpay / Main UPI" />
-        </div>
-        {mode === 'Razorpay' ? (
-          <>
-            <div>
-              <Label>Razorpay Key ID</Label>
-              <Input value={key} onChange={(e) => setKey(e.target.value)} placeholder="rzp_live_…" />
-            </div>
-            <div>
-              <Label>Webhook secret</Label>
-              <Input value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="whsec_…" />
-            </div>
-          </>
-        ) : (
-          <div>
-            <Label>UPI VPA</Label>
-            <Input value={vpa} onChange={(e) => setVpa(e.target.value)} placeholder="business@okicici" />
           </div>
-        )}
-        <Button className="w-full" onClick={save}>Save method</Button>
-      </div>
-    </Modal>
+        </Card>
+      )}
+
+      <ConfirmDialog
+        open={!!decision}
+        title={decision?.approve ? 'Verify UPI payment?' : 'Reject UPI payment?'}
+        message={decision?.approve
+          ? `Only continue after matching the UTR ${decision.payment.utr ?? '—'}, amount ₹${decision.payment.amount}, and date in the merchant bank account. Approval activates ${decision.payment.planDays} days from the current expiry (or now).`
+          : 'Reject this manual UPI request? No subscription will be activated.'}
+        confirmLabel={decision?.approve ? 'Verified — activate plan' : 'Reject request'}
+        danger={decision ? !decision.approve : false}
+        onConfirm={() => { if (decision) void review(decision.payment, decision.approve) }}
+        onCancel={() => { if (!reviewing) setDecision(null) }}
+      />
+    </div>
   )
 }
 
