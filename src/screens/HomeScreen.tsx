@@ -5,6 +5,7 @@ import { JobCard } from '../components/JobCard'
 import { CATEGORIES, filterJobs, jobStats, sortedJobs, type Job, type JobCategory } from '../data/jobs'
 import type { User } from '../data/auth'
 import { isSubscribed } from '../data/auth'
+import { CREATOR } from '../data/creator'
 
 const EXP_OPTIONS = ['All', 'Fresher', '0–2 years', '2–5 years', '5+ years']
 const SALARY_OPTIONS = ['All', 'Under ₹2 LPA', '₹2–4 LPA', '₹4–7 LPA', '₹7–12 LPA', '₹12 LPA+']
@@ -179,6 +180,21 @@ export function HomeScreen({
           list.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} />)
         )}
       </div>
+
+      {/* Footer credit — prominent but quiet: a single amber band at the end of
+          the feed, repeated nowhere else on this screen. */}
+      <footer className="pt-3 pb-2">
+        <div className="rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 ring-1 ring-amber-200 px-4 py-3 text-center">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">App created by</div>
+          <div className="mt-0.5 text-base sm:text-lg font-extrabold text-slate-900">
+            Mr. {CREATOR.name}
+          </div>
+          <div className="text-[11px] font-semibold text-amber-800 mt-0.5">{CREATOR.role}</div>
+        </div>
+        <p className="mt-2 text-center text-[11px] text-slate-400">
+          MedRep Connect Pro · {CREATOR.tagline}
+        </p>
+      </footer>
     </div>
   )
 }

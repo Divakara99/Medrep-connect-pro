@@ -34,7 +34,7 @@ try {
     INSERT INTO public.user_accounts VALUES
       ('${freeId}', NULL), ('${paidId}', now() + interval '1 day');
     INSERT INTO public.vacancies (id, data) VALUES
-      ('job_1', '{"title":"Medical Representative","location":"Chennai","category":"MR","salary":"2 LPA","experience":"0-2 years","company":"Hidden Pharma","manager":"Private Manager","contact":"9999999999","managerEmail":"private@example.org","description":"Private description","postedAt":123,"pinned":true}'),
+      ('job_1', '{"title":"Medical Representative","location":"Chennai","category":"MR","salary":"2 LPA","experience":"0-2 years","company":"Hidden Pharma","manager":"Private Manager","contact":"9999999999","managerEmail":"private@example.org","description":"Private description","hq":"Hyderabad HO","division":"Cardiology","postedAt":123,"pinned":true}'),
       ('removed', '{"deleted":true,"title":"Removed","location":"Chennai","category":"MR"}');
   `)
   const migration = await readFile(new URL('../supabase/secure_jobs.sql', import.meta.url), 'utf8')
@@ -65,9 +65,43 @@ try {
   assert.equal(free.length, 1, 'deleted rows must not be listed')
   const freeJob = free[0].list_visible_jobs
   assert.equal(freeJob.title, 'Medical Representative')
-  for (const field of ['company', 'manager', 'contact', 'managerEmail', 'description']) {
+  // The city and the public description stay visible before any subscription.
+  assert.equal(freeJob.location, 'Chennai', 'city must stay visible to free users')
+  assert.equal(freeJob.description, 'Private description', 'description is public and must be readable')
+  assert.equal(freeJob.hq, 'Hyderabad HO', 'HQ is public and must not be locked')
+  assert.equal(freeJob.division, 'Cardiology', 'division is public and must not be locked')
+  // The five confidential fields must not exist in the free-user response at all.
+  for (const field of ['company', 'manager', 'contact', 'managerEmail', 'managerAltPhone']) {
     assert.equal(Object.hasOwn(freeJob, field), false, `${field} leaked to free user`)
   }
+
+  // The public description must not become a back door for contact details.
+  // Re-run as a fully verified (role + aal2) admin, which is the only identity
+  // allowed to write vacancies at all.
+  await db.exec("SET test.admin = 'true'; SET test.aal = 'aal2'")
+  await assert.rejects(
+    db.query(`INSERT INTO public.vacancies (id, data) VALUES
+      ('leaky_email', '{"title":"MR","location":"Chennai","category":"MR","description":"Call hr@hiddenpharma.example"}')`),
+    /description is public/,
+    'emails in the public description must be rejected',
+  )
+  await assert.rejects(
+    db.query(`INSERT INTO public.vacancies (id, data) VALUES
+      ('leaky_phone', '{"title":"MR","location":"Chennai","category":"MR","description":"Contact +91 98765 43210 for details"}')`),
+    /description is public/,
+    'phone numbers in the public description must be rejected',
+  )
+  await assert.rejects(
+    db.query(`UPDATE public.vacancies SET data = data || '{"description":"Email hr@x.co.in"}' WHERE id = 'job_1'`),
+    /description is public/,
+    'updates must be guarded too',
+  )
+  const { rows: [guarded] } = await db.query(`
+    UPDATE public.vacancies
+    SET data = data || '{"description":"Field sales\\nDoctor calls\\n25k incentive"}'
+    WHERE id = 'job_1' RETURNING data ->> 'description' AS description`)
+  assert.match(guarded.description, /Doctor calls/, 'ordinary point-wise descriptions must still save')
+  await db.exec("SET test.admin = 'false'; SET test.aal = 'aal1'")
 
   await db.exec(`SET request.jwt.claim.sub = '${paidId}'`)
   const { rows: paid } = await db.query('SELECT * FROM public.list_visible_jobs()')

@@ -207,6 +207,17 @@ export function filterJobs(
   })
 }
 
+/**
+ * Job descriptions are entered one point per line and rendered as (+) bullets.
+ * A leading "(+)" typed by the admin is tolerated and stripped here.
+ */
+export function descriptionPoints(description?: string): string[] {
+  return (description || '')
+    .split(/\r?\n|•/)
+    .map((line) => line.replace(/^\s*\(\+\)\s*/, '').trim())
+    .filter(Boolean)
+}
+
 export function jobStats(jobs: Job[]) {
   const total = jobs.length
   const mr = jobs.filter((j) => j.category === 'MR').length

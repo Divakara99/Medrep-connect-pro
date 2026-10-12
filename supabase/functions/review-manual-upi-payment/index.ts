@@ -7,11 +7,12 @@ Deno.serve(async (request: Request) => {
 
   const context = await authenticate(request)
   if (isResponse(context)) return context
-  // The authenticator-code (aal2) requirement was removed with the fixed
-  // access-code gate. The verified admin role claim + password session remain
-  // the authorization boundary for this payment review.
+  // Trusted admin role AND a verified authenticator (aal2) session.
   if (!isAdmin(context.user.app_metadata)) {
     return jsonResponse({ error: 'An administrator account is required.' }, 403)
+  }
+  if (!context.aal2) {
+    return jsonResponse({ error: 'Verify your authenticator code (MFA) before reviewing payments.' }, 403)
   }
 
   const body = await readJson(request)

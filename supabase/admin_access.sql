@@ -1,18 +1,20 @@
--- Admin access-code gate + manual access grants.
+-- Manual access grants + the 'manual_grant' payment method.
 -- Run AFTER schema.sql, payments.sql and secure_jobs.sql in the SAME Supabase
 -- project as the app.
 --
--- 1. The old authenticator-code (aal2) requirement is removed: the admin portal
---    now uses the fixed box-entry access code (app-level lock) on top of the
---    admin email+password sign-in. The admin ROLE claim remains mandatory and
---    is still checked by RLS for every admin-only table.
+-- 1. The administrator gate keeps BOTH requirements: the trusted admin ROLE
+--    claim AND a verified authenticator (TOTP) step, i.e. an `aal2` JWT. A
+--    password-only (aal1) session cannot read or write admin data. Enable TOTP
+--    MFA in Supabase Auth settings; the app's admin portal enrols and verifies
+--    the authenticator before it shows any data.
 -- 2. grant_manual_access lets an admin grant special user access (e.g. a free
 --    15-day run) with a full audit row in subscription_payments.
 -- 3. subscription_payments gains the 'manual_grant' payment method.
 
 BEGIN;
 
--- Role-only admin gate (aal2 clause removed).
+-- Trusted role + verified TOTP (aal2). Identical to schema.sql/secure_jobs.sql;
+-- re-declared here so this file can be re-run on its own.
 CREATE OR REPLACE FUNCTION public.is_app_admin()
 RETURNS boolean LANGUAGE sql STABLE SECURITY INVOKER
 SET search_path = pg_catalog, auth
@@ -20,7 +22,7 @@ AS $$
   SELECT (
     coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false)
     OR coalesce((auth.jwt() -> 'app_metadata' ->> 'is_admin') = 'true', false)
-  )
+  ) AND coalesce(auth.jwt() ->> 'aal' = 'aal2', false)
 $$;
 REVOKE ALL ON FUNCTION public.is_app_admin() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_app_admin() TO authenticated;

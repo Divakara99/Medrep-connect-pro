@@ -31,6 +31,42 @@ type SubscriptionPaymentRow = {
 export type Database = {
   public: {
     Tables: {
+      billing_plans: {
+        Row: {
+          id: string
+          title: string
+          days: number
+          amount_paise: number
+          tagline: string
+          popular: boolean
+          active: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id: string
+          title: string
+          days: number
+          amount_paise: number
+          tagline?: string
+          popular?: boolean
+          active?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          days?: number
+          amount_paise?: number
+          tagline?: string
+          popular?: boolean
+          active?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       subscription_payments: {
         Row: SubscriptionPaymentRow
         Insert: {
@@ -67,6 +103,18 @@ export type Database = {
     }
     Views: { [_ in never]: never }
     Functions: {
+      save_billing_plan: {
+        Args: {
+          p_id: string
+          p_title: string
+          p_days: number
+          p_amount_paise: number
+          p_tagline?: string
+          p_popular?: boolean
+          p_active?: boolean
+        }
+        Returns: Json
+      }
       confirm_razorpay_subscription_payment: {
         Args: {
           p_gateway_order_id: string

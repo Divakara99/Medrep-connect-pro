@@ -9,6 +9,11 @@
     "icons": "node scripts/generate-icons.mjs",
     "lint": "oxlint",
     "test:security": "node scripts/test-secure-jobs.mjs",
+    "test:billing": "node scripts/test-billing-plans.mjs",
+    "test:resumes": "node scripts/test-resumes.mjs",
+    "test:applications": "node scripts/test-applications.mjs",
+    "test:descriptions": "node scripts/test-description-guard.mjs",
+    "test": "npm run test:security && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:descriptions",
     "preview": "vite preview"
   },
   "dependencies": {

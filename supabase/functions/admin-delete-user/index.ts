@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { hasVerifiedAal2 } from '../_shared/supabase.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,11 +41,14 @@ Deno.serve(async (request: Request) => {
   })
   const { data: { user: actor }, error: authError } = await authClient.auth.getUser(token)
   if (authError || !actor) return jsonResponse({ error: 'The Supabase session is invalid or expired.' }, 401)
-  // The authenticator-code (aal2) requirement was removed with the fixed
-  // access-code gate. The verified admin role claim + password session remain
-  // the authorization boundary for this destructive call.
+  // Two independent requirements for this destructive call: the trusted admin
+  // role claim, and an access token whose `aal` claim is `aal2`, which Supabase
+  // Auth only issues after the administrator verifies a TOTP challenge.
   if (!isAdmin(actor.app_metadata)) {
     return jsonResponse({ error: 'An administrator account is required.' }, 403)
+  }
+  if (!hasVerifiedAal2(token, actor.id)) {
+    return jsonResponse({ error: 'Verify your authenticator code (MFA) before using administrator tools.' }, 403)
   }
 
   let body: { userId?: unknown }

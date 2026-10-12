@@ -1,7 +1,6 @@
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
 import { getProfile, newEducation, newExperience, saveProfile, type Education, type Experience, type Profile } from '../data/profile'
-import { clearResume, getResume, saveResume, type ResumeRecord } from '../data/resume'
 import { updateCurrentPhone } from '../data/auth'
 
 export type ProfileEditorHandle = {
@@ -18,22 +17,6 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; ph
   })
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [resume, setResume] = useState<ResumeRecord | null>(() => getResume(email))
-  const [resumeMsg, setResumeMsg] = useState<string | null>(null)
-  const resumeInput = useRef<HTMLInputElement | null>(null)
-
-  async function onResumeFile(file: File | undefined) {
-    if (!file) return
-    setResumeMsg(null)
-    const result = await saveResume(email, file)
-    if (result.ok) {
-      setResume(result.resume)
-      setResumeMsg('Resume saved — it will be sent along with your job applications.')
-    } else {
-      setResumeMsg(result.error)
-    }
-  }
-
   function update(patch: Partial<Profile>) {
     setP((prev) => ({ ...prev, ...patch }))
   }
@@ -93,46 +76,14 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; ph
         </div>
       </Card>
 
-      <Card className="p-4 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Resume / CV</div>
-            <div className="text-sm text-slate-700">Sent along with your data on every job application (PDF/DOC/DOCX · max 1.5 MB).</div>
+      <Card className="p-4">
+        <div className="flex items-center gap-3">
+          <span aria-hidden className="text-2xl">📎</span>
+          <div className="text-sm text-slate-700">
+            Your resume is managed in the <span className="font-bold text-slate-900">Resume</span> tab, where it is
+            uploaded to private storage, downloaded when you apply, and deleted automatically after 30 days.
           </div>
-          <span className="text-2xl">📎</span>
         </div>
-        {resume ? (
-          <div className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-bold text-slate-900 truncate">{resume.fileName}</div>
-              <div className="text-xs text-slate-600">{Math.max(1, Math.round(resume.size / 1024))} KB · updated {new Date(resume.updatedAt).toLocaleDateString()}</div>
-            </div>
-            <a
-              href={resume.dataUrl}
-              download={resume.fileName}
-              className="shrink-0 rounded-xl bg-white ring-1 ring-slate-200 px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-50"
-            >
-              Download
-            </a>
-            <Button
-              variant="secondary"
-              className="shrink-0 px-3 py-2 text-xs"
-              onClick={() => { clearResume(email); setResume(null); setResumeMsg('Resume removed.') }}
-            >
-              Remove
-            </Button>
-          </div>
-        ) : (
-          <Button variant="secondary" onClick={() => resumeInput.current?.click()}>⬆ Upload resume</Button>
-        )}
-        <input
-          ref={resumeInput}
-          type="file"
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          className="hidden"
-          onChange={(event) => { void onResumeFile(event.target.files?.[0]); event.target.value = '' }}
-        />
-        {resumeMsg && <p role="status" className="text-xs font-semibold text-slate-700">{resumeMsg}</p>}
       </Card>
 
       <Card className="p-4 space-y-3">

@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
 import { hasAdminRole, supabase } from './supabase'
+import { isMfaVerifiedSession } from './mfa'
 import { read, remove, write } from './storage'
 
 export type User = {
@@ -114,10 +115,10 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   const snapshot = snapshotFromSession(data.session)
   if (!snapshot.user) return snapshot
   if (snapshot.session.kind === 'admin') {
-    // The fixed app access code (box entry) replaces the old authenticator-code
-    // requirement. The code gate is app-level; the admin password + role remain
-    // the real authentication boundary checked by the server.
-    return { ...snapshot, adminVerified: isAdminPinVerified() }
+    // Admin data needs a verified authenticator. `adminVerified` mirrors the
+    // session's authenticator assurance level reported by Supabase Auth, which
+    // is the same `aal2` claim the database and Edge Functions require.
+    return { ...snapshot, adminVerified: await isMfaVerifiedSession() }
   }
 
   try {
@@ -361,42 +362,7 @@ export async function deleteUserAccount(userId: string): Promise<{ ok: true } | 
 export async function logout(): Promise<void> {
   activeUser = null
   remove(USERS_CACHE_KEY)
-  remove(ADMIN_PIN_KEY)
   await supabase.auth.signOut()
-}
-
-// ---------------------------------------------------------------------------
-// Admin access code (fixed 4-digit, box-type entry)
-// ---------------------------------------------------------------------------
-
-const ADMIN_PIN_KEY = 'mrc_admin_pin_ok_v1'
-
-/**
- * Fixed administrator access code. This is an app-level lock that replaces the
- * old emailed/authenticator code screen — it is NOT a security boundary. The
- * admin password sign-in and the server-side admin role check remain the real
- * protections for admin data.
- */
-const ADMIN_ACCESS_CODE = '9676'
-
-export function verifyAdminPin(code: string): boolean {
-  return code === ADMIN_ACCESS_CODE
-}
-
-export function markAdminPinVerified(): void {
-  try {
-    sessionStorage.setItem(ADMIN_PIN_KEY, '1')
-  } catch {
-    /* ignore */
-  }
-}
-
-export function isAdminPinVerified(): boolean {
-  try {
-    return sessionStorage.getItem(ADMIN_PIN_KEY) === '1'
-  } catch {
-    return false
-  }
 }
 
 /** The current session user, refreshed by Auth events and getAuthSnapshot(). */
