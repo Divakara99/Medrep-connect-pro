@@ -1,7 +1,7 @@
 {
-  "name": "MedRep Connect Pro — Pharma & Multi-Industry Job Hub",
+  "name": "MedRep Connect Pro",
   "short_name": "MedRep Pro",
-  "description": "India's first pharma-job network — MR vacancies pinned first, then multi-industry jobs.",
+  "description": "India's 1st pharma-job network.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

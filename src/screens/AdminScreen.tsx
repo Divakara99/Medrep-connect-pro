@@ -9,6 +9,7 @@ import {
   addJob,
   CATEGORIES,
   deleteJob,
+  descriptionPoints,
   getJobs,
   getLegacyJobs,
   importLegacyJobs,
@@ -18,16 +19,15 @@ import {
   updateJob,
   type Job,
 } from '../data/jobs'
-import { getPlans, savePlans, type Plan } from '../data/plans'
+import { getAllPlansIncludingRetired, refreshPlans, savePlans, type Plan } from '../data/plans'
 import {
   getPayments,
   refreshPayments,
   reviewManualUpiPayment,
   type PaymentRecord,
 } from '../data/payments'
-import { getAltPaymentDetails, saveAltPaymentDetails } from '../data/altPayment'
 import { getTickets, updateTicket, type Ticket } from '../data/tickets'
-import { getApplicationQueue, type ApplicationRecord } from '../data/apply'
+import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
 import { broadcast } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
 import { getSyncStatus } from '../data/supabase'
@@ -76,6 +76,9 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     void loadAdminJobs()
+      .then(() => { if (active) setVersion((v) => v + 1) })
+      .catch(() => undefined)
+    void loadAllApplications()
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     return () => { active = false }
@@ -145,15 +148,32 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
 
 // -------------------- Applications --------------------
 function ApplicationsTab() {
-  const queue = useMemo(() => getApplicationQueue(), [])
+  const [queue, setQueue] = useState<ApplicationRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ApplicationRecord | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void loadAllApplications()
+      .then((records) => { if (active) { setQueue(records); setError(null) } })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'Applications could not be loaded.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold text-slate-900">✉️ Applications (Email · WhatsApp fallback)</h2>
         <Badge color="brand">{queue.length}</Badge>
       </div>
-      {queue.length === 0 ? (
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {loading ? (
+        <Card className="p-8 text-center text-sm text-slate-500">Loading applications…</Card>
+      ) : queue.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500">No applications have been submitted yet.</Card>
       ) : (
         <div className="grid gap-2">
@@ -172,7 +192,10 @@ function ApplicationsTab() {
                   <div className="text-xs text-slate-500 truncate">
                     {m.jobTitle} at {m.company} → {m.manager} ({m.to})
                   </div>
-                  <div className="text-[11px] text-slate-400">{new Date(m.sentAt).toLocaleString()}</div>
+                  <div className="text-[11px] text-slate-400">
+                {new Date(m.sentAt).toLocaleString()}
+                {m.resumeFileName ? ` · resume on file: ${m.resumeFileName}` : ''}
+              </div>
                 </div>
               </div>
               {/* Action row — always visible on mobile */}
@@ -301,6 +324,21 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
   )
 }
 
+/**
+ * Mirrors the public.vacancy_public_description_guard trigger so the admin gets
+ * an immediate message instead of a database error.
+ */
+function findConfidentialContact(description: string): string | null {
+  if (/[^\s@]+@[^\s@]+\.[A-Za-z]{2,}/.test(description)) {
+    return 'The description is public. Remove the email address and put it in the "Manager email" field instead.'
+  }
+  const candidates = description.match(/\+?[0-9][0-9 ()\-.]{7,}[0-9]/g) ?? []
+  if (candidates.some((candidate) => candidate.replace(/[^0-9]/g, '').length >= 10)) {
+    return 'The description is public. Remove the phone number and use the "Contact" or "Manager alternate number" field instead.'
+  }
+  return null
+}
+
 function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: boolean; onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState(job?.title ?? '')
   const [company, setCompany] = useState(job?.company ?? '')
@@ -322,6 +360,13 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
   async function save() {
     if (!title || !company || !location) {
       setError('Title, company, and location are required.')
+      return
+    }
+    // Same rule the database enforces: the description is public, so it must
+    // not carry contact details. Catching it here gives an immediate message.
+    const confidential = findConfidentialContact(description)
+    if (confidential) {
+      setError(confidential)
       return
     }
     setSaving(true)
@@ -408,11 +453,56 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
             <label htmlFor="pinned" className="text-sm font-semibold text-slate-700">Pin to Priority</label>
           </div>
         </div>
-        <div>
-          <Label>Description — one point per line (shown to users as (+) bullets)</Label>
-          <Textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={'(+) Role responsibility one\n(+) Requirement two'} />
+        <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50/40 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <Label>Job description — one point per line</Label>
+            <Badge color="amber">PUBLIC · shown to every user</Badge>
+          </div>
+          <p className="text-xs font-medium text-amber-900">
+            Free users read this description before subscribing, so it must not contain confidential contact details.
+            Phone numbers and email addresses are rejected here and by the database — use the Manager, Contact,
+            Manager alternate number and Manager email fields above instead.
+          </p>
+          <Textarea
+            rows={6}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={'Field sales in the assigned territory\nDoctor and chemist calls as per the tour plan\nGraduate with 0-3 years of pharma experience'}
+          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              type="button"
+              variant="secondary"
+              className="px-3 py-1.5 text-xs"
+              onClick={() => setDescription((current) => (current.trim() ? `${current.replace(/\n+$/, '')}\n` : ''))}
+            >
+              + Add a point
+            </Button>
+            <span className="text-[11px] text-slate-600">
+              {descriptionPoints(description).length} point{descriptionPoints(description).length === 1 ? '' : 's'} · each line becomes a (+) bullet
+            </span>
+          </div>
+          {descriptionPoints(description).length > 0 && (
+            <div className="rounded-lg bg-white ring-1 ring-slate-200 p-2.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">How users will see it</div>
+              <ul className="space-y-1">
+                {descriptionPoints(description).map((point, index) => (
+                  <li key={index} className="flex items-start gap-1.5 text-xs text-slate-800 leading-snug">
+                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">(+)</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-        <p className="text-sm font-medium text-slate-700">Title, category, salary and experience are public. City, HQ, Division, company, manager, contact numbers (ABM/ASM) and description appear only to active subscribers and are blurred in job details until tapped. Do not put private details in public fields.</p>
+        <p className="text-sm font-medium text-slate-700">
+          <span className="font-bold">Public to every signed-in user:</span> title, category, city, salary, experience,
+          posted date and the description above.
+          <span className="font-bold"> Locked until an active subscription:</span> company name, manager name, manager
+          email, contact number (ABM/ASM), the optional (+) manager alternate number, HQ and division. Free users see
+          blurred placeholders only — those values are never sent to them.
+        </p>
         {error && <p role="alert" className="text-sm font-bold text-red-800">{error}</p>}
         <Button className="w-full" onClick={() => { void save() }} disabled={saving}>{saving ? 'Saving securely…' : job ? 'Save changes' : 'Post vacancy'}</Button>
       </div>
@@ -422,57 +512,115 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
 
 // -------------------- Plans --------------------
 function PlansTab({ onMutate }: { onMutate: () => void }) {
-  const [plans, setPlans] = useState<Plan[]>(() => getPlans())
+  const [plans, setPlans] = useState<Plan[]>(() => getAllPlansIncludingRetired())
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
 
-  function update(i: number, patch: Partial<Plan>) {
-    const next = [...plans]
-    next[i] = { ...next[i], ...patch }
-    setPlans(next)
+  useEffect(() => {
+    let active = true
+    void refreshPlans()
+      .then((loaded) => { if (active) { setPlans(loaded); setError(null) } })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'The plan catalog could not be loaded.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  function update(index: number, patch: Partial<Plan>) {
+    setPlans((current) => current.map((plan, position) => (position === index ? { ...plan, ...patch } : plan)))
+    setSaved(false)
   }
-  function save() {
-    savePlans(plans)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    setSaved(false)
+    const result = await savePlans(plans)
+    setSaving(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setPlans(result.plans)
+    setSaved(true)
     onMutate()
-    alert('Plans saved.')
   }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-lg font-bold text-slate-900">Plans & Pricing</h2>
-        <Button onClick={save}>Save changes</Button>
+        <h2 className="text-lg font-bold text-slate-900">Plans &amp; Pricing</h2>
+        <Button onClick={() => { void save() }} disabled={saving || loading}>
+          {saving ? 'Saving to server…' : 'Save changes'}
+        </Button>
       </div>
       <p className="rounded-xl bg-indigo-50 p-3 text-sm font-medium text-indigo-950 ring-1 ring-indigo-200">
-        Checkout amounts and plan validity are enforced by the secure server catalog. This page can edit display text only.
+        Prices and durations are stored on the server (<code className="font-mono text-xs">public.billing_plans</code>) and
+        Razorpay orders are created from those same values — the browser never supplies an amount. Saving requires an
+        MFA-verified administrator session. Existing subscriptions and already-created orders keep the amount and duration
+        they were sold with.
       </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {plans.map((p, i) => (
-          <Card key={p.id} className="p-3 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <Label>Title</Label>
-                <Input value={p.title} onChange={(e) => update(i, { title: e.target.value })} />
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {saved && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Plan catalog saved to the server.</p>}
+      {loading ? (
+        <Card className="p-5 text-sm text-slate-700">Loading the server catalog…</Card>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {plans.map((p, i) => (
+            <Card key={p.id} className={`p-3 space-y-2 ${p.active ? '' : 'opacity-70'}`}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <Label>Title</Label>
+                  <Input value={p.title} onChange={(e) => update(i, { title: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Checkout amount (₹)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={p.price}
+                    aria-label={`Checkout price for ${p.title}`}
+                    onChange={(e) => update(i, { price: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                  />
+                </div>
+                <div>
+                  <Label>Plan validity (days)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={p.days}
+                    aria-label={`Plan validity for ${p.title}`}
+                    onChange={(e) => update(i, { days: Math.min(3650, Math.max(1, Math.round(Number(e.target.value) || 1))) })}
+                  />
+                </div>
+                <div className="flex items-end gap-3 pb-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!!p.popular} onChange={(e) => update(i, { popular: e.target.checked })} />
+                    Popular
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={p.active !== false} onChange={(e) => update(i, { active: e.target.checked })} />
+                    On sale
+                  </label>
+                </div>
+                <div className="col-span-2">
+                  <Label>Tagline</Label>
+                  <Input value={p.tagline} onChange={(e) => update(i, { tagline: e.target.value })} />
+                </div>
               </div>
-              <div>
-                <Label>Checkout amount (₹) · fixed</Label>
-                <Input type="number" value={p.price} disabled aria-label={`Fixed checkout price for ${p.title}`} />
+              <div className="text-[11px] text-slate-500">
+                {p.price >= 1 ? `₹${p.price} for ${p.days} day${p.days === 1 ? '' : 's'}` : 'Set a price of ₹1 or more.'}
+                {p.updatedAt ? ` · last saved ${new Date(p.updatedAt).toLocaleString('en-IN')}` : ''}
               </div>
-              <div>
-                <Label>Plan validity (days) · fixed</Label>
-                <Input type="number" value={p.days} disabled aria-label={`Fixed plan validity for ${p.title}`} />
-              </div>
-              <div className="flex items-end gap-2">
-                <label className="flex items-center gap-2 text-sm pb-2">
-                  <input type="checkbox" checked={!!p.popular} onChange={(e) => update(i, { popular: e.target.checked })} />
-                  Popular
-                </label>
-              </div>
-              <div className="col-span-2">
-                <Label>Tagline</Label>
-                <Input value={p.tagline} onChange={(e) => update(i, { tagline: e.target.value })} />
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -484,16 +632,6 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
-  const [altUpiId, setAltUpiId] = useState(() => getAltPaymentDetails().upiId)
-  const [altBankDetails, setAltBankDetails] = useState(() => getAltPaymentDetails().bankDetails)
-  const [altInstructions, setAltInstructions] = useState(() => getAltPaymentDetails().instructions)
-  const [altSaved, setAltSaved] = useState(false)
-
-  function saveAltPayment() {
-    saveAltPaymentDetails({ upiId: altUpiId.trim(), bankDetails: altBankDetails.trim(), instructions: altInstructions.trim() })
-    setAltSaved(true)
-    window.setTimeout(() => setAltSaved(false), 2500)
-  }
   const [details, setDetails] = useState<PaymentRecord | null>(null)
 
   useEffect(() => {
@@ -542,27 +680,14 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
 
-      <Card className="p-4 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">Alternative payment details</h3>
-            <p className="text-xs text-slate-600 mt-0.5">Shown to users on the Plans page as optional fallback options (manual verification required). Leave blank to hide them.</p>
-          </div>
-          {altSaved && <Badge color="green">Saved</Badge>}
-        </div>
-        <div>
-          <Label htmlFor="alt-upi-id">UPI ID (alternative)</Label>
-          <Input id="alt-upi-id" value={altUpiId} onChange={(event) => setAltUpiId(event.target.value)} placeholder="e.g. medrepconnect@upi" />
-        </div>
-        <div>
-          <Label htmlFor="alt-bank">Bank transfer details</Label>
-          <Textarea id="alt-bank" rows={3} value={altBankDetails} onChange={(event) => setAltBankDetails(event.target.value)} placeholder={'Account name: …\nAccount number: …\nIFSC: …\nBank / branch: …'} />
-        </div>
-        <div>
-          <Label htmlFor="alt-instructions">Extra instructions</Label>
-          <Textarea id="alt-instructions" rows={2} value={altInstructions} onChange={(event) => setAltInstructions(event.target.value)} placeholder="Optional note shown to users" />
-        </div>
-        <Button onClick={saveAltPayment}>Save alternative payment details</Button>
+      <Card className="p-4">
+        <h3 className="text-base font-bold text-slate-900">Merchant payment details stay private</h3>
+        <p className="text-sm text-slate-700 mt-1">
+          Merchant UPI IDs, bank account numbers and IFSC codes are never stored in this app or shown to users. All
+          payments go through Razorpay Checkout using the methods enabled on the merchant account, so settlement details
+          live only in the Razorpay dashboard and the bank. Legacy manual UPI requests created before that change can
+          still be reviewed below from their recorded UTR.
+        </p>
       </Card>
 
       {loading && payments.length === 0 ? (
@@ -972,7 +1097,7 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
       .some((value) => String(value).toLowerCase().includes(lower)),
   ).slice(0, 5) : []
 
-  const applications = active ? getApplicationQueue().filter((a) =>
+  const applications = active ? getCachedApplications().filter((a) =>
     [a.applicantName, a.applicantEmail, a.jobTitle, a.company, a.to].filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(lower) || (digits.length >= 3 && String(value).includes(digits))),
   ).slice(0, 5) : []
@@ -1060,7 +1185,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
   const jobs = getJobs()
   const payments = getPayments()
   const tickets = getTickets()
-  const queue = getApplicationQueue()
+  const queue = getCachedApplications()
 
   const now = useCurrentTime()
   const active = users.filter((u) => u.subscribedUntil && u.subscribedUntil > now)
@@ -1132,12 +1257,14 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
               <tbody>
                 {payments.slice(0, 10).map((p) => {
                   const u = users.find((x) => x.id === p.userId)
-                  const plan = getPlans().find((pl) => pl.id === p.planId)
+                  // The payment row carries its own plan title; the catalog is
+                  // only a fallback for very old records.
+                  const plan = getAllPlansIncludingRetired().find((pl) => pl.id === p.planId)
                   return (
                     <tr key={p.id} className="border-t border-slate-100">
                       <td className="py-1 pr-2 text-xs text-slate-500">{new Date(p.createdAt).toLocaleString()}</td>
                       <td className="py-1 pr-2 font-medium text-slate-900">{u?.name ?? p.userId}</td>
-                      <td className="py-1 pr-2 text-slate-700">{plan?.title ?? p.planId}</td>
+                      <td className="py-1 pr-2 text-slate-700">{p.planTitle ?? plan?.title ?? p.planId}</td>
                       <td className="py-1 pr-2 font-bold text-slate-900">₹{p.amount}</td>
                       <td className="py-1 pr-2 font-mono text-xs text-slate-500">{p.txRef ?? '—'}{p.utr ? ` · UTR ${p.utr}` : ''}</td>
                       <td className="py-1 pr-2 text-xs">{p.expiresAt ? new Date(p.expiresAt).toLocaleDateString() : '—'}</td>

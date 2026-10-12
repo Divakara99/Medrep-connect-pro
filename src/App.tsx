@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LoginScreen } from './screens/LoginScreen'
 import { AdminLoginScreen } from './screens/AdminLoginScreen'
-import { AdminPinScreen } from './screens/AdminPinScreen'
+import { AdminMfaScreen } from './screens/AdminMfaScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { BottomNav, type UserTab } from './components/BottomNav'
 import { TopBar, IconButton } from './components/ui'
@@ -10,17 +10,18 @@ import { HomeScreen } from './screens/HomeScreen'
 import { PriorityScreen } from './screens/PriorityScreen'
 import { PlansScreen } from './screens/PlansScreen'
 import { AccountScreen } from './screens/AccountScreen'
+import { ApplicationsScreen } from './screens/ApplicationsScreen'
 import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
 import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
 import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { openApplication } from './data/apply'
-import { getResume } from './data/resume'
+import { getLatestResume, type ResumeRecord } from './data/resume'
 import { refreshNotificationsFromServer, unreadCount } from './data/notifications'
 import { clearPaymentCache } from './data/payments'
 
-type View = 'loading' | 'login' | 'admin-login' | 'admin-pin' | 'user' | 'admin'
+type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'user' | 'admin'
 
 export default function App() {
   const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
@@ -36,6 +37,8 @@ export default function App() {
   const [applyJob, setApplyJob] = useState<Job | null>(null)
   const [applyChannel, setApplyChannel] = useState<'email' | 'whatsapp'>('email')
   const [applyTarget, setApplyTarget] = useState<string>('')
+  const [resume, setResume] = useState<ResumeRecord | null>(null)
+  const [applyBusy, setApplyBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifTick, setNotifTick] = useState(0)
@@ -46,7 +49,7 @@ export default function App() {
     if (snapshot.session.kind === 'admin') {
       if (adminPortal) {
         setUser(null)
-        setView(snapshot.adminVerified ? 'admin' : 'admin-pin')
+        setView(snapshot.adminVerified ? 'admin' : 'admin-mfa')
       } else {
         setUser(null)
         setView('login')
@@ -161,6 +164,17 @@ export default function App() {
     return () => { active = false }
   }, [view, userId, unlocked])
 
+  // Keep the stored resume in sync so the apply sheet can offer a secure
+  // download without leaving the current screen.
+  useEffect(() => {
+    if (view !== 'user' || !userId) { queueMicrotask(() => setResume(null)); return }
+    let active = true
+    void getLatestResume()
+      .then((stored) => { if (active) setResume(stored) })
+      .catch(() => { if (active) setResume(null) })
+    return () => { active = false }
+  }, [view, userId])
+
   // Keep the broadcast feed (new job posts + every job update) in sync so the
   // notification bell reflects admin activity without a manual refresh.
   useEffect(() => {
@@ -215,9 +229,9 @@ export default function App() {
     return <AdminLoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
   }
 
-  if (view === 'admin-pin') {
-    return <AdminPinScreen onVerified={() => {
-      void getAuthSnapshot().then((snapshot) => applyAuthSnapshot(snapshot)).catch(() => setView('admin-pin'))
+  if (view === 'admin-mfa') {
+    return <AdminMfaScreen onVerified={() => {
+      void getAuthSnapshot().then((snapshot) => applyAuthSnapshot(snapshot)).catch(() => setView('admin-mfa'))
     }} onExit={onLogout} />
   }
 
@@ -239,6 +253,7 @@ export default function App() {
             {tab === 'home' && 'Home'}
             {tab === 'priority' && 'Priority Jobs'}
             {tab === 'plans' && 'Plans'}
+            {tab === 'applications' && 'Resume'}
             {tab === 'ai' && 'AI Help'}
             {tab === 'account' && 'Account'}
           </span>
@@ -287,6 +302,9 @@ export default function App() {
       {tab === 'plans' && user && (
         <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
       )}
+      {tab === 'applications' && user && (
+        <ApplicationsScreen user={user} onResumeChange={setResume} />
+      )}
       {tab === 'ai' && user && <AIChatScreen user={user} />}
       {tab === 'account' && user && (
         <AccountScreen user={user} onLogout={onLogout} onSubscribed={() => refreshUser()} />
@@ -314,22 +332,26 @@ export default function App() {
         job={applyJob}
         channel={applyChannel}
         target={applyTarget}
-        resume={user ? getResume(user.email) : null}
-        onClose={() => setApplyJob(null)}
+        resume={resume}
+        busy={applyBusy}
+        onClose={() => { if (!applyBusy) setApplyJob(null) }}
         onConfirm={() => {
-          if (applyJob && user) {
-            const r = openApplication(user, applyJob)
-            if (r.ok) {
-              showToast(
-                r.channel === 'email'
-                  ? `Mail app opened — send to ${applyJob.manager || 'manager'} ✉️`
-                  : `WhatsApp opened — message ${applyJob.manager || 'manager'} 💬`,
-              )
-            } else {
-              showToast(r.error || 'Could not open application')
-            }
-          }
-          setApplyJob(null)
+          if (!applyJob || !user || applyBusy) return
+          setApplyBusy(true)
+          void openApplication(user, applyJob, resume)
+            .then((result) => {
+              if (result.ok) {
+                showToast(
+                  result.channel === 'email'
+                    ? `Mail app opened — send to ${applyJob.manager || 'manager'} ✉️`
+                    : `WhatsApp opened — message ${applyJob.manager || 'manager'} 💬`,
+                )
+                setApplyJob(null)
+              } else {
+                showToast(result.error)
+              }
+            })
+            .finally(() => setApplyBusy(false))
         }}
       />
 

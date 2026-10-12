@@ -46,6 +46,9 @@ type SubscriptionPaymentRow = {
 const LEGACY_METHODS_KEY = 'mrc_payment_methods_v1'
 const LEGACY_PAYMENTS_KEY = 'mrc_payments_v1'
 const VERIFIED_PAYMENT_CACHE_KEY = 'mrc_verified_payment_cache_v1'
+// Merchant UPI/bank details must not live in a browser. Razorpay Checkout is the
+// only payment path, so the previously stored merchant details are purged.
+const LEGACY_ALT_PAYMENT_KEY = 'mrc_alt_payment_v1'
 
 // Remove the old local-only payment simulation and any Razorpay secret that
 // may have been entered into the former Admin payment form. Neither browser
@@ -54,6 +57,7 @@ const VERIFIED_PAYMENT_CACHE_KEY = 'mrc_verified_payment_cache_v1'
 remove(LEGACY_METHODS_KEY)
 remove(LEGACY_PAYMENTS_KEY)
 remove(VERIFIED_PAYMENT_CACHE_KEY)
+remove(LEGACY_ALT_PAYMENT_KEY)
 
 let paymentCache: PaymentRecord[] = []
 let cacheGeneration = 0

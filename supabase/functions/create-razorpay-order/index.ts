@@ -1,6 +1,6 @@
 import { authenticate, isResponse, optionsResponse } from '../_shared/supabase.ts'
 import { jsonResponse, readJson } from '../_shared/http.ts'
-import { findBillingPlan } from '../_shared/plans.ts'
+import { fetchActiveBillingPlan, type BillingPlan } from '../_shared/plans.ts'
 import { createRazorpayOrder, razorpayCredentials } from '../_shared/razorpay.ts'
 
 Deno.serve(async (request: Request) => {
@@ -11,14 +11,24 @@ Deno.serve(async (request: Request) => {
   if (isResponse(context)) return context
 
   const body = await readJson(request)
-  const plan = findBillingPlan(body?.planId)
+  // The amount and duration come from the server-side catalog
+  // (public.billing_plans), never from the request body. An MFA-verified admin
+  // edits that catalog; changing a price later never affects orders already
+  // created, because subscription_payments keeps its own amount/days snapshot.
+  let plan: BillingPlan | null = null
+  try {
+    plan = await fetchActiveBillingPlan(context.adminClient, body?.planId)
+  } catch (error) {
+    console.error('Billing catalog read failed:', error instanceof Error ? error.message : error)
+    return jsonResponse({ error: 'The subscription catalog is unavailable. Please try again later.' }, 503)
+  }
   if (!plan) return jsonResponse({ error: 'Choose a valid subscription plan.' }, 400)
 
   try {
     const { keyId } = razorpayCredentials()
     const paymentRecordId = crypto.randomUUID()
     const receipt = `mrc_${crypto.randomUUID().replaceAll('-', '')}`
-    const amountPaise = plan.amountRupees * 100
+    const amountPaise = plan.amountPaise
     const order = await createRazorpayOrder({
       amountPaise,
       currency: 'INR',

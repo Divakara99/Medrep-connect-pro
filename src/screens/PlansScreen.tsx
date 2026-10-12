@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
-import { getPlans, type Plan } from '../data/plans'
-import { getAltPaymentDetails, hasAltPaymentDetails } from '../data/altPayment'
+import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
   createRazorpayOrder,
@@ -13,9 +12,6 @@ import {
   type RazorpayCheckoutResponse,
 } from '../data/razorpay'
 
-/** Plan selection is intentionally locked to the 15-day plan. */
-const LOCKED_PLAN_ID = 'p15'
-
 export function PlansScreen({
   user,
   onSubscribed,
@@ -23,16 +19,18 @@ export function PlansScreen({
   user: User
   onSubscribed: (user: User) => void
 }) {
-  const plans = useMemo(() => getPlans(), [])
-  // Selection is fixed to the 15-day plan (blue). Clicking other plans never
-  // shifts the selection — they are not purchasable right now.
+  // Every plan in the server catalog stays purchasable; prices come from the
+  // server, never from the browser.
+  const [plans, setPlans] = useState<Plan[]>(() => getPlans())
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = useMemo(
-    () => plans.find((plan) => plan.id === LOCKED_PLAN_ID) ?? plans.find((plan) => plan.popular) ?? plans[0],
-    [plans],
+    () => plans.find((plan) => plan.id === selectedId)
+      ?? plans.find((plan) => plan.popular)
+      ?? plans[0],
+    [plans, selectedId],
   )
-  const [planNotice, setPlanNotice] = useState<string | null>(null)
   const [showTerms, setShowTerms] = useState(false)
-  const altPayment = useMemo(() => getAltPaymentDetails(), [])
   const [showCheckout, setShowCheckout] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,17 +60,20 @@ export function PlansScreen({
 
   useEffect(() => {
     void loadPaymentHistory()
+    void refreshPlans()
+      .then((loaded) => {
+        setPlans(loaded.filter((plan) => plan.active))
+        setCatalogError(null)
+      })
+      .catch((cause: unknown) => {
+        setCatalogError(cause instanceof Error ? cause.message : 'The plan catalog could not be loaded.')
+      })
     // Load only when the signed-in account changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id])
 
   function openCheckout(plan: Plan) {
-    if (plan.id !== selected.id) {
-      // Clicking any other plan must not move the locked blue selection.
-      setPlanNotice('Only the 15-day plan can be purchased right now — the blue selection stays locked to it.')
-      return
-    }
-    setPlanNotice(null)
+    setSelectedId(plan.id)
     setError(null)
     setSuccess(false)
     setConfirmedUntil(null)
@@ -201,9 +202,9 @@ export function PlansScreen({
         )}
       </Card>
 
-      {planNotice && (
-        <div role="status" className="rounded-xl bg-brand-50 ring-1 ring-brand-200 px-3 py-2 text-sm font-semibold text-brand-900">
-          {planNotice}
+      {catalogError && (
+        <div role="alert" className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm font-semibold text-amber-900">
+          {catalogError} Prices shown are the standard catalog; checkout always uses the live server price.
         </div>
       )}
 
@@ -212,7 +213,7 @@ export function PlansScreen({
           const isSelected = selected.id === plan.id
           return (
             <Card key={plan.id} className={`p-4 relative ${isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : ''} ${plan.popular && !isSelected ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}>
-              {isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected · 15-day plan</Badge></div>}
+              {isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
               {!isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
               <div className="flex items-center justify-between gap-2">
                 <div className="font-bold text-slate-900">{plan.title}</div>
@@ -231,7 +232,7 @@ export function PlansScreen({
                 className="w-full mt-3"
                 onClick={() => openCheckout(plan)}
               >
-                {isSelected ? (unlocked ? 'Extend / Renew' : 'Choose plan') : 'Unavailable for now'}
+                {isSelected ? (unlocked ? 'Extend / Renew' : 'Choose plan') : 'Select plan'}
               </Button>
             </Card>
           )
@@ -250,43 +251,22 @@ export function PlansScreen({
 
       <Card className="p-4">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-          <div className="text-sm font-bold text-slate-900">Alternative payment details</div>
-          <Badge color="slate">Optional · manual verification</Badge>
+          <div className="text-sm font-bold text-slate-900">How payment works</div>
+          <Badge color="slate">Razorpay Checkout only</Badge>
         </div>
-        {hasAltPaymentDetails() ? (
-          <div className="text-sm text-slate-800 space-y-1.5">
-            {altPayment.upiId.trim() && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold">UPI ID:</span>
-                <span className="font-mono bg-slate-100 rounded-lg px-2 py-1 select-all">{altPayment.upiId.trim()}</span>
-              </div>
-            )}
-            {altPayment.bankDetails.trim() && (
-              <div>
-                <span className="font-semibold">Bank transfer:</span>
-                <div className="whitespace-pre-wrap text-slate-700 mt-0.5">{altPayment.bankDetails.trim()}</div>
-              </div>
-            )}
-            {altPayment.instructions.trim() && (
-              <div className="text-xs text-slate-600">{altPayment.instructions.trim()}</div>
-            )}
-            <div className="text-xs font-semibold text-amber-800 bg-amber-50 ring-1 ring-amber-200 rounded-lg px-2.5 py-2">
-              After paying through any alternative option, submit your bank UTR from Payment history below.
-              An admin verifies the bank credit before access activates. Never share your PIN or OTP with anyone.
-            </div>
-          </div>
-        ) : (
-          <div className="text-sm text-slate-600">
-            No alternative payment options are configured. Razorpay Checkout (cards, UPI apps, QR) is the default secure path.
-          </div>
-        )}
+        <p className="text-sm text-slate-700">
+          Every plan is paid inside secure Razorpay Checkout, using whichever methods the merchant account has enabled —
+          credit/debit cards, netbanking, and UPI apps such as PhonePe, Google Pay or Paytm, plus a Razorpay QR where
+          offered. We never ask you to transfer money to a personal UPI ID or bank account, and merchant banking details
+          are never shown in the app.
+        </p>
       </Card>
 
       <Card className="p-4">
         <div className="text-sm font-bold text-slate-900 mb-1.5">Instructions & standard terms</div>
         <div className="text-[11px] leading-relaxed text-slate-600 space-y-1">
-          <p>• Pay only inside Razorpay Checkout or through the alternative payment details shown above.</p>
-          <p>• Access starts after the payment is verified (instant for Razorpay; manual admin verification for alternative payments).</p>
+          <p>• Pay only inside Razorpay Checkout. No other payment channel is offered.</p>
+          <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
           <p>• One plan per payment. Renewals add days to your existing expiry.</p>
           <p>• Do not share your bank PIN, OTP or passwords with anyone, including support.</p>
           <p>• By continuing you agree to the standard MedRep Connect Pro terms and conditions.</p>
@@ -409,6 +389,10 @@ export function PlansScreen({
 
       <Modal open={showTerms} onClose={() => setShowTerms(false)} title="Standard terms and conditions">
         <div className="space-y-3 text-sm text-slate-800 leading-relaxed">
+          <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-900">
+            Draft — final wording is pending owner approval. The clauses below describe how the platform works today; the
+            published legal text will replace them without changing plan pricing or refund handling.
+          </p>
           <p><span className="font-bold">1. Platform role.</span> MedRep Connect Pro is a job-listing and subscription platform for pharma and multi-industry field roles. We list vacancies in good faith; hiring decisions rest with the employing companies and their managers.</p>
           <p><span className="font-bold">2. Subscriptions.</span> Plans unlock company names, manager contacts and one-tap apply for the purchased period. Plan validity and amounts are fixed by the server-side catalog shown at checkout.</p>
           <p><span className="font-bold">3. Payments.</span> Online payments run through Razorpay Checkout. Alternative payment options (manual UPI/bank transfer), when offered, are verified manually by an admin against the merchant bank statement before access activates.</p>

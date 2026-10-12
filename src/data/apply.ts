@@ -1,11 +1,22 @@
 import type { Job } from './jobs'
 import type { User } from './auth'
+import type { ResumeRecord } from './resume'
 import { getProfile, type Profile } from './profile'
-import { getResume } from './resume'
 import { CREATOR } from './creator'
-import { mirror } from './supabase'
-import { read, write } from './storage'
+import { mirror, supabase } from './supabase'
 
+/**
+ * Job applications.
+ *
+ * The application record is stored server-side (public.applications) through the
+ * record_application RPC, which stamps the caller's verified identity. Admins
+ * review the same table; a user only ever sees their own rows.
+ *
+ * The resume itself is never copied here — only its file name and the id of the
+ * private resume_documents row. Browsers cannot attach a file to a mailto: link,
+ * so the UI offers an authorized download of the stored resume instead of
+ * pretending it was attached.
+ */
 export type ApplicationRecord = {
   id: string
   jobId: string
@@ -18,14 +29,9 @@ export type ApplicationRecord = {
   applicantEmail: string
   subject?: string
   body: string
+  resumeDocumentId?: string
   resumeFileName?: string
   sentAt: number
-}
-
-const QUEUE_KEY = 'mrc_applications_v1'
-
-function newId() {
-  return 'ap_' + Math.random().toString(36).slice(2, 10)
 }
 
 function buildTextContent(user: User, job: Job, profile: Profile, format: 'email' | 'whatsapp'): { subject: string; body: string } {
@@ -62,8 +68,6 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
   if (profile.preferredRoles?.length) push('Preferred Roles', profile.preferredRoles.join(', '))
   if (profile.ctc) push('Expected CTC', profile.ctc)
   if (profile.noticePeriod) push('Notice Period', profile.noticePeriod)
-  const resume = getResume(user.email)
-  if (resume) push('Resume', `${resume.fileName} — sent along with this application (please find attached)`)
   if (profile.bio) {
     lines.push(''); lines.push(format === 'email' ? 'Profile Summary:' : '*Summary:*')
     lines.push(profile.bio)
@@ -81,8 +85,8 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
     lines.push(''); lines.push(format === 'email' ? '--- EXPERIENCE ---' : '*Experience*')
     profile.experience.forEach((e) => {
       const head = `${e.title}${e.company ? ' at ' + e.company : ''}`
-      lines.push(format === 'email' ? `• ${head}${e.duration ? ' (' + e.duration + ')' : ''}` : `• ${head}${e.duration ? ' (' + e.duration + ')' : ''}`)
-      if (e.description) lines.push(format === 'email' ? `  ${e.description}` : `  ${e.description}`)
+      lines.push(`• ${head}${e.duration ? ' (' + e.duration + ')' : ''}`)
+      if (e.description) lines.push(`  ${e.description}`)
     })
   }
 
@@ -97,7 +101,7 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
   } else {
     lines.push('Looking forward to your response. Please reach out to me at the contact above.')
     lines.push('')
-    lines.push(`Regards,${format === 'whatsapp' ? '\n' : ' '}${user.name}`)
+    lines.push(`Regards,\n${user.name}`)
     lines.push('')
     lines.push(`_Sent via MedRep Connect Pro._`)
   }
@@ -112,7 +116,31 @@ function normalizePhone(raw?: string): string {
   return p
 }
 
-export function openApplication(user: User, job: Job): { ok: boolean; channel: 'email' | 'whatsapp'; to: string; record: ApplicationRecord; error?: string } {
+/**
+ * Open the mail/WhatsApp composer WITHOUT unloading the app, so the user stays
+ * on the applications screen and still sees the confirmation. A detached anchor
+ * click hands the URL to the OS instead of navigating this document.
+ */
+function openComposer(href: string): void {
+  const anchor = document.createElement('a')
+  anchor.href = href
+  anchor.rel = 'noopener'
+  anchor.target = '_blank'
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
+export type OpenApplicationResult =
+  | { ok: true; channel: 'email' | 'whatsapp'; to: string; record: ApplicationRecord }
+  | { ok: false; channel: 'email' | 'whatsapp'; to: string; error: string }
+
+export async function openApplication(
+  user: User,
+  job: Job,
+  resume?: ResumeRecord | null,
+): Promise<OpenApplicationResult> {
   const profile = getProfile(user.email)
   const emailTo = (job.managerEmail || '').trim()
   const phoneTo = normalizePhone(job.contact)
@@ -123,22 +151,20 @@ export function openApplication(user: User, job: Job): { ok: boolean; channel: '
   const { subject, body } = buildTextContent(user, job, profile, 'email')
 
   if (emailTo && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo)) {
-    // Email first priority
     channel = 'email'
     to = emailTo
     href = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(CREATOR.adminEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   } else if (phoneTo.length >= 10) {
-    // Fallback to WhatsApp
     channel = 'whatsapp'
     to = phoneTo
-    const w = buildTextContent(user, job, profile, 'whatsapp')
-    href = `https://wa.me/${to}?text=${encodeURIComponent(w.body)}`
+    const whatsapp = buildTextContent(user, job, profile, 'whatsapp')
+    href = `https://wa.me/${to}?text=${encodeURIComponent(whatsapp.body)}`
   } else {
-    return { ok: false, channel: 'email', to: '', record: {} as ApplicationRecord, error: 'No manager email or contact number on this job — please notify admin.' }
+    return { ok: false, channel: 'email', to: '', error: 'No manager email or contact number on this job — please notify admin.' }
   }
 
   const record: ApplicationRecord = {
-    id: newId(),
+    id: '',
     jobId: job.id,
     jobTitle: job.title,
     company: job.company,
@@ -149,18 +175,83 @@ export function openApplication(user: User, job: Job): { ok: boolean; channel: '
     applicantEmail: user.email,
     subject: channel === 'email' ? subject : undefined,
     body,
-    resumeFileName: getResume(user.email)?.fileName,
+    resumeDocumentId: resume?.id,
+    resumeFileName: resume?.fileName,
     sentAt: Date.now(),
   }
-  const queue = read<ApplicationRecord[]>(QUEUE_KEY, [])
-  queue.unshift(record)
-  write(QUEUE_KEY, queue.slice(0, 300))
-  mirror('applications', record)
 
-  window.location.href = href
+  // Store the record first: the server assigns the id and the verified identity.
+  const { data, error } = await supabase.rpc('record_application', {
+    p_payload: { ...record, id: undefined },
+  })
+  if (error) {
+    return {
+      ok: false,
+      channel,
+      to,
+      error: error.message || 'Your application could not be recorded. Please try again.',
+    }
+  }
+  const stored = (data as { id?: string } | null)?.id ?? ''
+  record.id = stored
+  // Admin-side mirror for the dashboard listing; the RPC row is authoritative.
+  if (stored) mirror('applications', record)
+
+  openComposer(href)
   return { ok: true, channel, to, record }
 }
 
-export function getApplicationQueue(): ApplicationRecord[] {
-  return read<ApplicationRecord[]>(QUEUE_KEY, [])
+type StoredApplication = Partial<ApplicationRecord> & { id?: string }
+
+function toApplicationRecord(value: unknown): ApplicationRecord | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as StoredApplication
+  if (typeof row.id !== 'string' || typeof row.jobTitle !== 'string') return null
+  return {
+    id: row.id,
+    jobId: row.jobId ?? '',
+    jobTitle: row.jobTitle,
+    company: row.company ?? '',
+    manager: row.manager ?? 'Hiring Manager',
+    channel: row.channel === 'whatsapp' ? 'whatsapp' : 'email',
+    to: row.to ?? '',
+    applicantName: row.applicantName ?? '',
+    applicantEmail: row.applicantEmail ?? '',
+    subject: row.subject,
+    body: row.body ?? '',
+    resumeDocumentId: row.resumeDocumentId,
+    resumeFileName: row.resumeFileName,
+    sentAt: typeof row.sentAt === 'number' ? row.sentAt : 0,
+  }
+}
+
+/** The signed-in user's own application history. */
+export async function listMyApplications(): Promise<ApplicationRecord[]> {
+  const { data, error } = await supabase.rpc('list_my_applications')
+  if (error) throw new Error(error.message || 'Your applications could not be loaded.')
+  return ((data ?? []) as unknown[])
+    .map(toApplicationRecord)
+    .filter((record): record is ApplicationRecord => record !== null)
+}
+
+let applicationCache: ApplicationRecord[] = []
+
+/** Administrator view of every application recorded on the platform. */
+export async function loadAllApplications(): Promise<ApplicationRecord[]> {
+  const { data, error } = await supabase
+    .from('applications')
+    .select('id,data')
+    .order('synced_at', { ascending: false })
+    .limit(300)
+  if (error) throw new Error(error.message || 'Applications could not be loaded.')
+  const records = (((data ?? []) as { id: string; data: unknown }[])
+    .map((row) => toApplicationRecord({ ...(row.data as StoredApplication), id: row.id })))
+    .filter((record): record is ApplicationRecord => record !== null)
+  applicationCache = records
+  return records
+}
+
+/** Last admin load, for the synchronous dashboard counters and search. */
+export function getCachedApplications(): ApplicationRecord[] {
+  return applicationCache
 }

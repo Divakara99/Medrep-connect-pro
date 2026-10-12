@@ -60,77 +60,140 @@ npm run preview      # serves the exact production build
 
 ---
 
-## Required before the secure jobs frontend goes live
+## Required before this release goes live
 
-**Coordinate these changes in a short maintenance window.** The new app has
-no client-side demo jobs; without the migration it shows a jobs-unavailable
-message rather than exposing private details. The admin portal requires the
-admin email+password sign-in plus the fixed 4-digit access code (`9676`,
-box-type entry). The old emailed/authenticator code requirement is removed.
-Do not run the migration and leave the old frontend live for an extended
-period.
+**Coordinate these changes in a short maintenance window.** The frontend and the
+database must move together: the new app reads the server billing catalog, the
+private resume bucket and the server-side application records, and the
+administrator gate is a verified authenticator again.
 
-1. Back up the production `public.vacancies` table. If old posts exist only in
-   the admin browser's `mrc_jobs_v1` localStorage, **do not clear that admin
-   browser's site data yet**; its Vacancies tab offers a review/import button.
-   Check for sample posts before importing. If no rows exist, an admin must
-   post vacancies after the new frontend is live.
-2. Configure a strong server-side password policy (12+ characters), email
-   confirmation, rate limits and breached-password checks in Supabase Auth.
-   The frontend alone cannot enforce Auth settings. The fixed admin access
-   code (`9676`) is an app-level lock only — the admin password and the
-   trusted `app_metadata` role claim remain the real authorization boundary.
-3. Deploy the updated `admin-delete-user` and
-   `review-manual-upi-payment` Edge Functions, which refuse non-admin
-   JWTs (the authenticator-code check is removed with the PIN gate):
+### 1. Restore administrator TOTP MFA (replaces the fixed access code)
+
+The previous release shipped a fixed 4-digit access code (`9676`) inside the
+public browser bundle and removed the `aal2` requirement from
+`is_app_admin()`. Both are reverted:
+
+1. In Supabase **Authentication → Attack Protection / MFA**, enable TOTP and
+   allow `aal2` sessions.
+2. Run [`supabase/admin_mfa.sql`](supabase/admin_mfa.sql) (also re-run
+   [`supabase/admin_access.sql`](supabase/admin_access.sql), which no longer
+   relaxes the gate). `is_app_admin()` again requires the trusted
+   `app_metadata.role = 'admin'` claim **and** `auth.jwt().aal = 'aal2'`.
+3. Deploy the updated `admin-delete-user` and `review-manual-upi-payment`
+   Edge Functions; both refuse a JWT without `aal2`:
    ```bash
    npx supabase login
    npx supabase functions deploy admin-delete-user --project-ref <production-project-ref>
    npx supabase functions deploy review-manual-upi-payment --project-ref <production-project-ref>
    ```
-   Keep your Supabase login and API secrets private. Do not paste tokens here.
-4. In Supabase SQL Editor for the SAME project used by `VITE_SUPABASE_URL`,
-   apply `supabase/schema.sql` (if not already applied), then
-   `supabase/payments.sql` (reapply it if `schema.sql` was rerun), then
-   **`supabase/secure_jobs.sql`** (reapply to expose the new `hq`, `division`
-   and `managerAltPhone` fields to subscribers), then
-   **`supabase/user_notifications.sql`** (broadcast job notifications for
-   users), and finally **`supabase/admin_access.sql`** — in that order, because
-   it is the file that relaxes `is_app_admin()` for the fixed access-code gate
-   and adds the admin-only `grant_manual_access` RPC. `secure_jobs.sql` grants
-   users only `list_visible_jobs()`; private fields depend on server-owned
-   expiry. No service-role key goes into the browser.
-5. Confirm the migration in SQL Editor:
-   ```sql
-   select to_regprocedure('public.list_visible_jobs()') as jobs_rpc,
-          has_function_privilege('anon', 'public.list_visible_jobs()', 'EXECUTE') as anon_can_run;
-   ```
-   `jobs_rpc` must be non-null and `anon_can_run` must be `false`. The SQL
-   Editor runs as an owner, so it cannot simulate a free user: test with two
-   separate signed-in accounts in the app. A free user's Network response for
-   `list_visible_jobs` must omit `company`, `manager`, `contact`,
-   `managerEmail` and `description`; a paid user's response can include them.
-   The raw `vacancies`/`vacancies_view` API must not return rows to a free user.
-6. Merge the PR and wait for Netlify to publish the updated `main`. Open the
-   admin portal via a privately bookmarked `/?portal=admin` URL or five taps
-   on the login-page logo/name within four seconds. Sign in with the admin
-   password, then enter the fixed 4-digit access code `9676` in the box
-   entry. The access code is deliberately shared and is **not** a secret —
-   the admin password, the trusted role claim and RLS enforce authorization.
-   Review/import older posts on the admin device if needed.
-7. On user devices with older versions, clear site data/old PWA cache once,
-   sign in again, and check jobs and payment flow. Previously delivered browser
-   data cannot be retroactively hidden; never publish real confidential
-   contacts in an old static bundle or public field (title, location, salary,
-   experience or category).
+4. After the new frontend is live, sign in to `/?portal=admin` with the admin
+   password. The authenticator screen enrols a TOTP factor on first use (scan
+   the QR with Google Authenticator / Authy) and asks for the six-digit code on
+   every later session. Keep the recovery route in mind: a project owner removes
+   the factor in **Authentication → Users** if the device is lost.
+
+Until step 2 is applied to production, an already-live project still runs the
+relaxed role-only gate — apply the SQL before or with the frontend deploy.
+
+### 2. Apply the database migrations, in this order
+
+Run each file in the SQL Editor of the SAME project used by
+`VITE_SUPABASE_URL`. All of them are safe to re-run.
+
+| Order | File | What it does |
+| --- | --- | --- |
+| 1 | `supabase/schema.sql` | Auth-backed accounts, admin-only mirror RLS (unchanged). |
+| 2 | `supabase/payments.sql` | `subscription_payments` ledger and the verified activation functions (unchanged). |
+| 3 | `supabase/secure_jobs.sql` | Job projection: city, salary, experience and the **description** are public to signed-in users; company, manager, manager email, contact, alternate number, HQ and division stay subscriber-only. Adds a trigger that rejects phone numbers and email addresses in the public description. |
+| 4 | `supabase/user_notifications.sql` | Durable broadcast job notifications (unchanged). |
+| 5 | `supabase/admin_access.sql` | `manual_grant` payment method + audited `grant_manual_access`. No longer relaxes `is_app_admin()`. |
+| 6 | `supabase/admin_mfa.sql` | Reinstates the `aal2` requirement and adds `current_admin_session()` for diagnostics. |
+| 7 | `supabase/billing_plans.sql` | **New.** Server-side plan catalog (`public.billing_plans`) seeded with the seven existing plans; `save_billing_plan()` is admin+MFA only and refuses to retire the last purchasable plan. |
+| 8 | `supabase/resumes.sql` | **New.** Private `resumes` storage bucket, owner-only `resume_documents`, forced 30-day retention and `delete_expired_resumes()`. |
+| 9 | `supabase/applications.sql` | **New.** `record_application()` / `list_my_applications()` so a user's application history is stored server-side with the verified identity. |
+
+**Existing subscriptions and orders are preserved.** `billing_plans.sql` seeds
+with `ON CONFLICT DO NOTHING`, `subscription_payments` keeps its own
+`amount_paise` / `plan_days` snapshot per order, and activation reads that
+snapshot — so a later price change never rewrites history or an active expiry.
+
+### 3. Pre-flight check for public descriptions
+
+The new description guard rejects a vacancy save whose description contains a
+phone number or email address. Find affected rows before the admin edits them:
+
+```sql
+select id, data ->> 'title' as title
+from public.vacancies
+where coalesce(data ->> 'deleted', 'false') <> 'true'
+  and (
+    coalesce(data ->> 'description', '') ~ '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    or coalesce(data ->> 'description', '') ~ '\+?[0-9][0-9 ()\-\.]{7,}[0-9]'
+  );
+```
+
+Move any contact details into the Manager / Contact / Manager email fields.
+
+### 4. Schedule the resume retention purge
+
+Resumes expire 30 days after upload. Enable `pg_cron` in **Database →
+Extensions**, then schedule the purge (it deletes the metadata row and the
+stored object together):
+
+```sql
+select cron.schedule(
+  'purge-expired-resumes',
+  '17 19 * * *',
+  $$select public.delete_expired_resumes()$$
+);
+```
+
+Without the schedule, expired resumes are simply never offered to the user
+again, but the objects stay in the bucket.
+
+### 5. Verify, then publish the frontend
+
+```sql
+select to_regprocedure('public.list_visible_jobs()') as jobs_rpc,
+       has_function_privilege('anon', 'public.list_visible_jobs()', 'EXECUTE') as anon_can_run,
+       (select count(*) from public.billing_plans where active) as purchasable_plans,
+       (select public from storage.buckets where id = 'resumes') as resumes_public;
+```
+
+`jobs_rpc` must be non-null, `anon_can_run` must be `false`,
+`purchasable_plans` must be `7` (or your chosen set), and `resumes_public`
+must be `false`.
+
+Then deploy `create-razorpay-order` again — it now prices orders from
+`public.billing_plans` instead of a hard-coded list:
+
+```bash
+npx supabase functions deploy create-razorpay-order --project-ref <production-project-ref>
+```
+
+Merge the PR, wait for the host to publish `main`, and confirm with two
+accounts:
+
+* a **free** user sees the city, salary, experience and description, and their
+  `list_visible_jobs` response contains no `company`, `manager`,
+  `managerEmail`, `contact`, `managerAltPhone`, `hq` or `division` key;
+* the same user can pick **any** plan and the Razorpay modal amount matches the
+  catalog price;
+* an **admin** without a verified authenticator cannot open the admin panel,
+  and cannot save a price change from the Plans tab;
+* uploading a resume keeps the user on the Resume tab and the file is not
+  visible in browser storage.
+
+On user devices with older versions, clear site data/old PWA cache once and
+sign in again. The app purges its own legacy keys on start-up
+(`mrc_plans_v1`, `mrc_alt_payment_v1`, `mrc_resume_v1*`,
+`mrc_verified_payment_cache_v1`), so previously delivered browser data is
+removed rather than trusted.
 
 Client-side 12-character password checks are a convenience, not a substitute
-for your Supabase Auth policy. The fixed access code `9676` is an app-level
-lock and ships in the browser bundle — treat the admin password and the
-server-side role claim as the real protection, and rotate the password if it
-is ever exposed. Account recovery must be performed by a trusted Supabase
-project owner using the Auth Dashboard/admin tools. A hidden entry route is
-not authentication.
+for your Supabase Auth policy. Account recovery must be performed by a trusted
+Supabase project owner using the Auth Dashboard/admin tools. A hidden entry
+route is not authentication.
 
 ---
 
@@ -158,7 +221,7 @@ The browser only asks Supabase to create a server-priced order. Razorpay payment
 
 Razorpay Checkout displays the payment methods enabled for your merchant account/device: cards (credit/debit), netbanking, and enabled UPI apps. Razorpay-managed QR is available only when Razorpay enables it for the merchant and checkout device; this app does not generate an unverified merchant-VPA QR or expose the merchant UPI ID. Enable UPI/QR and card methods in the Razorpay dashboard as needed. Existing manual UPI rows remain reviewable by admins against bank statements; users with an already-created pending request can submit a bank-generated UTR without seeing the VPA. No new manual UPI request can be created after the disabled `create-upi-intent` function is deployed. Never approve a typed UTR without a matching bank credit. The database already computes expiry atomically as `greatest(now(), current_expiry) + plan_days`; the UI displays date and time and rechecks on return to the app. Netlify publishes the frontend when `main` changes, but **does not deploy Edge Functions**.
 
-**Security scope:** Payment activation and expiry are server-verified; the job RPC enforces server-side expiry for sensitive fields, and admin-only RLS plus sensitive Edge Functions require the trusted admin role claim (the authenticator-code requirement was removed with the fixed access-code gate). The old PWA/localStorage may still contain previously delivered data until site data is cleared. Other device-local features (tickets, profiles and applications) are not yet a confidential multi-user backend; do not put sensitive cross-user information there until separately migrated. Full security requires operational Auth settings, careful admin management, deployment verification and an independent review. Hiding the admin URL does not grant security.
+**Security scope:** Payment activation and expiry are server-verified and priced from the server catalog; the job RPC enforces server-side expiry for confidential fields; admin-only RLS and the sensitive Edge Functions require the trusted admin role claim **plus a verified authenticator (`aal2`)**; resumes live in a private bucket readable only by their owner. The old PWA/localStorage may still contain previously delivered data until site data is cleared. Profiles and tickets are still device-local and must not hold data requiring cross-device confidentiality until separately migrated. Full security requires operational Auth settings, careful admin management, deployment verification and an independent review. Hiding the admin URL does not grant security.
 
 ## Exact deployment steps for `create-razorpay-order`
 

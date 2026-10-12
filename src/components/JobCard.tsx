@@ -1,5 +1,5 @@
 import { Badge, Card } from './ui'
-import type { Job } from '../data/jobs'
+import { descriptionPoints, type Job } from '../data/jobs'
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -8,6 +8,11 @@ function timeAgo(ts: number): string {
   if (h < 24) return `${h}h ago`
   const days = Math.floor(h / 24)
   return `${days}d ago`
+}
+
+function postedOn(ts: number): string {
+  if (!ts) return ''
+  return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export function JobCard({
@@ -34,6 +39,7 @@ export function JobCard({
   }
 
   const initials = unlocked ? job.company.slice(0, 2).toUpperCase() : '🔒'
+  const preview = descriptionPoints(job.description).slice(0, 2)
 
   return (
     <Card className="p-4 cursor-pointer hover:shadow-md transition active:scale-[0.995]">
@@ -47,29 +53,49 @@ export function JobCard({
               <div className="font-semibold text-slate-900 truncate">{job.title}</div>
               {job.pinned && <Badge color="amber">★ Pinned</Badge>}
             </div>
-            <div className="text-sm text-slate-600 truncate">
-              {unlocked ? (
-                <>
-                  {job.company} · {job.location}
-                </>
-              ) : (
-                <>
-                  <span className="text-slate-600">Company hidden · {job.location}</span>
-                </>
-              )}
+
+            {/* The city is always visible — before and after subscribing. */}
+            <div className="text-sm text-slate-700 truncate flex items-center gap-1">
+              <span aria-hidden>📍</span>
+              <span className="font-semibold text-slate-800">{job.location}</span>
             </div>
+
+            {unlocked ? (
+              <div className="text-sm text-slate-600 truncate mt-0.5">{job.company}</div>
+            ) : (
+              /* Locked placeholder: the real company name is never sent to a
+                 free user, so there is nothing behind this blur. */
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span aria-hidden className="text-xs">🔒</span>
+                <span className="text-sm font-bold text-slate-400 blur-[5px] select-none" aria-hidden>Hidden Pharma Pvt Ltd</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Locked</span>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge color={categoryColor[job.category] ?? 'slate'}>{job.category}</Badge>
               {job.salary && <Badge color="green">{job.salary}</Badge>}
               {job.experience && <span className="text-xs text-slate-500">{job.experience}</span>}
             </div>
 
-            <div className="mt-3 text-sm text-slate-700 line-clamp-2">
-              {job.description || 'Tap to view full details.'}
-            </div>
+            {preview.length > 0 ? (
+              <ul className="mt-2 space-y-1">
+                {preview.map((point, index) => (
+                  <li key={index} className="flex items-start gap-1.5 text-sm text-slate-700 leading-snug">
+                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">(+)</span>
+                    <span className="line-clamp-1">{point}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-2 text-sm text-slate-600">Tap to view full details.</div>
+            )}
 
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-[11px] text-slate-400">{timeAgo(job.postedAt)}</div>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <div className="text-[11px] text-slate-400">
+                {timeAgo(job.postedAt)}
+                {postedOn(job.postedAt) ? ` · ${postedOn(job.postedAt)}` : ''}
+              </div>
               {!unlocked ? (
                 <div className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-full ring-1 ring-amber-200">
                   🔒 Subscribe to unlock
@@ -81,10 +107,12 @@ export function JobCard({
               )}
             </div>
 
-
             {unlocked && (
               <div className="mt-2 text-xs text-slate-600">
-                Company: <span className="font-semibold text-slate-800">{job.company}</span> · Manager: <span className="font-semibold text-slate-800">{job.manager}</span> · Contact: <span className="font-semibold text-slate-800">{job.contact}</span>
+                Company: <span className="font-semibold text-slate-800">{job.company}</span>
+                {job.manager ? <> · Manager: <span className="font-semibold text-slate-800">{job.manager}</span></> : null}
+                {job.contact ? <> · Contact: <span className="font-semibold text-slate-800">{job.contact}</span></> : null}
+                {job.managerAltPhone ? <> · <span className="text-brand-700 font-extrabold">(+)</span> <span className="font-semibold text-slate-800">{job.managerAltPhone}</span></> : null}
               </div>
             )}
           </div>

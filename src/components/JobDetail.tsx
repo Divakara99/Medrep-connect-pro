@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Button, Badge, Modal } from './ui'
-import type { Job } from '../data/jobs'
+import { descriptionPoints, type Job } from '../data/jobs'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
+import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
 
 function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
   const email = (job.managerEmail || '').trim()
@@ -24,16 +25,9 @@ function postedOn(ts: number): string {
   return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function descriptionPoints(description?: string): string[] {
-  return (description || '')
-    .split(/\r?\n|•/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-}
-
 /**
- * Confidential job fields stay visible but blurred (never fully hidden).
- * Tapping the value reveals it again — an anti-shoulder-surfing measure.
+ * A confidential value for an ACTIVE subscriber: visible, but blurred until
+ * tapped — an anti-shoulder-surfing measure for real contact details.
  */
 function SensitiveValue({ label, value, plus = false }: { label: string; value: string; plus?: boolean }) {
   const [revealed, setRevealed] = useState(false)
@@ -63,6 +57,25 @@ function SensitiveValue({ label, value, plus = false }: { label: string; value: 
   )
 }
 
+/**
+ * A locked PLACEHOLDER for a user without an active subscription. The server
+ * never sends these values, so what is blurred here is a placeholder string —
+ * there is nothing behind the blur to reveal.
+ */
+function LockedValue({ label, placeholder }: { label: string; placeholder: string }) {
+  return (
+    <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50/40 p-3">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+        <span aria-hidden>🔒</span>{label}
+      </div>
+      <div className="mt-0.5 text-sm font-bold text-slate-400 blur-[5px] select-none" aria-hidden>{placeholder}</div>
+      <div className="text-[9px] font-bold uppercase tracking-wide text-amber-700 mt-0.5">
+        Locked · subscribe to unlock
+      </div>
+    </div>
+  )
+}
+
 export function JobDetail({
   job,
   unlocked,
@@ -77,6 +90,8 @@ export function JobDetail({
   onApply: (j: Job) => void
 }) {
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
+  const points = job ? descriptionPoints(job.description) : []
+
   return (
     <Modal open={!!job} onClose={onClose} title={job?.title}>
       {job && (
@@ -99,22 +114,24 @@ export function JobDetail({
             </div>
           </div>
 
+          {/* Always public: role, city, experience, salary and posted date. */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Role" value={job.title} />
-            <SensitiveValue label="City" value={job.location} />
-            <SensitiveValue label="HQ" value={job.hq || ''} />
-            <SensitiveValue label="Division" value={job.division || ''} />
+            <Field label="City" value={job.location} />
             <Field label="Experience" value={job.experience || '—'} />
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
           <div className="rounded-xl ring-1 ring-slate-200 p-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Description</div>
-            {descriptionPoints(job.description).length === 0 ? (
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Job description</div>
+              <Badge color="slate">Public</Badge>
+            </div>
+            {points.length === 0 ? (
               <div className="text-sm text-slate-500">No description provided.</div>
             ) : (
               <ul className="space-y-1.5">
-                {descriptionPoints(job.description).map((point, index) => (
+                {points.map((point, index) => (
                   <li key={index} className="flex items-start gap-2 text-sm text-slate-800 leading-relaxed">
                     <span aria-hidden className="text-brand-600 font-extrabold shrink-0 leading-relaxed">(+)</span>
                     <span>{point}</span>
@@ -124,25 +141,34 @@ export function JobDetail({
             )}
           </div>
 
-          <div className="rounded-xl ring-1 ring-slate-200 p-3 relative overflow-hidden">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Hiring company & contact</div>
+          <div className="rounded-xl ring-1 ring-slate-200 p-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              Hiring company & contact
+            </div>
             {!unlocked ? (
               <>
-                <div className="text-sm text-slate-600">Company and contact are available with an active plan.</div>
-                <div className="absolute inset-0 grid place-items-center bg-white/60 backdrop-blur-sm">
-                  <div className="text-center">
-                    <div className="text-2xl">🔒</div>
-                    <div className="text-sm font-semibold text-slate-900">Subscribe to unlock company & contact</div>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <LockedValue label="Company name" placeholder="Hidden Pharma Pvt Ltd" />
+                  <LockedValue label="Manager name" placeholder="Hiring Manager" />
+                  <LockedValue label="Manager email" placeholder="manager@company.com" />
+                  <LockedValue label="Contact number" placeholder="+91 90000 00000" />
+                  <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
+                  <LockedValue label="HQ / Division" placeholder="Head office" />
                 </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  These five details — plus HQ and division — are released to active subscribers only. The city, salary,
+                  experience and description above stay visible.
+                </p>
               </>
             ) : (
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <SensitiveValue label="Company name" value={job.company} />
-                <Field label="Manager" value={job.manager || '—'} />
-                <Field label="Email" value={job.managerEmail || CREATOR.adminEmail} />
+                <SensitiveValue label="Manager name" value={job.manager || ''} />
+                <Field label="Manager email" value={job.managerEmail || CREATOR.adminEmail} />
                 <SensitiveValue label="ABM/ASM number" value={job.contact || ''} />
                 <SensitiveValue label="Manager alternate number" value={job.managerAltPhone || ''} plus />
+                <Field label="HQ" value={job.hq || '—'} />
+                <Field label="Division" value={job.division || '—'} />
                 <Field label="Posted on" value={postedOn(job.postedAt)} />
               </div>
             )}
@@ -182,6 +208,7 @@ export function ApplyConfirmSheet({
   resume,
   onClose,
   onConfirm,
+  busy = false,
 }: {
   job: Job | null
   channel: 'email' | 'whatsapp'
@@ -189,6 +216,7 @@ export function ApplyConfirmSheet({
   resume?: ResumeRecord | null
   onClose: () => void
   onConfirm: () => void
+  busy?: boolean
 }) {
   return (
     <Modal open={!!job} onClose={onClose} title={channel === 'email' ? 'Send application email' : 'Send WhatsApp message'}>
@@ -199,10 +227,8 @@ export function ApplyConfirmSheet({
               <div className="flex items-start gap-2">
                 <div className="text-xl">✉️</div>
                 <div>
-                  Tapping <span className="font-bold">Send</span> opens your default mail app (Gmail / Outlook / Apple Mail) with a fully pre-filled application addressed to the hiring manager.
-                  <span className="block mt-1 text-emerald-800 font-semibold">
-                    ✓ All your Job Seeker profile details are auto-filled. A copy is CC'd to MedRep Connect for tracking.
-                  </span>
+                  Tapping <span className="font-bold">Send</span> opens your mail app (Gmail / Outlook / Apple Mail) with a
+                  fully pre-filled application addressed to the hiring manager. You stay on this screen.
                 </div>
               </div>
             </div>
@@ -211,10 +237,8 @@ export function ApplyConfirmSheet({
               <div className="flex items-start gap-2">
                 <div className="text-xl">💬</div>
                 <div>
-                  No manager email is on file for this vacancy — so tapping <span className="font-bold">Send</span> opens WhatsApp with a pre-filled message to the manager.
-                  <span className="block mt-1 text-emerald-800 font-semibold">
-                    ✓ WhatsApp is the fallback only when email isn't available.
-                  </span>
+                  No manager email is on file for this vacancy — so tapping <span className="font-bold">Send</span> opens
+                  WhatsApp in a new tab with a pre-filled message to the manager.
                 </div>
               </div>
             </div>
@@ -234,45 +258,78 @@ export function ApplyConfirmSheet({
               </>
             )}
             <div><span className="font-semibold text-slate-900">Role:</span> {job.title}</div>
-            <div><span className="font-semibold text-slate-900">Location:</span> {job.location}</div>
+            <div><span className="font-semibold text-slate-900">City:</span> {job.location}</div>
           </div>
 
           {resume ? (
-            <div className="rounded-xl ring-1 ring-brand-200 bg-brand-50/40 p-3 flex items-center gap-3">
-              <div className="text-xl">📎</div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-900 truncate">{resume.fileName}</div>
-                <div className="text-xs text-slate-600 mt-0.5">
-                  Your resume goes out with this application. Download it now and attach it in the composer that opens next.
+            <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50/50 p-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="text-xl">📎</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900 truncate">{resume.fileName}</div>
+                  <div className="text-xs text-slate-600 mt-0.5">
+                    Stored privately · auto-deleted after {RESUME_RETENTION_DAYS} days.
+                  </div>
                 </div>
               </div>
-              <a
-                href={resume.dataUrl}
-                download={resume.fileName}
-                className="shrink-0 rounded-xl bg-white ring-1 ring-slate-200 px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-50 transition"
-              >
-                Download
-              </a>
+              <p className="text-xs text-amber-900">
+                A browser mail link cannot carry a file. Tap <span className="font-bold">Download resume</span>, then attach
+                that file in the mail app that opens next.
+              </p>
+              <ResumeDownloadButton resume={resume} />
             </div>
           ) : (
             <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-              No resume saved yet — add one in Account → Resume so it can be sent along with every application.
+              No resume uploaded yet — add one in the <span className="font-bold">Resume</span> tab so you can attach it to
+              every application.
             </div>
           )}
 
           <div className="text-xs text-slate-500">
             {channel === 'email'
               ? 'Your mail app will open — simply tap Send after reviewing.'
-              : 'WhatsApp will open with a pre-formatted message — tap Send to deliver it to the manager.'}
-            {' '}Make sure your Account profile is up-to-date.
+              : 'WhatsApp opens in a new tab with a pre-formatted message — tap Send to deliver it to the manager.'}
+            {' '}The application is also recorded in your Resume tab.
           </div>
 
-          <Button className="w-full" onClick={onConfirm}>
-            {channel === 'email' ? '✉️ Open mail app & send' : '💬 Open WhatsApp & send'}
+          <Button className="w-full" onClick={onConfirm} disabled={busy}>
+            {busy ? 'Preparing…' : channel === 'email' ? '✉️ Open mail app & send' : '💬 Open WhatsApp & send'}
           </Button>
           <Button variant="ghost" className="w-full" onClick={onClose}>Cancel</Button>
         </div>
       )}
     </Modal>
+  )
+}
+
+function ResumeDownloadButton({ resume }: { resume: ResumeRecord }) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function download() {
+    setBusy(true)
+    setError(null)
+    const result = await resumeDownloadUrl(resume)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    const anchor = document.createElement('a')
+    anchor.href = result.url
+    anchor.download = resume.fileName
+    anchor.rel = 'noopener'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+  }
+
+  return (
+    <div className="space-y-1">
+      <Button variant="secondary" className="px-3 py-2 text-xs" onClick={() => { void download() }} disabled={busy}>
+        {busy ? 'Preparing secure link…' : '⬇ Download resume'}
+      </Button>
+      {error && <p role="alert" className="text-xs font-semibold text-red-800">{error}</p>}
+    </div>
   )
 }
