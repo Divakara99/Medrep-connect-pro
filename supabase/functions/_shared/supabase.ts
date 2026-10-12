@@ -90,6 +90,18 @@ export type Database = {
 export type AuthenticatedContext = {
   user: User
   adminClient: SupabaseClient<Database, 'public'>
+  aal2: boolean
+}
+
+// Call ONLY after Auth has verified the same bearer JWT with getUser(token).
+// Claims parsed from an unverified browser value must never authorize admin work.
+export function hasVerifiedAal2(token: string, userId: string): boolean {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return false
+    const claims = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
+    return claims.sub === userId && claims.aal === 'aal2'
+  } catch { return false }
 }
 
 export function createAdminClient() {
@@ -123,7 +135,7 @@ export async function authenticate(request: Request): Promise<AuthenticatedConte
   const adminClient = createClient<Database>(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
-  return { user, adminClient }
+  return { user, adminClient, aal2: hasVerifiedAal2(token, user.id) }
 }
 
 export function isResponse(value: AuthenticatedContext | Response): value is Response {

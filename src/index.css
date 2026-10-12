@@ -36,8 +36,9 @@ body {
   font-family: var(--font-sans);
   background: #f6f8fb;
   color: #0f172a;
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -75,12 +76,14 @@ input::placeholder, textarea::placeholder {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Blur locked content */
-.blur-locked {
-  filter: blur(5px);
-  user-select: none;
-  pointer-events: none;
+/* Readable helper text across small screens. Never use tiny 10–12px labels
+   for payment, account or admin instructions. User zoom remains enabled. */
+.text-xs, [class*="text-[10px]"], [class*="text-[11px]"], [class*="text-[12px]"] {
+  font-size: 0.875rem;
+  line-height: 1.45;
 }
+.text-sm { font-size: 0.975rem; line-height: 1.5; }
+input, select, textarea { font-size: 1rem; }
 
 /* Fade in animation */
 @keyframes fadeIn {

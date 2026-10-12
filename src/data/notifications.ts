@@ -27,8 +27,8 @@ function nid() {
 const SIGN_OFF = `— Mr. ${CREATOR.name}, ${CREATOR.role}, MedRep Connect Pro`
 
 type EventKind =
-  | { kind: 'job-posted'; jobTitle: string; company: string; category: string; location: string; pinned?: boolean }
-  | { kind: 'job-edited'; jobTitle: string; company: string }
+  | { kind: 'job-posted'; jobTitle: string; category: string; location: string; pinned?: boolean }
+  | { kind: 'job-edited'; jobTitle: string }
   | { kind: 'plans-updated' }
   | { kind: 'payments-updated' }
   | { kind: 'payment-confirmed'; planName: string; days: number; expiresAt: number; amount: number }
@@ -74,7 +74,7 @@ function generateCopy(ev: EventKind): { title: string; body: string } {
       const pin = ev.pinned ? ' (priority pinned)' : ''
       const title = `New ${ev.category} opening${pin}`
       const body =
-        `Hi 👋\n\nA new ${ev.category} role just went live on MedRep Connect Pro — ${ev.jobTitle} at ${ev.company}, ${ev.location}.\n\n` +
+        `Hi 👋\n\nA new ${ev.category} role just went live on MedRep Connect Pro — ${ev.jobTitle}, ${ev.location}.\n\n` +
         `Mr. ${CREATOR.name} and the team review every posting to make sure it matches your job-seeker preferences. Open the app to check eligibility and apply.`
       return { title, body }
     }
@@ -82,7 +82,7 @@ function generateCopy(ev: EventKind): { title: string; body: string } {
       return {
         title: `Opening updated: ${ev.jobTitle}`,
         body:
-          `Heads up 🔔\n\nThe posting for ${ev.jobTitle} at ${ev.company} was just updated by the admin team. Details like salary, location, or contact may have changed — worth a quick look if you were tracking it.`,
+          `Heads up 🔔\n\nThe posting for ${ev.jobTitle} was just updated by the admin team. Details like salary or location may have changed — worth a quick look if you were tracking it.`,
       }
     case 'plans-updated':
       return {

@@ -1,55 +1,25 @@
-import { read, write } from './storage'
-import { broadcast } from './notifications'
-import { mirror } from './supabase'
+import { read, remove, write } from './storage'
+import { supabase } from './supabase'
 
 export type JobCategory =
-  | 'MR'
-  | 'ABM'
-  | 'Part-time'
-  | 'E-commerce'
-  | 'Finance'
-  | 'Banking'
-  | 'IT'
-  | 'Healthcare'
-  | 'Insurance'
-  | 'FMCG'
-  | 'Field'
-  | 'All'
+  | 'MR' | 'ABM' | 'Part-time' | 'E-commerce' | 'Finance' | 'Banking'
+  | 'IT' | 'Healthcare' | 'Insurance' | 'FMCG' | 'Field' | 'All'
 
 export const CATEGORIES: JobCategory[] = [
-  'All',
-  'MR',
-  'ABM',
-  'Part-time',
-  'E-commerce',
-  'Finance',
-  'Banking',
-  'IT',
-  'Healthcare',
-  'Insurance',
-  'FMCG',
-  'Field',
+  'All', 'MR', 'ABM', 'Part-time', 'E-commerce', 'Finance', 'Banking',
+  'IT', 'Healthcare', 'Insurance', 'FMCG', 'Field',
 ]
 
-// Priority order for "MR-first feed"
 export const CATEGORY_PRIORITY: Record<JobCategory, number> = {
-  MR: 0,
-  ABM: 1,
-  Healthcare: 2,
-  Field: 3,
-  FMCG: 4,
-  'Part-time': 5,
-  'E-commerce': 6,
-  Finance: 7,
-  Banking: 8,
-  IT: 9,
-  Insurance: 10,
-  All: 99,
+  MR: 0, ABM: 1, Healthcare: 2, Field: 3, FMCG: 4,
+  'Part-time': 5, 'E-commerce': 6, Finance: 7, Banking: 8,
+  IT: 9, Insurance: 10, All: 99,
 }
 
 export type Job = {
   id: string
   title: string
+  // These fields are returned by list_visible_jobs ONLY while subscribed.
   company: string
   manager?: string
   contact?: string
@@ -64,274 +34,122 @@ export type Job = {
   postedBy?: string
 }
 
-const JOBS_KEY = 'mrc_jobs_v1'
+const LEGACY_JOBS_KEY = 'mrc_jobs_v1'
+let jobs: Job[] = []
+let generation = 0
 
-function jid() {
-  return 'j_' + Math.random().toString(36).slice(2, 10)
-}
-
-const DEFAULT_JOBS: Job[] = [
-  {
-    id: jid(),
-    title: 'Medical Representative (MR)',
-    company: 'Apex Pharma Pvt Ltd',
-    manager: 'Ravi Kumar',
-    contact: '+91-98XXX-11111',
-    managerEmail: 'ravi.kumar@apexpharma.example',
-    location: 'Hyderabad, Telangana',
-    category: 'MR',
-    salary: '₹2.4 – 3.6 LPA',
-    experience: '0–2 years',
-    description:
-      'Field MR for cardio-diabetic division. Doctor visits, chemist follow-ups, stockist coordination. Bike + fuel allowance.',
-    pinned: true,
-    postedAt: Date.now() - 2 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Area Business Manager (ABM)',
-    company: 'SunHealth Lifesciences',
-    manager: 'Priya Sharma',
-    contact: '+91-98XXX-22222',
-    managerEmail: 'priya.sharma@sunhealth.example',
-    location: 'Vijayawada, AP',
-    category: 'ABM',
-    salary: '₹6 – 9 LPA',
-    experience: '3–6 years',
-    description: 'Lead a team of 6 MRs; HQ target delivery, RCPA, new product launches.',
-    pinned: true,
-    postedAt: Date.now() - 8 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Medical Representative — GP Division',
-    company: 'Curewell Remedies',
-    manager: 'Suresh G.',
-    contact: '+91-98XXX-33333',
-    managerEmail: 'suresh.g@curewell.example',
-    location: 'Bengaluru, Karnataka',
-    category: 'MR',
-    salary: '₹2.2 – 3.2 LPA',
-    experience: '0–3 years',
-    description: 'GP and pediatric division; daily reporting via SFA app.',
-    pinned: false,
-    postedAt: Date.now() - 20 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Field Sales Executive',
-    company: 'Bharat FMCG Distributors',
-    manager: 'Anil Reddy',
-    contact: '+91-98XXX-44444',
-    managerEmail: 'anil.reddy@bharatfmcg.example',
-    location: 'Chennai, Tamil Nadu',
-    category: 'FMCG',
-    salary: '₹1.8 – 2.8 LPA + incentives',
-    experience: '0–2 years',
-    description: 'Modern trade & general trade coverage, beat planning.',
-    pinned: false,
-    postedAt: Date.now() - 26 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Customer Support — Part Time',
-    company: 'ShopKart E-commerce',
-    manager: 'Neha M.',
-    contact: '+91-98XXX-55555',
-    managerEmail: 'neha.m@shopkart.example',
-    location: 'Work from home',
-    category: 'Part-time',
-    salary: '₹8,000 – 12,000 / month',
-    experience: 'Fresher',
-    description: '4 hours/day voice support; Hindi + English mandatory.',
-    pinned: false,
-    postedAt: Date.now() - 48 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Business Correspondent Executive',
-    company: 'Prajan Bank',
-    manager: 'Mohan K.',
-    contact: '+91-98XXX-66666',
-    location: 'Visakhapatnam, AP',
-    category: 'Banking',
-    salary: '₹2.0 – 3.0 LPA',
-    experience: '0–2 years',
-    description: 'Account opening, CSP operations, financial literacy drives.',
-    pinned: false,
-    postedAt: Date.now() - 72 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Junior Frontend Developer (React)',
-    company: 'StackNest IT Solutions',
-    manager: 'Karthik V.',
-    contact: '+91-98XXX-77777',
-    location: 'Hyderabad (Madhapur)',
-    category: 'IT',
-    salary: '₹3.5 – 6.0 LPA',
-    experience: '0–2 years',
-    description: 'React + TypeScript; build SaaS dashboards with senior mentorship.',
-    pinned: false,
-    postedAt: Date.now() - 96 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Insurance Advisor (LIC)',
-    company: 'LifeSecure Insurance',
-    manager: 'Divya S.',
-    contact: '+91-98XXX-88888',
-    location: 'Tirupati, AP',
-    category: 'Insurance',
-    salary: 'Commission based',
-    experience: 'Fresher+',
-    description: 'Flexible timing; training + license support provided.',
-    pinned: false,
-    postedAt: Date.now() - 120 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Staff Nurse',
-    company: 'SaiMulti Speciality Hospital',
-    manager: 'Matron Mary',
-    contact: '+91-98XXX-99999',
-    location: 'Guntur, AP',
-    category: 'Healthcare',
-    salary: '₹18k – 28k / month',
-    experience: '1–4 years',
-    description: 'GNM/B.Sc nursing; rotational shifts; in-patient ward duties.',
-    pinned: false,
-    postedAt: Date.now() - 150 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Finance Telecaller',
-    company: 'QuickLoan Finance',
-    manager: 'Arjun T.',
-    contact: '+91-98XXX-10101',
-    location: 'Vijayawada, AP',
-    category: 'Finance',
-    salary: '₹14k – 22k + incentives',
-    experience: '0–2 years',
-    description: 'Personal loan leads; day shift; Telugu + Hindi required.',
-    pinned: false,
-    postedAt: Date.now() - 200 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'E-commerce Delivery Partner',
-    company: 'ZippEx Logistics',
-    manager: 'Local Hub',
-    contact: '+91-98XXX-20202',
-    location: 'Multiple cities',
-    category: 'E-commerce',
-    salary: '₹18k – 35k / month',
-    experience: 'Fresher',
-    description: 'Two-wheeler + DL mandatory; daily payout options.',
-    pinned: false,
-    postedAt: Date.now() - 250 * 3600_000,
-    postedBy: 'admin',
-  },
-  {
-    id: jid(),
-    title: 'Field Officer — Microfinance',
-    company: 'GramaSeva Microfin',
-    manager: 'Ramana P.',
-    contact: '+91-98XXX-30303',
-    location: 'Nellore, AP',
-    category: 'Field',
-    salary: '₹2.1 – 3.0 LPA',
-    experience: '0–2 years',
-    description: 'JLG group meetings, collections, village travel.',
-    pinned: false,
-    postedAt: Date.now() - 300 * 3600_000,
-    postedBy: 'admin',
-  },
-]
-
-export function getJobs(): Job[] {
-  const existing = read<Job[]>(JOBS_KEY, [])
-  if (existing.length === 0) {
-    write(JOBS_KEY, DEFAULT_JOBS)
-    return DEFAULT_JOBS
+export function getJobs(): Job[] { return jobs }
+export function clearJobs(): void { ++generation; jobs = [] }
+// Old browser data was never access-controlled. Purge it on user login; on
+// an admin device it can instead be explicitly reviewed and imported once.
+export function purgeLegacyJobs(): void {
+  remove(LEGACY_JOBS_KEY)
+  // Old local job alerts could include company names. Keep other notices but
+  // purge those historic alerts when a normal user signs in.
+  const notifications = read<unknown>('mrc_notifications_v1', [])
+  if (Array.isArray(notifications)) {
+    write('mrc_notifications_v1', notifications.filter((notice) =>
+      notice && typeof notice === 'object' && notice.type !== 'job',
+    ))
   }
-  return existing
+}
+export function getLegacyJobs(): Job[] {
+  const saved = read<unknown>(LEGACY_JOBS_KEY, [])
+  if (!Array.isArray(saved)) return []
+  return saved.filter((job): job is Job =>
+    job !== null && typeof job === 'object'
+      && typeof job.id === 'string' && typeof job.title === 'string'
+      && typeof job.company === 'string' && typeof job.location === 'string'
+      && typeof job.category === 'string' && job.deleted !== true,
+  )
 }
 
-export function saveJobs(jobs: Job[]) {
-  write(JOBS_KEY, jobs)
-}
-
-export function addJob(j: Omit<Job, 'id' | 'postedAt'> & { id?: string; postedAt?: number }): Job {
-  const jobs = getJobs()
-  const job: Job = {
-    id: j.id || jid(),
-    postedAt: j.postedAt || Date.now(),
-    title: j.title,
-    company: j.company,
-    manager: j.manager,
-    contact: j.contact,
-    managerEmail: j.managerEmail,
-    location: j.location,
-    category: j.category,
-    salary: j.salary,
-    experience: j.experience,
-    description: j.description,
-    pinned: !!j.pinned,
-    postedBy: j.postedBy || 'admin',
+function parseJob(value: unknown): Job | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Record<string, unknown>
+  if (typeof row.id !== 'string' || typeof row.title !== 'string'
+    || typeof row.location !== 'string' || typeof row.category !== 'string') return null
+  return {
+    id: row.id,
+    title: row.title,
+    company: typeof row.company === 'string' ? row.company : '',
+    manager: typeof row.manager === 'string' ? row.manager : undefined,
+    contact: typeof row.contact === 'string' ? row.contact : undefined,
+    managerEmail: typeof row.managerEmail === 'string' ? row.managerEmail : undefined,
+    description: typeof row.description === 'string' ? row.description : undefined,
+    location: row.location,
+    category: row.category as Job['category'],
+    salary: typeof row.salary === 'string' ? row.salary : undefined,
+    experience: typeof row.experience === 'string' ? row.experience : undefined,
+    pinned: row.pinned === true,
+    postedAt: typeof row.postedAt === 'number' ? row.postedAt : 0,
   }
-  jobs.unshift(job)
-  saveJobs(jobs)
-  mirror('vacancies', job)
-  broadcast({
-    kind: 'job-posted',
-    jobTitle: job.title,
-    company: job.company,
-    category: job.category,
-    location: job.location,
-    pinned: job.pinned,
-  })
+}
+
+export async function loadVisibleJobs(): Promise<Job[]> {
+  const request = generation
+  const { data, error } = await supabase.rpc('list_visible_jobs')
+  if (error) throw new Error('Jobs are temporarily unavailable. Please try again later or contact support.')
+  const result = (Array.isArray(data) ? data : []).map(parseJob).filter((job): job is Job => job !== null)
+  if (generation === request) jobs = result
+  return result
+}
+
+export async function loadAdminJobs(): Promise<Job[]> {
+  const request = generation
+  const { data, error } = await supabase.from('vacancies').select('id,data').order('synced_at', { ascending: false }).limit(500)
+  if (error) throw new Error('Cannot load vacancies. Verify the admin role and run schema.sql.')
+  const result = ((data ?? []) as { id: string; data: unknown }[])
+    .filter((row) => (row.data as { deleted?: boolean })?.deleted !== true)
+    .map((row) => parseJob({ ...(row.data as Record<string, unknown>), id: row.id }))
+    .filter((job): job is Job => job !== null)
+  if (generation === request) jobs = result
+  return result
+}
+
+async function storeJob(job: Job): Promise<void> {
+  const { error } = await supabase.from('vacancies').upsert({
+    id: job.id,
+    data: job,
+    synced_at: new Date().toISOString(),
+  }, { onConflict: 'id' })
+  if (error) throw new Error('Vacancy could not be saved. Check administrator permissions and try again.')
+}
+
+export async function importLegacyJobs(): Promise<number> {
+  const legacy = getLegacyJobs()
+  for (const job of legacy) await storeJob(job)
+  purgeLegacyJobs()
+  await loadAdminJobs()
+  return legacy.length
+}
+
+export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> {
+  const job: Job = { ...input, id: crypto.randomUUID(), postedAt: Date.now() }
+  await storeJob(job)
+  jobs = [job, ...jobs]
   return job
 }
 
-export function updateJob(id: string, patch: Partial<Job>) {
-  const jobs = getJobs()
-  const idx = jobs.findIndex((j) => j.id === id)
-  if (idx === -1) return null
-  jobs[idx] = { ...jobs[idx], ...patch }
-  saveJobs(jobs)
-  mirror('vacancies', jobs[idx])
-  if (
-    patch.title !== undefined ||
-    patch.company !== undefined ||
-    patch.salary !== undefined ||
-    patch.location !== undefined ||
-    patch.managerEmail !== undefined ||
-    patch.contact !== undefined ||
-    patch.pinned !== undefined
-  ) {
-    broadcast({ kind: 'job-edited', jobTitle: jobs[idx].title, company: jobs[idx].company })
-  }
-  return jobs[idx]
+export async function updateJob(id: string, patch: Partial<Job>): Promise<Job> {
+  const previous = jobs.find((job) => job.id === id)
+  if (!previous) throw new Error('Reload vacancies and try again.')
+  const updated = { ...previous, ...patch, id }
+  await storeJob(updated)
+  jobs = jobs.map((job) => job.id === id ? updated : job)
+  return updated
 }
 
-export function deleteJob(id: string) {
-  const jobs = getJobs().filter((j) => j.id !== id)
-  saveJobs(jobs)
-  mirror('vacancies', { id, deleted: true, deletedAt: Date.now() })
+export async function deleteJob(id: string): Promise<void> {
+  // Tombstone rather than delete so a stale client cannot resurrect a row.
+  const { error } = await supabase.from('vacancies').update({
+    data: { deleted: true, deletedAt: Date.now() }, synced_at: new Date().toISOString(),
+  }).eq('id', id).select('id').single()
+  if (error) throw new Error('Vacancy could not be deleted. Check permissions and try again.')
+  jobs = jobs.filter((job) => job.id !== id)
 }
 
-export function togglePin(id: string, pinned: boolean) {
+export async function togglePin(id: string, pinned: boolean): Promise<Job> {
   return updateJob(id, { pinned })
 }
 
@@ -354,7 +172,7 @@ export function filterJobs(
   return jobs.filter((j) => {
     if (opts.category && opts.category !== 'All' && j.category !== opts.category) return false
     if (q) {
-      const hay = `${j.title} ${j.company} ${j.category} ${j.description ?? ''}`.toLowerCase()
+      const hay = `${j.title} ${j.company ?? ''} ${j.category} ${j.description ?? ''}`.toLowerCase()
       if (!hay.includes(q)) return false
     }
     if (loc && !j.location.toLowerCase().includes(loc)) return false

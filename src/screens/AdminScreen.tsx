@@ -10,6 +10,9 @@ import {
   CATEGORIES,
   deleteJob,
   getJobs,
+  getLegacyJobs,
+  importLegacyJobs,
+  loadAdminJobs,
   sortedJobs,
   togglePin,
   updateJob,
@@ -69,6 +72,9 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     void refreshPayments()
+      .then(() => { if (active) setVersion((v) => v + 1) })
+      .catch(() => undefined)
+    void loadAdminJobs()
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     return () => { active = false }
@@ -201,6 +207,17 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
   const [editing, setEditing] = useState<Job | null>(null)
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const legacyCount = getLegacyJobs().length
+
+  async function change(action: () => Promise<unknown>) {
+    setBusy(true)
+    setError(null)
+    try { await action(); onMutate() }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Vacancy change failed.') }
+    finally { setBusy(false) }
+  }
 
   function openNew() {
     setEditing(null)
@@ -221,6 +238,13 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
         <h2 className="text-lg font-bold text-slate-900">Vacancies ({jobs.length})</h2>
         <Button onClick={openNew}>+ Post vacancy</Button>
       </div>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {legacyCount > 0 && (
+        <Card className="p-4 space-y-2">
+          <p className="text-sm font-semibold text-slate-900">{legacyCount} older vacancies remain on this admin device. Review them first; sample vacancies may be included. Import only verified posts to the secure Supabase catalog.</p>
+          <Button variant="secondary" disabled={busy} onClick={() => { void change(importLegacyJobs) }}>Import older vacancies</Button>
+        </Card>
+      )}
       <div className="grid gap-2">
         {jobs.map((j) => (
           <Card key={j.id} className="p-3">
@@ -242,7 +266,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
             </div>
             {/* Action row — always visible on mobile (no side overflow) */}
             <div className="flex items-center gap-2 mt-3">
-              <Button variant="secondary" className="flex-1" onClick={() => { togglePin(j.id, !j.pinned); onMutate() }}>
+              <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => { void change(() => togglePin(j.id, !j.pinned)) }}>
                 {j.pinned ? '★ Unpin' : '☆ Pin'}
               </Button>
               <Button variant="secondary" className="flex-1" onClick={() => openEdit(j)}>
@@ -266,7 +290,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
         cancelLabel="Cancel"
         danger
         onConfirm={() => {
-          if (deleteTarget) { deleteJob(deleteTarget.id); onMutate() }
+          if (deleteTarget) void change(() => deleteJob(deleteTarget.id))
           setDeleteTarget(null)
         }}
         onCancel={() => setDeleteTarget(null)}
@@ -287,18 +311,26 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
   const [experience, setExperience] = useState(job?.experience ?? '')
   const [description, setDescription] = useState(job?.description ?? '')
   const [pinned, setPinned] = useState(job?.pinned ?? false)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  function save() {
+  async function save() {
     if (!title || !company || !location) {
-      alert('Title, company, and location are required.')
+      setError('Title, company, and location are required.')
       return
     }
-    if (job) {
-      updateJob(job.id, { title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
-    } else {
-      addJob({ title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
-    }
-    onSaved()
+    setSaving(true)
+    setError(null)
+    try {
+      if (job) {
+        await updateJob(job.id, { title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
+      } else {
+        await addJob({ title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
+      }
+      onSaved()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not save vacancy.')
+    } finally { setSaving(false) }
   }
 
   return (
@@ -354,7 +386,9 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
           <Label>Description</Label>
           <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
-        <Button className="w-full" onClick={save}>{job ? 'Save changes' : 'Post vacancy'}</Button>
+        <p className="text-sm font-medium text-slate-700">Title, location, category, salary and experience are public. Company, manager, contact, email and description appear only to active subscribers. Do not put private details in public fields.</p>
+        {error && <p role="alert" className="text-sm font-bold text-red-800">{error}</p>}
+        <Button className="w-full" onClick={() => { void save() }} disabled={saving}>{saving ? 'Saving securely…' : job ? 'Save changes' : 'Post vacancy'}</Button>
       </div>
     </Modal>
   )

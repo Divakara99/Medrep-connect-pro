@@ -69,7 +69,7 @@ export function AdminLoginScreen({
           <header className="flex flex-col items-center mb-6">
             <Logo size={64} />
             <div className="mt-3 text-center">
-              <h1 className="text-xl font-extrabold text-slate-900">
+              <h1 className="text-2xl font-extrabold text-slate-900">
                 MedRep <span className="text-brand-700">Connect Pro</span>
               </h1>
               <p className="text-sm text-slate-700 mt-1">Restricted administrator access</p>
@@ -125,9 +125,9 @@ export function AdminLoginScreen({
                     type="password"
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 12 characters"
                     autoComplete="new-password"
-                    minLength={6}
+                    minLength={12}
                     required
                   />
                 </div>

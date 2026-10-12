@@ -17,7 +17,7 @@ export type Session =
   | { kind: 'user'; userId: string }
   | { kind: 'admin' }
 
-export type AuthSnapshot = { session: Session; user: User | null }
+export type AuthSnapshot = { session: Session; user: User | null; adminVerified?: boolean }
 
 const USERS_CACHE_KEY = 'mrc_admin_users_cache_v1'
 const USER_STATE_KEY = 'mrc_user_state_v1'
@@ -113,6 +113,10 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   if (error) throw error
   const snapshot = snapshotFromSession(data.session)
   if (!snapshot.user) return snapshot
+  if (snapshot.session.kind === 'admin') {
+    const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    return { ...snapshot, adminVerified: !assurance.error && assurance.data?.currentLevel === 'aal2' }
+  }
 
   try {
     const user = await withServerSubscription(snapshot.user)
@@ -212,8 +216,8 @@ export async function registerUser(input: {
   if (!name || !email || !input.password) {
     return { ok: false, error: 'Name, email and password are required.' }
   }
-  if (input.password.length < 6) {
-    return { ok: false, error: 'Password must be at least 6 characters.' }
+  if (input.password.length < 12) {
+    return { ok: false, error: 'Password must be at least 12 characters.' }
   }
   if (hasPhone && !phone) {
     return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }
@@ -281,7 +285,7 @@ export async function resetPassword(email: string): Promise<{ ok: true } | { ok:
 }
 
 export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (password.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+  if (password.length < 12) return { ok: false, error: 'Password must be at least 12 characters.' }
   const { data, error } = await supabase.auth.updateUser({ password })
   if (error) return { ok: false, error: error.message }
   if (data.user) activeUser = toUser(data.user)

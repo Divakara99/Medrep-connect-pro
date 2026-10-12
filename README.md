@@ -10,12 +10,12 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Tailwind CSS 4** (via `@tailwindcss/vite`)
 - Single-file PWA (`manifest.json` + `sw.js`)
 - Supabase Auth for account identity and sessions
-- `localStorage` for device-local demo/app state, with an admin-authenticated Supabase mirror for selected records
+- Supabase RLS + a server-side job projection for vacancies; other legacy demo/profile/ticket data remains device-local until migrated
 
 ## Auth
 - Supabase Auth provides account creation, sign-in, persisted sessions, email password recovery, and sign-out.
 - The former localStorage username/password store (which contained plaintext demo passwords) is removed on startup; old local demo accounts must be recreated or migrated out-of-band.
-- **Admin sign-in:** use the separate Admin Login page at `/?portal=admin`, then sign in with a Supabase Auth account carrying the trusted `app_metadata.role = "admin"` claim. The normal user login rejects admin accounts; user-editable metadata never grants admin access.
+- **Admin sign-in:** the public login screen does not advertise the admin route. Administrators can tap the brand logo/name five times within four seconds or use a privately bookmarked `/?portal=admin` URL. This is convenience, not a secret or access control; the trusted `app_metadata.role = "admin"` claim and RLS enforce authorization. The normal login rejects admin accounts; the admin portal requires verified TOTP MFA (`aal2`) before showing data.
 - Admin accounts must be provisioned and promoted by a trusted Supabase administrator; see the Supabase setup below.
 
 ## User app
@@ -23,7 +23,7 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Priority** — pinned jobs + horizontally scrollable category filters.
 - **Plans** — 5/10/15/30/90/180/365 day tiers; server-verified Razorpay checkout for cards and enabled UPI methods; legacy manual UPI requests remain reviewable by an admin.
 - **Account** — fixed tagline **Job Seeker**; full profile editor (personal · education · experience).
-- **Job detail** — company/manager/contact omitted from the locked UI until subscribed; Apply locked for free users. Browser-held job data is not a security boundary (see DEPLOY.md).
+- **Job detail** — the server omits company/manager/contact/description for free users. Active subscriber access is checked against server expiry on each job listing request. Apply is locked for free users.
 - **AI chat** — answers pricing/jobs questions; hard issues automatically escalate to admin tickets.
 - **PWA** — `manifest.json` + service worker (`/sw.js`) for installable offline shell.
 
@@ -42,17 +42,17 @@ Horizontally scrollable tabs: **Vacancies · Plans · Payments · Tickets · Use
 - **Users** — Auth-backed registered-user list; delete non-admin accounts through the verified server-side Edge Function (administrator accounts are protected).
 - **Profile** — frozen creator identity + hidden admin mobile.
 
-Only admin can post vacancies.
+Only an authenticated admin with verified MFA can post/edit/delete vacancies (enforced by Supabase RLS). No demo jobs are shipped to user browsers; admins can explicitly import older local posts after review.
 
 ## Data (localStorage keys)
 | Concept | Key |
 | --- | --- |
 | Supabase Auth session | `mrc_supabase_auth_v1` (managed by Supabase Auth) |
 | Admin account cache | `mrc_admin_users_cache_v1` |
-| Jobs | `mrc_jobs_v1` |
+| Jobs | Supabase `vacancies` (old `mrc_jobs_v1` may be imported by an admin; cleared for users) |
 | Plans | `mrc_plans_v1` |
 | Tickets | `mrc_tickets_v1` |
-| Verified payment display cache | `mrc_verified_payment_cache_v1` (server is authoritative) |
+| Payment records | Server only; old `mrc_verified_payment_cache_v1` is removed |
 | User bios / profiles | `mrc_profiles_v1` |
 
 The obsolete `mrc_users_v1`, `mrc_session_v1`, `mrc_user_state_v1`, simulated payment history, and saved payment methods are cleared at startup. Old plaintext passwords, simulated entitlements, and any Razorpay secret once entered in the old Admin form are never imported or trusted.
@@ -65,15 +65,15 @@ Accounts and sessions use Supabase Auth (`@supabase/supabase-js`); localStorage 
 
 1. In Supabase, enable email/password Auth and configure the app URL plus allowed redirect URLs for the production site and local development. Email confirmation can remain enabled; new users then verify before signing in.
 2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL Editor. It creates the Auth-backed `user_accounts` projection and existing mirror tables, adds database-enforced normalized Indian mobile uniqueness, installs the Auth sync trigger, and applies admin-only RLS. The script removes legacy policies on the eight mirror tables (including the old `mirror_all` policy) and creates policies for `authenticated` sessions whose **trusted** `app_metadata.role` is `admin` (or `app_metadata.is_admin` is `true`). It creates no `anon` policies. Account records are readable by admins but cannot be changed/deleted directly by browser clients. The dashboard views (`users_view`, `payments_view`, `vacancies_view`, `applications_view`) are dropped and recreated, never `CREATE OR REPLACE`d, so re-running the script over an older view shape cannot fail with SQLSTATE `42P16` (`cannot change name of view column …`) before the viewers' `authenticated`-only grants are reapplied. The script is safe to re-run. The later billing migration adds a separate SELECT policy so each signed-in user can read only their own subscription expiry.
-3. Create the owner account `akhildivakara@gmail.com` in **Authentication → Users** before the first run (or re-run the script after creating it). The script promotes that account for you by merging `role: admin` into the **trusted** `raw_app_meta_data` and setting its display name to `M Divakar Reddy`; the Auth sync trigger then refreshes `user_accounts.name`/`is_admin`. Sign out and back in so the new role claim is present in the Auth token. Set the password privately in Supabase Auth — no password is stored in SQL or in the repository. To promote a *different* address, edit the email literal in the final `DO` block (or run the equivalent `UPDATE auth.users … WHERE lower(email) = lower('…')` yourself). Never put an admin password or service-role key in the frontend or `VITE_*` variables. Do not grant admin through `user_metadata`, which users can edit themselves.
-4. Deploy the account-deletion Edge Function from this repository with the Supabase CLI: `supabase functions deploy admin-delete-user`. The hosted function reads `SUPABASE_SERVICE_ROLE_KEY` only from its server environment. It verifies the caller's Auth JWT and protected admin claim, rejects self/admin deletion, and uses the Auth Admin API. Never commit or expose that key.
-5. Run [`supabase/payments.sql`](supabase/payments.sql) after `schema.sql`. It creates the server-owned subscription payment ledger, permits users to read only their own payments/expiry, and grants no browser write access. Razorpay capture and plan activation are processed by server-side Edge Functions.
+3. Enable TOTP MFA in Supabase Auth settings before deploying this version. The admin portal provides authenticator enrollment and a six-digit verification step; admin-only RLS requires both the trusted role and an `aal2` JWT. Create the owner account `akhildivakara@gmail.com` in **Authentication → Users** before the first run (or re-run the script after creating it). The script promotes that account for you by merging `role: admin` into the **trusted** `raw_app_meta_data` and setting its display name to `M Divakar Reddy`; the Auth sync trigger then refreshes `user_accounts.name`/`is_admin`. Sign out and back in so the new role claim is present in the Auth token. Set the password privately in Supabase Auth — no password is stored in SQL or in the repository. To promote a *different* address, edit the email literal in the final `DO` block (or run the equivalent `UPDATE auth.users … WHERE lower(email) = lower('…')` yourself). Never put an admin password or service-role key in the frontend or `VITE_*` variables. Do not grant admin through `user_metadata`, which users can edit themselves.
+4. Deploy `admin-delete-user` and `review-manual-upi-payment` Edge Functions from this repository. Both require a verified administrator MFA token; account deletion reads `SUPABASE_SERVICE_ROLE_KEY` only server-side. Never put that key in the frontend.
+5. Run [`supabase/payments.sql`](supabase/payments.sql) after `schema.sql`, then run [`supabase/secure_jobs.sql`](supabase/secure_jobs.sql) **before deploying the new frontend**. The job RPC exposes a public-field projection to signed-in free users, and private fields only to active subscribers. Direct `vacancies` access remains admin-only. Without this SQL the job feed fails closed instead of showing browser-held secrets. Payment capture and plan activation remain server-side.
 6. In Supabase **Project Settings → Edge Functions → Secrets**, set both `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to a matching test or live pair from the same Razorpay account. Set `RAZORPAY_WEBHOOK_SECRET` separately. Enter private secrets only in Supabase's secure secrets UI or CLI, never in chat, the repository, Netlify `VITE_*` variables, or the browser.
-7. Deploy `create-razorpay-order`, `verify-razorpay-payment`, `razorpay-webhook`, `create-upi-intent` (now returns 410 and no VPA), and `review-manual-upi-payment` (for legacy requests) with `supabase functions deploy <function-name>`. Configure the Razorpay webhook URL as `https://<project-ref>.supabase.co/functions/v1/razorpay-webhook` and subscribe to `payment.captured`; use the same webhook secret as the `RAZORPAY_WEBHOOK_SECRET` Edge Function secret.
+7. Deploy `create-razorpay-order`, `verify-razorpay-payment`, `razorpay-webhook`, and `create-upi-intent` (now returns 410 and no VPA) with `supabase functions deploy <function-name>`. Configure the Razorpay webhook URL as `https://<project-ref>.supabase.co/functions/v1/razorpay-webhook` and subscribe to `payment.captured`; use the same webhook secret as the `RAZORPAY_WEBHOOK_SECRET` Edge Function secret.
 
 The SQL normalizer treats `9876543210`, `09876543210`, and `+91 98765 43210` as the same phone number. A unique partial index is the enforcement point for signup and profile changes; browser checks are only validation. On account deletion, Supabase Auth deletes the account projection by foreign-key cascade and the trigger scrubs legacy identity/profile mirror rows.
 
-Jobs, profiles, tickets, applications, and notifications retain their existing local-first behavior. Paid subscription expiry and the subscription payment ledger are server-owned; clients can read their own records but cannot write or activate a plan. The admin payment monitor reads the protected payment table, and manual UPI activation requires a trusted admin to match the UTR against the bank statement. Razorpay key secrets remain only in Supabase Edge Function Secrets.
+Jobs are server-backed; profiles, tickets, applications and notifications still have legacy device-local behavior and must not contain data requiring cross-device confidentiality until separately migrated. Paid subscription expiry and the subscription payment ledger are server-owned; clients can read their own records but cannot write or activate a plan. The admin payment monitor reads the protected payment table, and manual UPI activation requires a trusted admin to match the UTR against the bank statement. Razorpay key secrets remain only in Supabase Edge Function Secrets.
 
 **Local-account migration:** existing `mrc_users_v1` entries contained plaintext passwords. The app deletes that key and the old `mrc_session_v1` on startup instead of trusting/importing them. Users must create Supabase Auth accounts; if existing account migration is required, do it through a controlled server-side import with a password-reset flow.
 
@@ -125,10 +125,11 @@ nothing else to touch.
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # production build to dist/
+npm run test:security  # isolated Postgres tests for free/paid/expired job projections
 npm run icons    # regenerate favicon + PWA icons from src/assets/logo.svg
 npm run preview  # preview production build
 ```
 
 ## Quick test paths
-1. **User:** Create account → Account shows **Job Seeker** → edit profile → browse locked jobs → choose a plan → pay in Razorpay → wait for server verification → Apply. UPI app/QR availability depends on Razorpay merchant settings and device support; never send a transfer to a merchant ID shown outside checkout.
+1. **User:** Create account → Account shows **Job Seeker** → edit profile → browse the public job projection → choose a plan → pay in Razorpay → wait for server verification → Apply. UPI app/QR availability depends on Razorpay merchant settings and device support; never send a transfer to a merchant ID shown outside checkout.
 2. **Admin:** Provision a Supabase Auth user with the trusted admin `app_metadata` claim → open `/?portal=admin` → sign in → Admin panel (users, verified payments, UPI review, and scrollable tabs).

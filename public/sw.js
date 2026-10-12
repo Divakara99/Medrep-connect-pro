@@ -1,7 +1,7 @@
 // MedRep Connect Pro — cache the public app shell, never payment/API responses.
 // Navigation is network-first so a deployed checkout/security fix is not hidden
 // behind an older cached index.html after a page refresh.
-const CACHE = 'mrc-v4'
+const CACHE = 'mrc-v5'
 const CORE = [
   './',
   './index.html',

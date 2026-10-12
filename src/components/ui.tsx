@@ -9,7 +9,7 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent'
 }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none select-none'
+    'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-base font-bold transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none select-none'
   const styles: Record<string, string> = {
     primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm shadow-brand-600/20',
     secondary: 'bg-white text-slate-800 border border-slate-200 hover:bg-slate-50',
@@ -28,7 +28,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 ${props.className ?? ''}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base font-medium text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 ${props.className ?? ''}`}
     />
   )
 }
@@ -46,14 +46,14 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       {...props}
-      className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 ${props.className ?? ''}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base font-medium text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100 ${props.className ?? ''}`}
     />
   )
 }
 
 export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+    <label htmlFor={htmlFor} className="block text-sm font-bold tracking-wide text-slate-700 mb-1.5">
       {children}
     </label>
   )
@@ -72,7 +72,7 @@ export function Badge({ children, color = 'slate' }: { children: ReactNode; colo
     red: 'bg-red-50 text-red-700 ring-1 ring-red-200',
     purple: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200',
   }
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${map[color]}`}>{children}</span>
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${map[color]}`}>{children}</span>
 }
 
 export function Modal({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
@@ -82,7 +82,7 @@ export function Modal({ open, onClose, children, title }: { open: boolean; onClo
       <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {title && (
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
-            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+            <h3 className="text-lg font-bold text-slate-900">{title}</h3>
             <button className="text-slate-400 hover:text-slate-700 text-xl leading-none" onClick={onClose}>×</button>
           </div>
         )}
