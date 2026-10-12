@@ -133,7 +133,7 @@ function openComposer(href: string): void {
 }
 
 export type OpenApplicationResult =
-  | { ok: true; channel: 'email' | 'whatsapp'; to: string; record: ApplicationRecord }
+  | { ok: true; channel: 'email' | 'whatsapp'; to: string; record: ApplicationRecord; historyError?: string }
   | { ok: false; channel: 'email' | 'whatsapp'; to: string; error: string }
 
 export async function openApplication(
@@ -180,30 +180,28 @@ export async function openApplication(
     sentAt: Date.now(),
   }
 
-  // Store the record first: the server assigns the id and the verified identity.
+  // The server assigns the id and stamps the verified identity. If the
+  // applications migration is not live yet we still open the composer — the
+  // user's message is the point — but we never claim a history record exists.
   const { data, error } = await supabase.rpc('record_application', {
     p_payload: { ...record, id: undefined },
   })
+  let stored = ''
+  let historyError: string | undefined
   if (error) {
-    // Applications are recorded server-side; without the migration the record
-    // would exist only on this device, so we fail closed with a clear reason.
     const missing = /could not find the function|record_application/i.test(error.message)
-    return {
-      ok: false,
-      channel,
-      to,
-      error: missing
-        ? 'Applications are unavailable right now: the platform has not finished its update. Please try again shortly or contact support.'
-        : error.message || 'Your application could not be recorded. Please try again.',
-    }
+    historyError = missing
+      ? 'Opened, but it could not be added to your application history yet — the platform is still updating.'
+      : error.message || 'Opened, but it could not be added to your application history.'
+  } else {
+    stored = (data as { id?: string } | null)?.id ?? ''
   }
-  const stored = (data as { id?: string } | null)?.id ?? ''
   record.id = stored
   // Admin-side mirror for the dashboard listing; the RPC row is authoritative.
   if (stored) mirror('applications', record)
 
   openComposer(href)
-  return { ok: true, channel, to, record }
+  return { ok: true, channel, to, record, historyError }
 }
 
 type StoredApplication = Partial<ApplicationRecord> & { id?: string }

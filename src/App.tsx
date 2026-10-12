@@ -341,11 +341,10 @@ export default function App() {
           void openApplication(user, applyJob, resume)
             .then((result) => {
               if (result.ok) {
-                showToast(
-                  result.channel === 'email'
-                    ? `Mail app opened — send to ${applyJob.manager || 'manager'} ✉️`
-                    : `WhatsApp opened — message ${applyJob.manager || 'manager'} 💬`,
-                )
+                const opened = result.channel === 'email'
+                  ? `Mail app opened — send to ${applyJob.manager || 'manager'} ✉️`
+                  : `WhatsApp opened — message ${applyJob.manager || 'manager'} 💬`
+                showToast(result.historyError ? `${opened} ${result.historyError}` : opened)
                 setApplyJob(null)
               } else {
                 showToast(result.error)

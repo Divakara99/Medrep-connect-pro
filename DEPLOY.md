@@ -67,6 +67,19 @@ database must move together: the new app reads the server billing catalog, the
 private resume bucket and the server-side application records, and the
 administrator gate is a verified authenticator again.
 
+### 0. If the frontend ships before the migrations
+
+The frontend degrades instead of failing, but features stay limited until the
+SQL is applied:
+
+| Area | Behaviour before the migration |
+| --- | --- |
+| Jobs | `list_visible_jobs()` still works; free users see no description and HQ/division show "—" until the new `secure_jobs.sql` is applied. |
+| Plans | The catalog read fails, so the screen shows the standard seven plans and prices from its built-in fallback. Checkout still works against the previously deployed `create-razorpay-order`. |
+| Resume tab | Upload is disabled with a "storage is being enabled" notice. |
+| Apply | The mail/WhatsApp composer still opens; the toast says the application could not be added to history yet. |
+| **Admin panel** | **Blocked.** The portal requires an `aal2` session, so an administrator must enable TOTP in Supabase Auth (step 1) before the panel opens. This is the intended fix — production currently has no second factor at all. |
+
 ### 1. Restore administrator TOTP MFA (replaces the fixed access code)
 
 The previous release shipped a fixed 4-digit access code (`9676`) inside the

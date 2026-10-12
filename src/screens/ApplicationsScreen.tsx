@@ -28,7 +28,8 @@ export function ApplicationsScreen({
   const [resume, setResume] = useState<ResumeRecord | null>(null)
   const [resumesLoading, setResumesLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null)
+  const [storageReady, setStorageReady] = useState(true)
   const [applications, setApplications] = useState<ApplicationRecord[]>([])
   const [applicationsError, setApplicationsError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement | null>(null)
@@ -38,10 +39,19 @@ export function ApplicationsScreen({
       const stored = await listResumes()
       setResume(stored[0] ?? null)
       onResumeChange(stored[0] ?? null)
+      setStorageReady(true)
     } catch (cause) {
+      // The private bucket/table are created by supabase/resumes.sql. Until
+      // that has run there is nothing to upload to, so say so plainly instead
+      // of offering a button that can only fail.
+      const message = cause instanceof Error ? cause.message : 'Resume storage is unavailable right now.'
+      const notEnabled = /resume_documents|relation|does not exist|could not find/i.test(message)
+      setStorageReady(!notEnabled)
       setNotice({
-        kind: 'error',
-        text: cause instanceof Error ? cause.message : 'Resume storage is unavailable right now.',
+        kind: notEnabled ? 'info' : 'error',
+        text: notEnabled
+          ? 'Secure resume storage is being enabled on the platform. Your upload will be available shortly — nothing is lost.'
+          : message,
       })
     } finally {
       setResumesLoading(false)
@@ -58,7 +68,7 @@ export function ApplicationsScreen({
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh])
 
   async function onFile(file: File | undefined) {
-    if (!file || uploading) return
+    if (!file || uploading || !storageReady) return
     setUploading(true)
     setNotice(null)
     const result = await uploadResume(file)
@@ -158,8 +168,8 @@ export function ApplicationsScreen({
             </p>
           </div>
         ) : (
-          <Button onClick={() => fileInput.current?.click()} disabled={uploading}>
-            {uploading ? 'Uploading securely…' : '⬆ Upload resume'}
+          <Button onClick={() => fileInput.current?.click()} disabled={uploading || !storageReady}>
+            {uploading ? 'Uploading securely…' : storageReady ? '⬆ Upload resume' : 'Upload unavailable right now'}
           </Button>
         )}
 
@@ -174,7 +184,7 @@ export function ApplicationsScreen({
         {notice && (
           <p
             role="status"
-            className={`rounded-lg px-3 py-2 text-sm font-semibold ${notice.kind === 'success' ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200' : 'bg-red-50 text-red-900 ring-1 ring-red-200'}`}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${notice.kind === 'success' ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200' : notice.kind === 'info' ? 'bg-brand-50 text-brand-900 ring-1 ring-brand-200' : 'bg-red-50 text-red-900 ring-1 ring-red-200'}`}
           >
             {notice.text}
           </p>
