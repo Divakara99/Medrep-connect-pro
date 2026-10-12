@@ -34,7 +34,7 @@ try {
     INSERT INTO public.user_accounts VALUES
       ('${freeId}', NULL), ('${paidId}', now() + interval '1 day');
     INSERT INTO public.vacancies (id, data) VALUES
-      ('job_1', '{"title":"Medical Representative","location":"Chennai","category":"MR","salary":"2 LPA","experience":"0-2 years","company":"Hidden Pharma","manager":"Private Manager","contact":"9999999999","managerEmail":"private@example.org","description":"Private description","postedAt":123,"pinned":true}'),
+      ('job_1', '{"title":"Medical Representative","location":"Chennai","category":"MR","salary":"2 LPA","experience":"0-2 years","company":"Hidden Pharma","manager":"Private Manager","contact":"9999999999","managerEmail":"private@example.org","description":"Private description","hq":"Hyderabad HO","division":"Cardiology","postedAt":123,"pinned":true}'),
       ('removed', '{"deleted":true,"title":"Removed","location":"Chennai","category":"MR"}');
   `)
   const migration = await readFile(new URL('../supabase/secure_jobs.sql', import.meta.url), 'utf8')
@@ -68,8 +68,10 @@ try {
   // The city and the public description stay visible before any subscription.
   assert.equal(freeJob.location, 'Chennai', 'city must stay visible to free users')
   assert.equal(freeJob.description, 'Private description', 'description is public and must be readable')
-  // Confidential fields must not exist in the free-user response at all.
-  for (const field of ['company', 'manager', 'contact', 'managerEmail', 'managerAltPhone', 'hq', 'division']) {
+  assert.equal(freeJob.hq, 'Hyderabad HO', 'HQ is public and must not be locked')
+  assert.equal(freeJob.division, 'Cardiology', 'division is public and must not be locked')
+  // The five confidential fields must not exist in the free-user response at all.
+  for (const field of ['company', 'manager', 'contact', 'managerEmail', 'managerAltPhone']) {
     assert.equal(Object.hasOwn(freeJob, field), false, `${field} leaked to free user`)
   }
 

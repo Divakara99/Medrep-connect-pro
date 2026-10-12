@@ -104,7 +104,7 @@ Run each file in the SQL Editor of the SAME project used by
 | --- | --- | --- |
 | 1 | `supabase/schema.sql` | Auth-backed accounts, admin-only mirror RLS (unchanged). |
 | 2 | `supabase/payments.sql` | `subscription_payments` ledger and the verified activation functions (unchanged). |
-| 3 | `supabase/secure_jobs.sql` | Job projection: city, salary, experience and the **description** are public to signed-in users; company, manager, manager email, contact, alternate number, HQ and division stay subscriber-only. Adds a trigger that rejects phone numbers and email addresses in the public description. |
+| 3 | `supabase/secure_jobs.sql` | Job projection: city, HQ, division, salary, experience and the **description** are public to signed-in users and never blurred; company name, manager name, manager email, primary contact and the optional alternate number stay subscriber-only. Adds a trigger that rejects phone numbers and email addresses in the public description. |
 | 4 | `supabase/user_notifications.sql` | Durable broadcast job notifications (unchanged). |
 | 5 | `supabase/admin_access.sql` | `manual_grant` payment method + audited `grant_manual_access`. No longer relaxes `is_app_admin()`. |
 | 6 | `supabase/admin_mfa.sql` | Reinstates the `aal2` requirement and adds `current_admin_session()` for diagnostics. |
@@ -174,9 +174,9 @@ npx supabase functions deploy create-razorpay-order --project-ref <production-pr
 Merge the PR, wait for the host to publish `main`, and confirm with two
 accounts:
 
-* a **free** user sees the city, salary, experience and description, and their
-  `list_visible_jobs` response contains no `company`, `manager`,
-  `managerEmail`, `contact`, `managerAltPhone`, `hq` or `division` key;
+* a **free** user sees the city, HQ, division, salary, experience and
+  description, and their `list_visible_jobs` response contains no `company`,
+  `manager`, `managerEmail`, `contact` or `managerAltPhone` key;
 * the same user can pick **any** plan and the Razorpay modal amount matches the
   catalog price;
 * an **admin** without a verified authenticator cannot open the admin panel,

@@ -62,11 +62,12 @@ BEGIN
   WHERE user_id = auth.uid();
 
   -- PUBLIC to every signed-in user: title, city, category, salary, experience,
-  -- posted date and the point-wise description.
-  -- PRIVATE until an active subscription: company name, manager name, manager
-  -- email, primary contact number, optional alternative manager number, HQ and
-  -- division. These values are not sent at all — the client only ever receives
-  -- a placeholder, so there is nothing to un-blur in the network response.
+  -- posted date, HQ, division and the point-wise description. None of these are
+  -- blurred in the UI.
+  -- PRIVATE until an active subscription — exactly five fields: company name,
+  -- manager name, manager email, primary contact number and the optional
+  -- alternative manager number. These values are not sent at all, so the client
+  -- only ever receives a placeholder and there is nothing to un-blur.
   RETURN QUERY
   SELECT
     jsonb_build_object(
@@ -77,6 +78,8 @@ BEGIN
       'salary', v.data ->> 'salary',
       'experience', v.data ->> 'experience',
       'description', v.data ->> 'description',
+      'hq', v.data ->> 'hq',
+      'division', v.data ->> 'division',
       'pinned', coalesce((v.data ->> 'pinned')::boolean, false),
       'postedAt', coalesce((v.data ->> 'postedAt')::bigint, 0)
     ) || CASE WHEN can_view_private THEN
@@ -85,9 +88,7 @@ BEGIN
         'manager', v.data ->> 'manager',
         'contact', v.data ->> 'contact',
         'managerAltPhone', v.data ->> 'managerAltPhone',
-        'managerEmail', v.data ->> 'managerEmail',
-        'hq', v.data ->> 'hq',
-        'division', v.data ->> 'division'
+        'managerEmail', v.data ->> 'managerEmail'
       ) ELSE '{}'::jsonb END
   FROM public.vacancies AS v
   WHERE coalesce(v.data ->> 'deleted', 'false') <> 'true'

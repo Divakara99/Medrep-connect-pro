@@ -24,14 +24,14 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Plans** — every tier (5/10/15/30/90/180/365 days) stays selectable. Prices and durations come from the server catalog (`public.billing_plans`); Razorpay Checkout is the only payment path and shows whichever methods the merchant account has enabled. Legacy manual UPI requests remain reviewable by an admin.
 - **Resume** — private resume upload (PDF/DOC/DOCX, ≤ 2 MB) plus the user's application history. Files go to a private Supabase Storage bucket, are readable only by their owner, and are deleted after 30 days. Uploading never navigates away from the screen.
 - **Account** — fixed tagline **Job Seeker**; full profile editor (personal · education · experience).
-- **Job detail** — role, **city**, salary, experience, posted date and the point-wise description are visible to every signed-in user. Company name, manager name, manager email, contact number, the optional (+) manager alternate number, HQ and division are sent only to active subscribers; free users see blurred placeholders instead of values. Apply is locked for free users.
+- **Job detail** — role, **city**, HQ, division, salary, experience, posted date and the point-wise description are visible to every signed-in user and are never blurred. Exactly five fields are sent only to active subscribers — company name, manager name, manager email, primary contact number and the optional (+) manager alternate number; free users see blurred placeholders instead of values. Apply is locked for free users.
 - **AI chat** — answers pricing/jobs questions; hard issues automatically escalate to admin tickets.
 - **PWA** — `manifest.json` + service worker (`/sw.js`) for installable offline shell.
 
 ## Free vs. Subscribed
 | Free | After subscribe |
 | --- | --- |
-| Role, **city**, salary, experience, category, posted date and description visible | Company, manager, manager email, contact, (+) alternate number, HQ and division unlocked |
+| Role, **city**, HQ, division, salary, experience, category, posted date and description visible | Company name, manager name, manager email, contact number and the (+) alternate number unlocked |
 | Confidential fields shown as blurred placeholders — their values are never sent | Values are sent, then blurred until tapped (anti-shoulder-surfing) |
 | Apply blocked — "Subscribe to apply" | Apply + confirmation sheet enabled |
 

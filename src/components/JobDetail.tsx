@@ -114,10 +114,13 @@ export function JobDetail({
             </div>
           </div>
 
-          {/* Always public: role, city, experience, salary and posted date. */}
+          {/* Always public and never blurred: role, city, HQ, division,
+              experience, salary and posted date. */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Role" value={job.title} />
             <Field label="City" value={job.location} />
+            <Field label="HQ" value={job.hq || '—'} />
+            <Field label="Division" value={job.division || '—'} />
             <Field label="Experience" value={job.experience || '—'} />
             <Field label="Salary" value={job.salary || '—'} />
           </div>
@@ -153,11 +156,10 @@ export function JobDetail({
                   <LockedValue label="Manager email" placeholder="manager@company.com" />
                   <LockedValue label="Contact number" placeholder="+91 90000 00000" />
                   <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
-                  <LockedValue label="HQ / Division" placeholder="Head office" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">
-                  These five details — plus HQ and division — are released to active subscribers only. The city, salary,
-                  experience and description above stay visible.
+                  Only these five details wait for an active subscription. City, HQ, division, salary, experience,
+                  posted date and the description above stay visible to everyone.
                 </p>
               </>
             ) : (
@@ -167,8 +169,6 @@ export function JobDetail({
                 <Field label="Manager email" value={job.managerEmail || CREATOR.adminEmail} />
                 <SensitiveValue label="ABM/ASM number" value={job.contact || ''} />
                 <SensitiveValue label="Manager alternate number" value={job.managerAltPhone || ''} plus />
-                <Field label="HQ" value={job.hq || '—'} />
-                <Field label="Division" value={job.division || '—'} />
                 <Field label="Posted on" value={postedOn(job.postedAt)} />
               </div>
             )}
