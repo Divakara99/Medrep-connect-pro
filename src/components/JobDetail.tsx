@@ -51,7 +51,7 @@ export function JobDetail({
                   </>
                 ) : (
                   <>
-                    <span className="blur-locked select-none">{job.company}</span> · {timeAgo(job.postedAt)}
+                    Company hidden · {timeAgo(job.postedAt)}
                   </>
                 )}
               </div>
@@ -74,12 +74,7 @@ export function JobDetail({
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Hiring company & contact</div>
             {!unlocked ? (
               <>
-                <div className="blur-locked text-sm text-slate-800 space-y-1">
-                  <div><span className="font-semibold">Company:</span> {job.company}</div>
-                  <div><span className="font-semibold">Manager:</span> {job.manager || '—'}</div>
-                  <div><span className="font-semibold">Email:</span> {job.managerEmail || '—'}</div>
-                  <div><span className="font-semibold">Contact:</span> {job.contact || '—'}</div>
-                </div>
+                <div className="text-sm text-slate-600">Company and contact are available with an active plan.</div>
                 <div className="absolute inset-0 grid place-items-center bg-white/60 backdrop-blur-sm">
                   <div className="text-center">
                     <div className="text-2xl">🔒</div>

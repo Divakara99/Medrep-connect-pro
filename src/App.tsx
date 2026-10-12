@@ -16,12 +16,14 @@ import { getJobs, type Job } from './data/jobs'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { openApplication } from './data/apply'
 import { unreadCount } from './data/notifications'
+import { clearPaymentCache } from './data/payments'
 
-type View = 'login' | 'admin-login' | 'user' | 'admin'
+type View = 'loading' | 'login' | 'admin-login' | 'user' | 'admin'
 
 export default function App() {
   const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
-  const [view, setView] = useState<View>(adminPortal ? 'admin-login' : 'login')
+  const [view, setView] = useState<View>('loading')
+  const [, setClock] = useState(Date.now)
   const [user, setUser] = useState<User | null>(null)
   const [tab, setTab] = useState<UserTab>('home')
   const [jobs, setJobs] = useState<Job[]>(getJobs)
@@ -63,36 +65,58 @@ export default function App() {
     }
   }, [adminPortal])
 
-  // Restore and observe the Supabase Auth session; the former localStorage
-  // session is intentionally ignored and cleared by the auth module.
+  // Wait for session restoration before showing either login screen. Supabase
+  // sends INITIAL_SESSION before the subscription/entitlement query finishes;
+  // showing it immediately causes the login screen to flash on refresh.
   useEffect(() => {
     let mounted = true
-    const unsubscribe = onAuthStateChange((event, snapshot) => {
-      if (!mounted) return
+    let generation = 0
+    const restore = (resetTab = false) => {
+      const request = ++generation
+      void getAuthSnapshot()
+        .then((snapshot) => { if (mounted && request === generation) applyAuthSnapshot(snapshot, resetTab) })
+        .catch(() => { if (mounted && request === generation) setView(adminPortal ? 'admin-login' : 'login') })
+    }
+    const unsubscribe = onAuthStateChange((event) => {
+      if (!mounted || event === 'INITIAL_SESSION') return
       if (event === 'PASSWORD_RECOVERY') {
+        ++generation
         setRecoveryMode(true)
         setUser(null)
         setView(adminPortal ? 'admin-login' : 'login')
-        return
-      }
-      if (event === 'SIGNED_OUT') {
+      } else if (event === 'SIGNED_OUT') {
+        ++generation
+        clearPaymentCache()
         setRecoveryMode(false)
         setUser(null)
         setView(adminPortal ? 'admin-login' : 'login')
-        return
+      } else {
+        if (event === 'SIGNED_IN') clearPaymentCache()
+        if (event === 'USER_UPDATED') setRecoveryMode(false)
+        restore(event === 'SIGNED_IN')
       }
-      if (event === 'USER_UPDATED') setRecoveryMode(false)
-      applyAuthSnapshot(snapshot, event === 'SIGNED_IN')
     })
-    void getAuthSnapshot()
-      .then((snapshot) => { if (mounted) applyAuthSnapshot(snapshot) })
-      .catch(() => { if (mounted) setView(adminPortal ? 'admin-login' : 'login') })
-
-    return () => {
-      mounted = false
-      unsubscribe()
-    }
+    restore()
+    return () => { mounted = false; ++generation; unsubscribe() }
   }, [adminPortal, applyAuthSnapshot])
+
+  // Keep time-based access in sync without a page reload. Recheck the server
+  // on returning to the app (e.g. after a Razorpay UPI-app handoff/webhook).
+  useEffect(() => {
+    const tick = () => setClock(Date.now())
+    const interval = window.setInterval(tick, 30_000)
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      tick()
+      const before = currentUser()
+      if (!before || before.isAdmin) return
+      void getAuthSnapshot().then((snapshot) => {
+        if (currentUser()?.id === before.id) applyAuthSnapshot(snapshot)
+      }).catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, [applyAuthSnapshot])
 
   const unlocked = isSubscribed(user)
 
@@ -103,13 +127,13 @@ export default function App() {
 
   function onAuthed() {
     setRecoveryMode(false)
-    void getAuthSnapshot()
-      .then((snapshot) => applyAuthSnapshot(snapshot, true))
-      .catch(() => setView(adminPortal ? 'admin-login' : 'login'))
+    // SIGNED_IN/USER_UPDATED restores the authenticated view after the
+    // server-owned subscription has been loaded.
     setJobs(getJobs())
   }
 
   async function onLogout() {
+    clearPaymentCache()
     await doLogout()
     setRecoveryMode(false)
     setUser(null)
@@ -123,6 +147,10 @@ export default function App() {
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 2200)
+  }
+
+  if (view === 'loading') {
+    return <main role="status" aria-live="polite" className="min-h-screen bg-brand-50 grid place-items-center text-brand-900 font-semibold">Loading your account…</main>
   }
 
   if (view === 'login') {
@@ -187,7 +215,7 @@ export default function App() {
         <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} />
       )}
       {tab === 'plans' && user && (
-        <PlansScreen user={user} onSubscribed={(u) => { setUser(u); refreshUser(); showToast('Welcome to Pro!') }} />
+        <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
       )}
       {tab === 'ai' && user && <AIChatScreen user={user} />}
       {tab === 'account' && user && (

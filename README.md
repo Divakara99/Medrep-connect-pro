@@ -21,9 +21,9 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 ## User app
 - **Home** — search, filters, hero, MR-first feed, live stats.
 - **Priority** — pinned jobs + horizontally scrollable category filters.
-- **Plans** — 5/10/15/30/90/180/365 day tiers; server-verified Razorpay checkout and direct UPI with admin verification.
+- **Plans** — 5/10/15/30/90/180/365 day tiers; server-verified Razorpay checkout for cards and enabled UPI methods; legacy manual UPI requests remain reviewable by an admin.
 - **Account** — fixed tagline **Job Seeker**; full profile editor (personal · education · experience).
-- **Job detail** — company/manager/contact blurred until subscribed; Apply locked for free users.
+- **Job detail** — company/manager/contact omitted from the locked UI until subscribed; Apply locked for free users. Browser-held job data is not a security boundary (see DEPLOY.md).
 - **AI chat** — answers pricing/jobs questions; hard issues automatically escalate to admin tickets.
 - **PWA** — `manifest.json` + service worker (`/sw.js`) for installable offline shell.
 
@@ -37,7 +37,7 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 Horizontally scrollable tabs: **Vacancies · Plans · Payments · Tickets · Users · Profile**
 - **Vacancies** — add / edit / delete / pin priority (MR, ABM, multi-industry).
 - **Plans** — edit display titles, taglines, and popularity; checkout prices and validity are fixed by the server catalog.
-- **Payments** — server-backed transaction monitor; verify direct UPI requests against the bank statement before activating. Razorpay and UPI credentials never go in the browser.
+- **Payments** — server-backed transaction monitor; legacy manual UPI requests require bank-statement review before activation. Razorpay and UPI credentials never go in the browser.
 - **Tickets** — AI-escaped and manual support tickets with replies & status.
 - **Users** — Auth-backed registered-user list; delete non-admin accounts through the verified server-side Edge Function (administrator accounts are protected).
 - **Profile** — frozen creator identity + hidden admin mobile.
@@ -68,8 +68,8 @@ Accounts and sessions use Supabase Auth (`@supabase/supabase-js`); localStorage 
 3. Create the owner account `akhildivakara@gmail.com` in **Authentication → Users** before the first run (or re-run the script after creating it). The script promotes that account for you by merging `role: admin` into the **trusted** `raw_app_meta_data` and setting its display name to `M Divakar Reddy`; the Auth sync trigger then refreshes `user_accounts.name`/`is_admin`. Sign out and back in so the new role claim is present in the Auth token. Set the password privately in Supabase Auth — no password is stored in SQL or in the repository. To promote a *different* address, edit the email literal in the final `DO` block (or run the equivalent `UPDATE auth.users … WHERE lower(email) = lower('…')` yourself). Never put an admin password or service-role key in the frontend or `VITE_*` variables. Do not grant admin through `user_metadata`, which users can edit themselves.
 4. Deploy the account-deletion Edge Function from this repository with the Supabase CLI: `supabase functions deploy admin-delete-user`. The hosted function reads `SUPABASE_SERVICE_ROLE_KEY` only from its server environment. It verifies the caller's Auth JWT and protected admin claim, rejects self/admin deletion, and uses the Auth Admin API. Never commit or expose that key.
 5. Run [`supabase/payments.sql`](supabase/payments.sql) after `schema.sql`. It creates the server-owned subscription payment ledger, permits users to read only their own payments/expiry, and grants no browser write access. Razorpay capture and plan activation are processed by server-side Edge Functions.
-6. In Supabase **Project Settings → Edge Functions → Secrets**, set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, and `MERCHANT_UPI_VPA`. Use the key ID provided for this merchant; enter the private key secret and webhook secret only in Supabase's secure secrets UI or CLI, never in chat, the repository, Netlify `VITE_*` variables, or the browser.
-7. Deploy `create-razorpay-order`, `verify-razorpay-payment`, `razorpay-webhook`, `create-upi-intent`, `submit-upi-utr`, and `review-manual-upi-payment` with `supabase functions deploy <function-name>`. Configure the Razorpay webhook URL as `https://<project-ref>.supabase.co/functions/v1/razorpay-webhook` and subscribe to `payment.captured`; use the same webhook secret as the `RAZORPAY_WEBHOOK_SECRET` Edge Function secret.
+6. In Supabase **Project Settings → Edge Functions → Secrets**, set both `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to a matching test or live pair from the same Razorpay account. Set `RAZORPAY_WEBHOOK_SECRET` separately. Enter private secrets only in Supabase's secure secrets UI or CLI, never in chat, the repository, Netlify `VITE_*` variables, or the browser.
+7. Deploy `create-razorpay-order`, `verify-razorpay-payment`, `razorpay-webhook`, `create-upi-intent` (now returns 410 and no VPA), and `review-manual-upi-payment` (for legacy requests) with `supabase functions deploy <function-name>`. Configure the Razorpay webhook URL as `https://<project-ref>.supabase.co/functions/v1/razorpay-webhook` and subscribe to `payment.captured`; use the same webhook secret as the `RAZORPAY_WEBHOOK_SECRET` Edge Function secret.
 
 The SQL normalizer treats `9876543210`, `09876543210`, and `+91 98765 43210` as the same phone number. A unique partial index is the enforcement point for signup and profile changes; browser checks are only validation. On account deletion, Supabase Auth deletes the account projection by foreign-key cascade and the trigger scrubs legacy identity/profile mirror rows.
 
@@ -130,5 +130,5 @@ npm run preview  # preview production build
 ```
 
 ## Quick test paths
-1. **User:** Create account → Account shows **Job Seeker** → edit profile → browse locked jobs → choose a plan → pay in Razorpay → wait for server verification → Apply. For direct UPI, enter the UTR only after payment and wait for admin bank verification.
+1. **User:** Create account → Account shows **Job Seeker** → edit profile → browse locked jobs → choose a plan → pay in Razorpay → wait for server verification → Apply. UPI app/QR availability depends on Razorpay merchant settings and device support; never send a transfer to a merchant ID shown outside checkout.
 2. **Admin:** Provision a Supabase Auth user with the trusted admin `app_metadata` claim → open `/?portal=admin` → sign in → Admin panel (users, verified payments, UPI review, and scrollable tabs).

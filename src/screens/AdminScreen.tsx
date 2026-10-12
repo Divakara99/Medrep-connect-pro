@@ -424,6 +424,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
+  const [details, setDetails] = useState<PaymentRecord | null>(null)
 
   useEffect(() => {
     let active = true
@@ -435,6 +436,14 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
+
+  async function reload() {
+    setLoading(true)
+    setError(null)
+    try { setPayments(await refreshPayments()) }
+    catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Payment records could not be loaded.') }
+    finally { setLoading(false) }
+  }
 
   async function review(payment: PaymentRecord, approve: boolean) {
     setReviewing(payment.id)
@@ -453,9 +462,12 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900">Payment transactions</h2>
-        <p className="text-sm text-slate-700 mt-1">Razorpay plans activate after server-side capture verification. Check a manual UPI transfer in the bank account before approving its UTR.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Payment transactions</h2>
+          <p className="text-sm text-slate-700 mt-1">Razorpay payments are read-only here: only verified capture activates a plan. Legacy manual UPI requests can be approved only after checking the bank statement.</p>
+        </div>
+        <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh records'}</Button>
       </div>
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
@@ -466,6 +478,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
         <Card className="p-5 text-sm text-slate-700">No payments recorded yet.</Card>
       ) : (
         <Card className="overflow-hidden">
+          <p className="px-3 pt-3 text-xs text-slate-600 sm:hidden">Scroll sideways to see transaction details and actions →</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-slate-100 text-slate-800 text-left">
@@ -486,29 +499,28 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
                   const account = getUsers().find((candidate) => candidate.id === payment.userId)
                   return (
                     <tr key={payment.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2 text-xs text-slate-700">{new Date(payment.createdAt).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-slate-700">{new Date(payment.createdAt).toLocaleString('en-IN')}</td>
                       <td className="px-3 py-2 font-semibold text-slate-900">{account?.name ?? account?.email ?? payment.userId}</td>
                       <td className="px-3 py-2 text-slate-800">{payment.planTitle ?? payment.planId} · {payment.planDays}d</td>
                       <td className="px-3 py-2 font-bold text-slate-900">₹{payment.amount}</td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.utr || '—'}</td>
-                      <td className="px-3 py-2 text-slate-800">{payment.expiresAt ? new Date(payment.expiresAt).toLocaleDateString() : '—'}</td>
+                      <td className="px-3 py-2 text-slate-800">{payment.expiresAt ? new Date(payment.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</td>
                       <td className="px-3 py-2">
                         <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
                           {payment.manualReview ? 'UPI review needed' : payment.status === 'success' ? 'Paid' : payment.status}
                         </Badge>
                       </td>
                       <td className="px-3 py-2">
-                        {payment.manualReview && (
-                          <div className="flex gap-2">
-                            <Button variant="secondary" disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: false })}>
-                              Reject
-                            </Button>
-                            <Button disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: true })}>
-                              Verify & activate
-                            </Button>
-                          </div>
-                        )}
+                        <div className="flex gap-2 whitespace-nowrap">
+                          <Button variant="secondary" onClick={() => setDetails(payment)}>Details</Button>
+                          {payment.manualReview && (
+                            <>
+                              <Button variant="secondary" disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: false })}>Reject</Button>
+                              <Button disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: true })}>Verify & activate</Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -518,6 +530,25 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
           </div>
         </Card>
       )}
+
+      <Modal open={!!details} onClose={() => setDetails(null)} title="Payment details">
+        {details && (
+          <div className="space-y-2 text-sm text-slate-800 break-all">
+            <p><strong>Method:</strong> {details.paymentMethod}</p>
+            <p><strong>Status:</strong> {details.manualReview ? 'Awaiting manual bank verification' : details.status}</p>
+            <p><strong>Plan:</strong> {details.planTitle ?? details.planId} · {details.planDays} days · ₹{details.amount}</p>
+            <p><strong>Order ID:</strong> {details.orderId ?? '—'}</p>
+            <p><strong>Payment ID / reference:</strong> {details.gatewayPaymentId ?? details.txRef ?? '—'}</p>
+            <p><strong>UTR:</strong> {details.utr ?? '—'}</p>
+            <p><strong>Expiry:</strong> {details.expiresAt ? new Date(details.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not activated'}</p>
+            <p className="rounded-lg bg-amber-50 p-3 text-amber-950">{details.manualReview
+              ? 'Approve only after independently matching the bank credit, amount, UTR and date.'
+              : details.status === 'pending'
+                ? 'Do not activate manually. Wait for Razorpay capture and the verified webhook, then refresh records.'
+                : 'Razorpay orders are read-only here; refunds must be handled in the Razorpay dashboard.'}</p>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         open={!!decision}

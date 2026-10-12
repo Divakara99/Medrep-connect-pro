@@ -1,4 +1,4 @@
-import { read, remove, write } from './storage'
+import { remove } from './storage'
 import { broadcast } from './notifications'
 import { supabase } from './supabase'
 
@@ -14,6 +14,7 @@ export type PaymentRecord = {
   expiresAt?: number
   txRef?: string
   gatewayPaymentId?: string
+  orderId?: string
   activated?: boolean
   utr?: string
   paymentMethod?: 'Razorpay' | 'UPI'
@@ -49,9 +50,18 @@ const VERIFIED_PAYMENT_CACHE_KEY = 'mrc_verified_payment_cache_v1'
 // Remove the old local-only payment simulation and any Razorpay secret that
 // may have been entered into the former Admin payment form. Neither browser
 // storage nor the UI is an authority for payment status or entitlements.
+// Keep fetched records in memory only, not cross-account browser storage.
 remove(LEGACY_METHODS_KEY)
 remove(LEGACY_PAYMENTS_KEY)
 remove(VERIFIED_PAYMENT_CACHE_KEY)
+
+let paymentCache: PaymentRecord[] = []
+let cacheGeneration = 0
+
+export function clearPaymentCache(): void {
+  ++cacheGeneration
+  paymentCache = []
+}
 
 function toPaymentRecord(row: SubscriptionPaymentRow): PaymentRecord {
   const paid = row.payment_status === 'paid'
@@ -67,6 +77,7 @@ function toPaymentRecord(row: SubscriptionPaymentRow): PaymentRecord {
     expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : undefined,
     txRef: row.razorpay_payment_id ?? row.upi_reference ?? undefined,
     gatewayPaymentId: row.razorpay_payment_id ?? undefined,
+    orderId: row.razorpay_order_id ?? undefined,
     activated: paid,
     utr: row.utr ?? undefined,
     paymentMethod: row.payment_method === 'upi_manual' ? 'UPI' : 'Razorpay',
@@ -76,10 +87,11 @@ function toPaymentRecord(row: SubscriptionPaymentRow): PaymentRecord {
 }
 
 export function getPayments(): PaymentRecord[] {
-  return read<PaymentRecord[]>(VERIFIED_PAYMENT_CACHE_KEY, [])
+  return paymentCache
 }
 
 export async function refreshPayments(): Promise<PaymentRecord[]> {
+  const requestGeneration = cacheGeneration
   const { data, error } = await supabase
     .from('subscription_payments')
     .select('id,user_id,plan_id,plan_title,plan_days,amount_paise,payment_method,payment_status,razorpay_order_id,razorpay_payment_id,upi_reference,utr,created_at,paid_at,expires_at')
@@ -88,7 +100,7 @@ export async function refreshPayments(): Promise<PaymentRecord[]> {
   if (error) throw error
 
   const records = ((data ?? []) as unknown as SubscriptionPaymentRow[]).map(toPaymentRecord)
-  write(VERIFIED_PAYMENT_CACHE_KEY, records)
+  if (requestGeneration === cacheGeneration) paymentCache = records
   return records
 }
 
@@ -107,7 +119,7 @@ export function requestRefund(userId: string): PaymentRecord | null {
   if (index < 0) return null
   const updated = { ...payments[index], refundStatus: 'requested' as const }
   payments[index] = updated
-  write(VERIFIED_PAYMENT_CACHE_KEY, payments)
+  paymentCache = payments
   return updated
 }
 
@@ -126,7 +138,7 @@ export function resolveRefund(
     refundAt: options.approve ? Date.now() : payments[index].refundAt,
   }
   payments[index] = updated
-  write(VERIFIED_PAYMENT_CACHE_KEY, payments)
+  paymentCache = payments
   if (options.approve) {
     broadcast({
       kind: 'refund-processed',

@@ -4,3 +4,13 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# Baseline browser hardening for the static app. Authorization and payment
+# security are enforced independently by Supabase RLS and Edge Functions.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

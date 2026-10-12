@@ -93,7 +93,12 @@ async function withServerSubscription(user: User): Promise<User> {
     .select('subscribed_until')
     .eq('user_id', user.id)
     .maybeSingle()
-  if (error) return user
+  // If the server entitlement cannot be read, never reuse a cached expiry.
+  if (error) {
+    const locked = { ...user, subscribedUntil: undefined }
+    if (activeUser?.id === user.id) activeUser = locked
+    return locked
+  }
 
   const updated: User = {
     ...user,
@@ -113,9 +118,10 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
     const user = await withServerSubscription(snapshot.user)
     return { ...snapshot, user }
   } catch {
-    // Auth must remain available if the optional billing migration is pending;
-    // in that case the safe default is no paid entitlement.
-    return snapshot
+    // Auth stays available, but never keep a stale paid entitlement on error.
+    const locked = { ...snapshot.user, subscribedUntil: undefined }
+    if (activeUser?.id === locked.id) activeUser = locked
+    return { ...snapshot, user: locked }
   }
 }
 

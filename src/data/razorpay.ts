@@ -30,18 +30,6 @@ export type RazorpayVerification = {
   paymentStatus?: string
 }
 
-export type ManualUpiIntent = {
-  ok: true
-  paymentRecordId: string
-  upiReference: string
-  vpa: string
-  upiUri: string
-  amountRupees: number
-  planId: string
-  planTitle: string
-  planDays: number
-}
-
 type RazorpayOptions = {
   key: string
   amount: number
@@ -51,7 +39,6 @@ type RazorpayOptions = {
   order_id: string
   prefill: { name: string; email: string }
   theme: { color: string }
-  method: { upi: boolean; card: boolean; netbanking: boolean; wallet: boolean }
   handler: (response: RazorpayCheckoutResponse) => void
   modal: { ondismiss: () => void }
 }
@@ -126,10 +113,7 @@ export function verifyRazorpayPayment(input: RazorpayCheckoutResponse): Promise<
   })
 }
 
-export function createManualUpiIntent(planId: string): Promise<ManualUpiIntent> {
-  return invoke<ManualUpiIntent>('create-upi-intent', { planId })
-}
-
+// Only for legacy manual requests already created before direct UPI was retired.
 export async function submitManualUpiUtr(paymentRecordId: string, utr: string): Promise<void> {
   const result = await invoke<{ ok: boolean; pendingVerification: boolean }>('submit-upi-utr', {
     paymentRecordId,

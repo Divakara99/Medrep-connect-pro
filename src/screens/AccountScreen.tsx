@@ -38,6 +38,13 @@ export function AccountScreen({
         </div>
       </Card>
 
+      <Card className="p-4">
+        <h2 className="font-bold text-slate-900">Subscription validity</h2>
+        <p className="text-sm text-slate-700 mt-1">{unlocked && user.subscribedUntil
+          ? `Active until ${new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}. Renewals extend the current expiry; new plans start after server-verified payment.`
+          : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
+      </Card>
+
       <ProfileEditor ref={editorRef} email={user.email} phone={user.phone} onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })} />
 
       {/* About card: same brand mark that ships as the PWA icon, plus the
