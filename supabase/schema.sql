@@ -173,8 +173,10 @@ STABLE
 SECURITY INVOKER
 SET search_path = pg_catalog, auth
 AS $$
-  SELECT coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false)
-      OR coalesce((auth.jwt() -> 'app_metadata' ->> 'is_admin') = 'true', false)
+  SELECT (
+    coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false)
+    OR coalesce((auth.jwt() -> 'app_metadata' ->> 'is_admin') = 'true', false)
+  ) AND coalesce(auth.jwt() ->> 'aal' = 'aal2', false)
 $$;
 REVOKE ALL ON FUNCTION public.is_app_admin() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_app_admin() TO authenticated;

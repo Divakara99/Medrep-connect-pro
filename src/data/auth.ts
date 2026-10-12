@@ -17,7 +17,7 @@ export type Session =
   | { kind: 'user'; userId: string }
   | { kind: 'admin' }
 
-export type AuthSnapshot = { session: Session; user: User | null }
+export type AuthSnapshot = { session: Session; user: User | null; adminVerified?: boolean }
 
 const USERS_CACHE_KEY = 'mrc_admin_users_cache_v1'
 const USER_STATE_KEY = 'mrc_user_state_v1'
@@ -93,7 +93,12 @@ async function withServerSubscription(user: User): Promise<User> {
     .select('subscribed_until')
     .eq('user_id', user.id)
     .maybeSingle()
-  if (error) return user
+  // If the server entitlement cannot be read, never reuse a cached expiry.
+  if (error) {
+    const locked = { ...user, subscribedUntil: undefined }
+    if (activeUser?.id === user.id) activeUser = locked
+    return locked
+  }
 
   const updated: User = {
     ...user,
@@ -108,14 +113,19 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   if (error) throw error
   const snapshot = snapshotFromSession(data.session)
   if (!snapshot.user) return snapshot
+  if (snapshot.session.kind === 'admin') {
+    const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    return { ...snapshot, adminVerified: !assurance.error && assurance.data?.currentLevel === 'aal2' }
+  }
 
   try {
     const user = await withServerSubscription(snapshot.user)
     return { ...snapshot, user }
   } catch {
-    // Auth must remain available if the optional billing migration is pending;
-    // in that case the safe default is no paid entitlement.
-    return snapshot
+    // Auth stays available, but never keep a stale paid entitlement on error.
+    const locked = { ...snapshot.user, subscribedUntil: undefined }
+    if (activeUser?.id === locked.id) activeUser = locked
+    return { ...snapshot, user: locked }
   }
 }
 
@@ -206,8 +216,8 @@ export async function registerUser(input: {
   if (!name || !email || !input.password) {
     return { ok: false, error: 'Name, email and password are required.' }
   }
-  if (input.password.length < 6) {
-    return { ok: false, error: 'Password must be at least 6 characters.' }
+  if (input.password.length < 12) {
+    return { ok: false, error: 'Password must be at least 12 characters.' }
   }
   if (hasPhone && !phone) {
     return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }
@@ -241,7 +251,8 @@ export async function loginUser(
   if (hasAdminRole(data.user)) {
     activeUser = null
     await supabase.auth.signOut()
-    return { ok: false, error: 'Admin accounts must sign in from the dedicated Admin Login page.' }
+    // The public form should never advertise the restricted entry route.
+    return { ok: false, error: 'This account cannot sign in here. Contact support if you need help.' }
   }
 
   const user = toUser(data.user)
@@ -275,7 +286,7 @@ export async function resetPassword(email: string): Promise<{ ok: true } | { ok:
 }
 
 export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (password.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+  if (password.length < 12) return { ok: false, error: 'Password must be at least 12 characters.' }
   const { data, error } = await supabase.auth.updateUser({ password })
   if (error) return { ok: false, error: error.message }
   if (data.user) activeUser = toUser(data.user)

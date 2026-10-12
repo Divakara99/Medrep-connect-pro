@@ -54,8 +54,7 @@ export function JobCard({
                 </>
               ) : (
                 <>
-                  <span className="blur-locked select-none inline-block align-middle">{job.company}</span>
-                  <span className="text-slate-400"> · {job.location}</span>
+                  <span className="text-slate-600">Company hidden · {job.location}</span>
                 </>
               )}
             </div>
@@ -82,11 +81,7 @@ export function JobCard({
               )}
             </div>
 
-            {!unlocked && (
-              <div className="mt-2 text-xs text-slate-500 blur-locked select-none">
-                Company: {job.company} · Manager: {job.manager} · Contact: {job.contact}
-              </div>
-            )}
+
             {unlocked && (
               <div className="mt-2 text-xs text-slate-600">
                 Company: <span className="font-semibold text-slate-800">{job.company}</span> · Manager: <span className="font-semibold text-slate-800">{job.manager}</span> · Contact: <span className="font-semibold text-slate-800">{job.contact}</span>

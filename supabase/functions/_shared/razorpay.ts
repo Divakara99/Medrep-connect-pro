@@ -17,14 +17,11 @@ export type RazorpayPayment = {
   acquirer_data?: { rrn?: string; [key: string]: unknown }
 }
 
-// Razorpay key IDs are public checkout identifiers; the supplied live key ID
-// can be overridden at deploy time. The matching private secret is never bundled.
-const DEFAULT_RAZORPAY_KEY_ID = 'rzp_live_DYPHachvqO71iH'
-
 export function razorpayCredentials() {
-  const keyId = Deno.env.get('RAZORPAY_KEY_ID')?.trim() || DEFAULT_RAZORPAY_KEY_ID
+  // Never pair a newly configured secret with an old, hard-coded live key ID.
+  const keyId = Deno.env.get('RAZORPAY_KEY_ID')?.trim()
   const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET')?.trim()
-  if (!keySecret) throw new Error('Razorpay server credentials are not configured.')
+  if (!keyId || !keySecret) throw new Error('Razorpay server credentials are not configured.')
   return { keyId, keySecret }
 }
 
@@ -45,10 +42,25 @@ export async function createRazorpayOrder(input: {
       Authorization: basicAuthorization(keyId, keySecret),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(input),
+    // The Orders API accepts `amount` (in paise), not `amountPaise`.
+    body: JSON.stringify({
+      amount: input.amountPaise,
+      currency: input.currency,
+      receipt: input.receipt,
+      notes: input.notes,
+    }),
   })
-  const payload = await response.json().catch(() => null) as RazorpayOrderResponse | null
+  const payload = await response.json().catch(() => null) as (RazorpayOrderResponse & {
+    error?: { code?: unknown }
+  }) | null
   if (!response.ok || !payload?.id) {
+    // Only log the HTTP status and a tightly validated gateway error code.
+    // Razorpay's descriptions/metadata can include sensitive data; never log them.
+    const rawCode = payload?.error?.code
+    const errorCode = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode)
+      ? rawCode
+      : 'unavailable'
+    console.error('Razorpay order request failed:', { httpStatus: response.status, errorCode })
     throw new Error('Razorpay could not create the payment order. Check the server credentials and merchant account.')
   }
   if (payload.amount !== input.amountPaise || payload.currency !== 'INR') {

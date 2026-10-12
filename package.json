@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "icons": "node scripts/generate-icons.mjs",
     "lint": "oxlint",
+    "test:security": "node scripts/test-secure-jobs.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LoginScreen } from './screens/LoginScreen'
 import { AdminLoginScreen } from './screens/AdminLoginScreen'
+import { AdminMfaScreen } from './screens/AdminMfaScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { BottomNav, type UserTab } from './components/BottomNav'
 import { TopBar, Button, IconButton } from './components/ui'
@@ -11,20 +12,25 @@ import { PlansScreen } from './screens/PlansScreen'
 import { AccountScreen } from './screens/AccountScreen'
 import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
-import { currentUser, getAuthSnapshot, isSubscribed, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
-import { getJobs, type Job } from './data/jobs'
+import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
+import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { openApplication } from './data/apply'
 import { unreadCount } from './data/notifications'
+import { clearPaymentCache } from './data/payments'
 
-type View = 'login' | 'admin-login' | 'user' | 'admin'
+type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'user' | 'admin'
 
 export default function App() {
   const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
-  const [view, setView] = useState<View>(adminPortal ? 'admin-login' : 'login')
+  const [view, setView] = useState<View>('loading')
+  const [authTimedOut, setAuthTimedOut] = useState(false)
+  const [now, setClock] = useState(Date.now)
   const [user, setUser] = useState<User | null>(null)
   const [tab, setTab] = useState<UserTab>('home')
-  const [jobs, setJobs] = useState<Job[]>(getJobs)
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobsError, setJobsError] = useState<string | null>(null)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [applyJob, setApplyJob] = useState<Job | null>(null)
   const [applyChannel, setApplyChannel] = useState<'email' | 'whatsapp'>('email')
@@ -39,7 +45,7 @@ export default function App() {
     if (snapshot.session.kind === 'admin') {
       if (adminPortal) {
         setUser(null)
-        setView('admin')
+        setView(snapshot.adminVerified ? 'admin' : 'admin-mfa')
       } else {
         setUser(null)
         setView('login')
@@ -63,38 +69,96 @@ export default function App() {
     }
   }, [adminPortal])
 
-  // Restore and observe the Supabase Auth session; the former localStorage
-  // session is intentionally ignored and cleared by the auth module.
+  // Wait for session restoration before showing either login screen. Supabase
+  // sends INITIAL_SESSION before the subscription/entitlement query finishes;
+  // showing it immediately causes the login screen to flash on refresh.
   useEffect(() => {
     let mounted = true
-    const unsubscribe = onAuthStateChange((event, snapshot) => {
+    let generation = 0
+    let newerAuthEvent = false
+    const timeout = window.setTimeout(() => { if (mounted) setAuthTimedOut(true) }, 10_000)
+    const restore = (resetTab = false) => {
+      const request = ++generation
+      void getAuthSnapshot()
+        .then((snapshot) => { if (mounted && request === generation) applyAuthSnapshot(snapshot, resetTab) })
+        .catch(() => { if (mounted && request === generation) setView(adminPortal ? 'admin-login' : 'login') })
+    }
+    const unsubscribe = onAuthStateChange((event) => {
       if (!mounted) return
+      if (event === 'INITIAL_SESSION') {
+        if (!newerAuthEvent) { window.clearTimeout(timeout); restore() }
+        return
+      }
+      newerAuthEvent = true
+      window.clearTimeout(timeout)
       if (event === 'PASSWORD_RECOVERY') {
+        ++generation
         setRecoveryMode(true)
         setUser(null)
         setView(adminPortal ? 'admin-login' : 'login')
-        return
-      }
-      if (event === 'SIGNED_OUT') {
+      } else if (event === 'SIGNED_OUT') {
+        ++generation
+        clearPaymentCache()
+        clearJobs()
         setRecoveryMode(false)
         setUser(null)
         setView(adminPortal ? 'admin-login' : 'login')
-        return
+      } else {
+        if (event === 'SIGNED_IN') { clearPaymentCache(); clearJobs() }
+        if (event === 'USER_UPDATED') setRecoveryMode(false)
+        restore(event === 'SIGNED_IN')
       }
-      if (event === 'USER_UPDATED') setRecoveryMode(false)
-      applyAuthSnapshot(snapshot, event === 'SIGNED_IN')
     })
-    void getAuthSnapshot()
-      .then((snapshot) => { if (mounted) applyAuthSnapshot(snapshot) })
-      .catch(() => { if (mounted) setView(adminPortal ? 'admin-login' : 'login') })
-
-    return () => {
-      mounted = false
-      unsubscribe()
-    }
+    // Supabase must finish restoring the persisted session before we decide
+    // which page to show. Calling getSession earlier can briefly render login.
+    return () => { mounted = false; ++generation; window.clearTimeout(timeout); unsubscribe() }
   }, [adminPortal, applyAuthSnapshot])
 
-  const unlocked = isSubscribed(user)
+  // Keep time-based access in sync without a page reload. Recheck the server
+  // on returning to the app (e.g. after a Razorpay UPI-app handoff/webhook).
+  useEffect(() => {
+    const tick = () => setClock(Date.now())
+    const interval = window.setInterval(tick, 30_000)
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      tick()
+      const before = currentUser()
+      if (!before || before.isAdmin) return
+      void getAuthSnapshot().then((snapshot) => {
+        if (currentUser()?.id === before.id) applyAuthSnapshot(snapshot)
+      }).catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, [applyAuthSnapshot])
+
+  const unlocked = Boolean(user?.subscribedUntil && user.subscribedUntil > now)
+
+  const userId = user?.id
+  useEffect(() => {
+    if (view !== 'user' || !userId) {
+      if (view === 'login' || view === 'admin-login') clearJobs()
+      return
+    }
+    // A signed-in user only sees the server-projected job catalog. Discard
+    // paid details when their account or entitlement changes.
+    clearJobs()
+    purgeLegacyJobs()
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
+      setJobs([])
+      setSelectedJob(null)
+      setApplyJob(null)
+      setJobsLoading(true)
+      setJobsError(null)
+    })
+    void loadVisibleJobs()
+      .then((result) => { if (active) setJobs(result) })
+      .catch((cause) => { if (active) setJobsError(cause instanceof Error ? cause.message : 'Jobs are unavailable.') })
+      .finally(() => { if (active) setJobsLoading(false) })
+    return () => { active = false }
+  }, [view, userId, unlocked])
 
   function refreshUser() {
     const u = currentUser()
@@ -103,13 +167,13 @@ export default function App() {
 
   function onAuthed() {
     setRecoveryMode(false)
-    void getAuthSnapshot()
-      .then((snapshot) => applyAuthSnapshot(snapshot, true))
-      .catch(() => setView(adminPortal ? 'admin-login' : 'login'))
-    setJobs(getJobs())
+    // SIGNED_IN/USER_UPDATED restores the authenticated view after the
+    // server-owned subscription has been loaded.
   }
 
   async function onLogout() {
+    clearPaymentCache()
+    clearJobs()
     await doLogout()
     setRecoveryMode(false)
     setUser(null)
@@ -125,12 +189,26 @@ export default function App() {
     setTimeout(() => setToast(null), 2200)
   }
 
+  if (view === 'loading') {
+    return <main role="status" aria-live="polite" className="min-h-screen bg-brand-50 grid place-items-center px-6 text-center text-brand-900 font-bold text-lg">
+      <div>Loading your account…
+        {authTimedOut && <div className="mt-3 text-base">Sign-in is taking longer than expected. Check your connection, then <button className="underline" onClick={() => window.location.reload()}>retry</button>.</div>}
+      </div>
+    </main>
+  }
+
   if (view === 'login') {
     return <LoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
   }
 
   if (view === 'admin-login') {
     return <AdminLoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
+  }
+
+  if (view === 'admin-mfa') {
+    return <AdminMfaScreen onVerified={() => {
+      void getAuthSnapshot().then((snapshot) => applyAuthSnapshot(snapshot)).catch(() => setView('admin-mfa'))
+    }} onExit={onLogout} />
   }
 
   if (view === 'admin') {
@@ -175,6 +253,11 @@ export default function App() {
         }
       />
 
+      {(jobsLoading || jobsError) && (tab === 'home' || tab === 'priority') && (
+        <div role={jobsError ? 'alert' : 'status'} className={`max-w-3xl mx-auto px-4 pt-4 text-base font-semibold ${jobsError ? 'text-red-800' : 'text-slate-700'}`}>
+          {jobsError || 'Loading secure vacancies…'}
+        </div>
+      )}
       {tab === 'home' && user && (
         <HomeScreen
           user={user}
@@ -187,14 +270,14 @@ export default function App() {
         <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} />
       )}
       {tab === 'plans' && user && (
-        <PlansScreen user={user} onSubscribed={(u) => { setUser(u); refreshUser(); showToast('Welcome to Pro!') }} />
+        <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
       )}
       {tab === 'ai' && user && <AIChatScreen user={user} />}
       {tab === 'account' && user && (
         <AccountScreen user={user} onLogout={onLogout} onSubscribed={() => refreshUser()} />
       )}
 
-      <BottomNav active={tab} onChange={(t) => { setTab(t); setJobs(getJobs()) }} />
+      <BottomNav active={tab} onChange={setTab} />
 
       <JobDetail
         job={selectedJob}

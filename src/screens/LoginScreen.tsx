@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button, Card, Input, Label } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
@@ -19,6 +19,20 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const brandTaps = useRef({ count: 0, lastAt: 0 })
+
+  function openRestrictedPortal() {
+    const now = Date.now()
+    brandTaps.current.count = now - brandTaps.current.lastAt <= 4000 ? brandTaps.current.count + 1 : 1
+    brandTaps.current.lastAt = now
+    if (brandTaps.current.count !== 5) return
+    brandTaps.current.count = 0
+    // Convenience entry only. The URL is not secret; Supabase's trusted admin
+    // claim and database RLS enforce authorization regardless of navigation.
+    const url = new URL(window.location.href)
+    url.searchParams.set('portal', 'admin')
+    window.location.assign(url.toString())
+  }
 
   function switchMode(next: Mode) {
     setMode(next)
@@ -74,10 +88,10 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
           <header className="flex flex-col items-center mb-6">
-            <Logo size={64} />
+            <button type="button" aria-label="MedRep Connect Pro" onClick={openRestrictedPortal} className="rounded-full focus-visible:outline-2 focus-visible:outline-brand-700"><Logo size={64} /></button>
             <div className="mt-3 text-center">
-              <h1 className="text-xl font-extrabold text-slate-900">
-                MedRep <span className="text-brand-700">Connect Pro</span>
+              <h1 className="text-2xl font-extrabold text-slate-900">
+                <button type="button" onClick={openRestrictedPortal} className="rounded-md">MedRep <span className="text-brand-700">Connect Pro</span></button>
               </h1>
               <p className="text-sm text-slate-700 mt-1 px-4">{CREATOR.tagline}</p>
               <span className="inline-flex mt-2 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-300">
@@ -87,7 +101,8 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
             <div className="mt-4"><CreatorCredit variant="solid" /></div>
           </header>
 
-          <Card className="p-5 animate-fade-in">
+          <Card className="p-5">
+            <p className="text-base font-semibold text-slate-700 mb-4">Sign in to browse openings. New here? Create an account first.</p>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">
                 {activeMode === 'signin' && 'Welcome back'}
@@ -106,7 +121,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
               )}
             </div>
 
-            <form key={activeMode} onSubmit={submit} className="space-y-3" autoComplete="off">
+            <form key={activeMode} onSubmit={submit} className="space-y-3">
               {activeMode === 'signup' && (
                 <div>
                   <Label htmlFor="name">Full name</Label>
@@ -124,7 +139,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="you@example.com"
-                    autoComplete="off"
+                    autoComplete={activeMode === 'signin' ? 'username' : 'email'}
                     spellCheck={false}
                     required
                   />
@@ -147,8 +162,9 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="At least 6 characters"
-                    autoComplete="current-password"
+                    placeholder={activeMode === 'signup' ? 'At least 12 characters' : 'Enter your password'}
+                    autoComplete={activeMode === 'signup' ? 'new-password' : 'current-password'}
+                    minLength={activeMode === 'signup' ? 12 : undefined}
                     required
                   />
                 </div>
@@ -157,7 +173,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
               {activeMode === 'update-password' && (
                 <div>
                   <Label htmlFor="new-password">New password</Label>
-                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 6 characters" minLength={6} required />
+                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required />
                 </div>
               )}
 
@@ -185,10 +201,8 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
             </form>
           </Card>
 
-          <footer className="mt-6 text-center space-y-2">
-            <a href="/?portal=admin" className="text-sm font-semibold text-indigo-800 hover:underline">Administrator? Use the separate Admin Login page</a>
-            <div><CreatorCredit variant="light" /></div>
-            <p className="text-xs text-slate-700">App created by <span className="font-semibold">Mr. {CREATOR.name}</span> · {CREATOR.role}</p>
+          <footer className="mt-5 text-center">
+            <p className="text-sm font-medium text-slate-700">Use Forgot password if you cannot sign in. Never share your password or payment PIN.</p>
           </footer>
         </div>
       </div>

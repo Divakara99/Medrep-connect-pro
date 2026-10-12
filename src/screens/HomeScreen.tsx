@@ -181,7 +181,7 @@ export function HomeScreen({
       <div className="space-y-3">
         {list.length === 0 ? (
           <Card className="p-8 text-center text-sm text-slate-500">
-            No jobs match your filters.
+            {jobs.length === 0 ? 'No vacancies published yet. Please check back later.' : 'No jobs match your filters.'}
             <div className="mt-2">
               <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
             </div>

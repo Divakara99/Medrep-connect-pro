@@ -10,6 +10,9 @@ import {
   CATEGORIES,
   deleteJob,
   getJobs,
+  getLegacyJobs,
+  importLegacyJobs,
+  loadAdminJobs,
   sortedJobs,
   togglePin,
   updateJob,
@@ -69,6 +72,9 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     void refreshPayments()
+      .then(() => { if (active) setVersion((v) => v + 1) })
+      .catch(() => undefined)
+    void loadAdminJobs()
       .then(() => { if (active) setVersion((v) => v + 1) })
       .catch(() => undefined)
     return () => { active = false }
@@ -201,6 +207,17 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
   const [editing, setEditing] = useState<Job | null>(null)
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const legacyCount = getLegacyJobs().length
+
+  async function change(action: () => Promise<unknown>) {
+    setBusy(true)
+    setError(null)
+    try { await action(); onMutate() }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Vacancy change failed.') }
+    finally { setBusy(false) }
+  }
 
   function openNew() {
     setEditing(null)
@@ -221,6 +238,13 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
         <h2 className="text-lg font-bold text-slate-900">Vacancies ({jobs.length})</h2>
         <Button onClick={openNew}>+ Post vacancy</Button>
       </div>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {legacyCount > 0 && (
+        <Card className="p-4 space-y-2">
+          <p className="text-sm font-semibold text-slate-900">{legacyCount} older vacancies remain on this admin device. Review them first; sample vacancies may be included. Import only verified posts to the secure Supabase catalog.</p>
+          <Button variant="secondary" disabled={busy} onClick={() => { void change(importLegacyJobs) }}>Import older vacancies</Button>
+        </Card>
+      )}
       <div className="grid gap-2">
         {jobs.map((j) => (
           <Card key={j.id} className="p-3">
@@ -242,7 +266,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
             </div>
             {/* Action row — always visible on mobile (no side overflow) */}
             <div className="flex items-center gap-2 mt-3">
-              <Button variant="secondary" className="flex-1" onClick={() => { togglePin(j.id, !j.pinned); onMutate() }}>
+              <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => { void change(() => togglePin(j.id, !j.pinned)) }}>
                 {j.pinned ? '★ Unpin' : '☆ Pin'}
               </Button>
               <Button variant="secondary" className="flex-1" onClick={() => openEdit(j)}>
@@ -266,7 +290,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
         cancelLabel="Cancel"
         danger
         onConfirm={() => {
-          if (deleteTarget) { deleteJob(deleteTarget.id); onMutate() }
+          if (deleteTarget) void change(() => deleteJob(deleteTarget.id))
           setDeleteTarget(null)
         }}
         onCancel={() => setDeleteTarget(null)}
@@ -287,18 +311,26 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
   const [experience, setExperience] = useState(job?.experience ?? '')
   const [description, setDescription] = useState(job?.description ?? '')
   const [pinned, setPinned] = useState(job?.pinned ?? false)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  function save() {
+  async function save() {
     if (!title || !company || !location) {
-      alert('Title, company, and location are required.')
+      setError('Title, company, and location are required.')
       return
     }
-    if (job) {
-      updateJob(job.id, { title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
-    } else {
-      addJob({ title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
-    }
-    onSaved()
+    setSaving(true)
+    setError(null)
+    try {
+      if (job) {
+        await updateJob(job.id, { title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
+      } else {
+        await addJob({ title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
+      }
+      onSaved()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not save vacancy.')
+    } finally { setSaving(false) }
   }
 
   return (
@@ -354,7 +386,9 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
           <Label>Description</Label>
           <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
-        <Button className="w-full" onClick={save}>{job ? 'Save changes' : 'Post vacancy'}</Button>
+        <p className="text-sm font-medium text-slate-700">Title, location, category, salary and experience are public. Company, manager, contact, email and description appear only to active subscribers. Do not put private details in public fields.</p>
+        {error && <p role="alert" className="text-sm font-bold text-red-800">{error}</p>}
+        <Button className="w-full" onClick={() => { void save() }} disabled={saving}>{saving ? 'Saving securely…' : job ? 'Save changes' : 'Post vacancy'}</Button>
       </div>
     </Modal>
   )
@@ -424,6 +458,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
+  const [details, setDetails] = useState<PaymentRecord | null>(null)
 
   useEffect(() => {
     let active = true
@@ -435,6 +470,14 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
+
+  async function reload() {
+    setLoading(true)
+    setError(null)
+    try { setPayments(await refreshPayments()) }
+    catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Payment records could not be loaded.') }
+    finally { setLoading(false) }
+  }
 
   async function review(payment: PaymentRecord, approve: boolean) {
     setReviewing(payment.id)
@@ -453,9 +496,12 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900">Payment transactions</h2>
-        <p className="text-sm text-slate-700 mt-1">Razorpay plans activate after server-side capture verification. Check a manual UPI transfer in the bank account before approving its UTR.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Payment transactions</h2>
+          <p className="text-sm text-slate-700 mt-1">Razorpay payments are read-only here: only verified capture activates a plan. Legacy manual UPI requests can be approved only after checking the bank statement.</p>
+        </div>
+        <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh records'}</Button>
       </div>
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
@@ -466,6 +512,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
         <Card className="p-5 text-sm text-slate-700">No payments recorded yet.</Card>
       ) : (
         <Card className="overflow-hidden">
+          <p className="px-3 pt-3 text-xs text-slate-600 sm:hidden">Scroll sideways to see transaction details and actions →</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-slate-100 text-slate-800 text-left">
@@ -486,29 +533,28 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
                   const account = getUsers().find((candidate) => candidate.id === payment.userId)
                   return (
                     <tr key={payment.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2 text-xs text-slate-700">{new Date(payment.createdAt).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-slate-700">{new Date(payment.createdAt).toLocaleString('en-IN')}</td>
                       <td className="px-3 py-2 font-semibold text-slate-900">{account?.name ?? account?.email ?? payment.userId}</td>
                       <td className="px-3 py-2 text-slate-800">{payment.planTitle ?? payment.planId} · {payment.planDays}d</td>
                       <td className="px-3 py-2 font-bold text-slate-900">₹{payment.amount}</td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.utr || '—'}</td>
-                      <td className="px-3 py-2 text-slate-800">{payment.expiresAt ? new Date(payment.expiresAt).toLocaleDateString() : '—'}</td>
+                      <td className="px-3 py-2 text-slate-800">{payment.expiresAt ? new Date(payment.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</td>
                       <td className="px-3 py-2">
                         <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
                           {payment.manualReview ? 'UPI review needed' : payment.status === 'success' ? 'Paid' : payment.status}
                         </Badge>
                       </td>
                       <td className="px-3 py-2">
-                        {payment.manualReview && (
-                          <div className="flex gap-2">
-                            <Button variant="secondary" disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: false })}>
-                              Reject
-                            </Button>
-                            <Button disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: true })}>
-                              Verify & activate
-                            </Button>
-                          </div>
-                        )}
+                        <div className="flex gap-2 whitespace-nowrap">
+                          <Button variant="secondary" onClick={() => setDetails(payment)}>Details</Button>
+                          {payment.manualReview && (
+                            <>
+                              <Button variant="secondary" disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: false })}>Reject</Button>
+                              <Button disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: true })}>Verify & activate</Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -518,6 +564,25 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
           </div>
         </Card>
       )}
+
+      <Modal open={!!details} onClose={() => setDetails(null)} title="Payment details">
+        {details && (
+          <div className="space-y-2 text-sm text-slate-800 break-all">
+            <p><strong>Method:</strong> {details.paymentMethod}</p>
+            <p><strong>Status:</strong> {details.manualReview ? 'Awaiting manual bank verification' : details.status}</p>
+            <p><strong>Plan:</strong> {details.planTitle ?? details.planId} · {details.planDays} days · ₹{details.amount}</p>
+            <p><strong>Order ID:</strong> {details.orderId ?? '—'}</p>
+            <p><strong>Payment ID / reference:</strong> {details.gatewayPaymentId ?? details.txRef ?? '—'}</p>
+            <p><strong>UTR:</strong> {details.utr ?? '—'}</p>
+            <p><strong>Expiry:</strong> {details.expiresAt ? new Date(details.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not activated'}</p>
+            <p className="rounded-lg bg-amber-50 p-3 text-amber-950">{details.manualReview
+              ? 'Approve only after independently matching the bank credit, amount, UTR and date.'
+              : details.status === 'pending'
+                ? 'Do not activate manually. Wait for Razorpay capture and the verified webhook, then refresh records.'
+                : 'Razorpay orders are read-only here; refunds must be handled in the Razorpay dashboard.'}</p>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         open={!!decision}

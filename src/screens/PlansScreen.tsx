@@ -4,13 +4,11 @@ import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/
 import { getPlans, type Plan } from '../data/plans'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
-  createManualUpiIntent,
   createRazorpayOrder,
   loadRazorpayCheckout,
   openRazorpayCheckout,
   submitManualUpiUtr,
   verifyRazorpayPayment,
-  type ManualUpiIntent,
   type RazorpayCheckoutResponse,
 } from '../data/razorpay'
 
@@ -27,15 +25,17 @@ export function PlansScreen({
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [confirmedUntil, setConfirmedUntil] = useState<string | null>(null)
   const [verificationPending, setVerificationPending] = useState(false)
+  const [autoChecks, setAutoChecks] = useState(0)
   const [pendingCheckout, setPendingCheckout] = useState<RazorpayCheckoutResponse | null>(null)
-  const [manualIntent, setManualIntent] = useState<ManualUpiIntent | null>(null)
-  const [manualPaid, setManualPaid] = useState(false)
-  const [utr, setUtr] = useState('')
-  const [manualSubmitted, setManualSubmitted] = useState(false)
+  const [legacyPaymentId, setLegacyPaymentId] = useState<string | null>(null)
+  const [legacyUtr, setLegacyUtr] = useState('')
+  const [legacyError, setLegacyError] = useState<string | null>(null)
+  const [legacySubmitting, setLegacySubmitting] = useState(false)
   const [payments, setPayments] = useState<PaymentRecord[]>(() => getPaymentsByUser(user.id))
   const unlocked = isSubscribed(user)
-  const activeUntil = user.subscribedUntil ? new Date(user.subscribedUntil).toLocaleDateString() : null
+  const activeUntil = user.subscribedUntil ? new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : null
 
   async function loadPaymentHistory() {
     try {
@@ -58,12 +58,10 @@ export function PlansScreen({
     setSelected(plan)
     setError(null)
     setSuccess(false)
+    setConfirmedUntil(null)
     setVerificationPending(false)
+    setAutoChecks(0)
     setPendingCheckout(null)
-    setManualIntent(null)
-    setManualPaid(false)
-    setUtr('')
-    setManualSubmitted(false)
     setShowCheckout(true)
   }
 
@@ -75,6 +73,7 @@ export function PlansScreen({
       : { ...user, subscribedUntil: serverExpiry }
     onSubscribed(updatedUser)
     await loadPaymentHistory()
+    setConfirmedUntil(new Date(updatedUser.subscribedUntil ?? serverExpiry).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))
     setSuccess(true)
     setError(null)
     setVerificationPending(false)
@@ -119,15 +118,15 @@ export function PlansScreen({
         order_id: order.orderId,
         prefill: { name: user.name, email: user.email },
         theme: { color: '#1746bb' },
-        method: { upi: true, card: true, netbanking: true, wallet: false },
+        // Razorpay decides which enabled methods, UPI apps and QR options are available.
         handler: (response) => { void verifyPayment(response) },
         modal: {
           ondismiss: () => setProcessing(false),
         },
       })
-      checkout.on('payment.failed', (response) => {
+      checkout.on('payment.failed', () => {
         setProcessing(false)
-        setError(response.error?.description || 'Payment was not completed. No plan was activated.')
+        setError('Payment was not completed. If you were charged, do not pay again; contact support with your payment ID.')
       })
       checkout.open()
     } catch (checkoutError) {
@@ -136,40 +135,36 @@ export function PlansScreen({
     }
   }
 
+  // Capture/webhooks may take a few seconds. Retry verification with the same
+  // Razorpay response; never create a second order or ask for another payment.
+  useEffect(() => {
+    if (!showCheckout || !verificationPending || !pendingCheckout || processing || autoChecks >= 3) return
+    const timer = window.setTimeout(() => {
+      setAutoChecks((count) => count + 1)
+      void verifyPayment(pendingCheckout)
+    }, 12_000)
+    return () => window.clearTimeout(timer)
+    // Retrying depends only on the pending state; verifyPayment is local to this view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCheckout, verificationPending, pendingCheckout, processing, autoChecks])
+
   async function checkPaymentStatus() {
     if (!pendingCheckout) return
     await verifyPayment(pendingCheckout)
   }
 
-  async function startManualUpi() {
-    setProcessing(true)
-    setError(null)
+  async function submitLegacyUtr() {
+    if (!legacyPaymentId || legacySubmitting) return
+    setLegacySubmitting(true)
+    setLegacyError(null)
     try {
-      const intent = await createManualUpiIntent(selected.id)
-      setManualIntent(intent)
-      setManualPaid(false)
-      setUtr('')
-      setManualSubmitted(false)
-    } catch (upiError) {
-      setError(upiError instanceof Error ? upiError.message : 'Could not start a UPI request.')
-    } finally {
-      setProcessing(false)
-    }
-  }
-
-  async function submitUtr() {
-    if (!manualIntent) return
-    setProcessing(true)
-    setError(null)
-    try {
-      await submitManualUpiUtr(manualIntent.paymentRecordId, utr.trim())
-      setManualSubmitted(true)
+      await submitManualUpiUtr(legacyPaymentId, legacyUtr.trim())
       await loadPaymentHistory()
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Could not submit the UPI reference.')
-    } finally {
-      setProcessing(false)
-    }
+      setLegacyPaymentId(null)
+      setLegacyUtr('')
+    } catch (submissionError) {
+      setLegacyError(submissionError instanceof Error ? submissionError.message : 'Could not submit the reference.')
+    } finally { setLegacySubmitting(false) }
   }
 
   const paymentRows = payments.length > 0 ? payments : getPaymentsByUser(user.id)
@@ -180,7 +175,7 @@ export function PlansScreen({
         <div className="text-xs font-bold uppercase tracking-widest text-brand-800">Subscription</div>
         <h1 className="text-xl font-extrabold text-slate-900 mt-1">Unlock company details and apply</h1>
         <p className="text-sm text-slate-800 mt-1">
-          Choose a plan. Razorpay supports UPI, cards and netbanking; direct UPI is verified by an admin before activation.
+          Choose a plan and pay inside secure Razorpay Checkout. Use a credit/debit card or an available UPI app/QR option. We never ask you to send money to a UPI ID.
         </p>
         {unlocked && activeUntil && (
           <div className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-emerald-950 bg-emerald-100 px-3 py-1.5 rounded-full ring-1 ring-emerald-300">
@@ -266,12 +261,32 @@ export function PlansScreen({
         )}
       </Card>
 
+      {paymentRows.some((payment) => payment.paymentMethod === 'UPI' && payment.status === 'pending' && !payment.manualReview) && (
+        <Card className="p-4 space-y-2">
+          <h2 className="font-bold text-slate-900">Earlier direct UPI transfer?</h2>
+          <p className="text-sm text-slate-700">Only if you already paid for an existing manual UPI request, select its reference and enter the bank-generated UTR. Do not make a new direct transfer. An admin must verify the bank credit before access activates.</p>
+          <Label htmlFor="legacy-upi-order">Existing request</Label>
+          <select id="legacy-upi-order" className="w-full rounded-lg border border-slate-300 p-2" value={legacyPaymentId ?? ''} onChange={(event) => { setLegacyPaymentId(event.target.value || null); setLegacyError(null) }}>
+            <option value="">Select an existing request</option>
+            {paymentRows.filter((payment) => payment.paymentMethod === 'UPI' && payment.status === 'pending' && !payment.manualReview).map((payment) => (
+              <option value={payment.id} key={payment.id}>{payment.txRef} · ₹{payment.amount}</option>
+            ))}
+          </select>
+          <Label htmlFor="legacy-upi-utr">UTR from your completed bank transfer</Label>
+          <Input id="legacy-upi-utr" value={legacyUtr} onChange={(event) => setLegacyUtr(event.target.value.replace(/\s/g, '').slice(0, 35))} maxLength={35} autoComplete="off" />
+          {legacyError && <p role="alert" className="text-sm text-red-800">{legacyError}</p>}
+          <Button disabled={!legacyPaymentId || legacyUtr.trim().length < 6 || legacySubmitting} onClick={() => { void submitLegacyUtr() }}>
+            {legacySubmitting ? 'Submitting…' : 'Submit old UTR for bank verification'}
+          </Button>
+        </Card>
+      )}
+
       <Modal open={showCheckout} onClose={() => { if (!processing) setShowCheckout(false) }} title="Confirm your plan">
         {success ? (
           <div role="status" className="text-center py-8">
             <div className="text-5xl mb-3">✅</div>
             <h2 className="text-lg font-extrabold text-slate-900">Payment verified</h2>
-            <p className="text-sm text-slate-700 mt-1">Your {selected.days}-day plan is active. {user.subscribedUntil ? `Active until ${new Date(user.subscribedUntil).toLocaleDateString()}.` : ''}</p>
+            <p className="text-sm text-slate-700 mt-1">Your {selected.days}-day plan is active. {confirmedUntil ? `Active until ${confirmedUntil}.` : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -283,27 +298,19 @@ export function PlansScreen({
               <div className="text-2xl font-extrabold text-indigo-900">₹{selected.price}</div>
             </div>
 
-            {!manualIntent && !verificationPending && (
+            {!verificationPending && (
               <>
                 <Button className="w-full" onClick={() => { void startRazorpayCheckout() }} disabled={processing}>
                   {processing ? 'Opening secure checkout…' : `Pay ₹${selected.price} with Razorpay`}
                 </Button>
-                <div className="text-center text-xs font-semibold text-slate-600">UPI, card or netbanking</div>
-                <button
-                  type="button"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                  onClick={() => { void startManualUpi() }}
-                  disabled={processing}
-                >
-                  {processing ? 'Preparing UPI…' : 'Pay directly by UPI'}
-                </button>
+                <p className="text-xs text-slate-700 text-center">Cards (credit/debit), netbanking and UPI apps such as PhonePe or Google Pay are shown if enabled by Razorpay. On supported devices, choose UPI to scan a Razorpay QR if offered.</p>
               </>
             )}
 
             {verificationPending && (
               <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
                 <p className="text-sm font-bold text-amber-950">Payment confirmation is pending</p>
-                <p className="text-sm text-amber-900 mt-1">Do not make another payment. The plan stays locked until Razorpay confirms capture.</p>
+                <p className="text-sm text-amber-900 mt-1">Do not make another payment. We will check again automatically; the plan stays locked until Razorpay confirms capture.</p>
                 {pendingCheckout && (
                   <p className="mt-2 text-xs font-mono text-amber-900 break-all">Payment ID: {pendingCheckout.razorpay_payment_id}</p>
                 )}
@@ -313,54 +320,13 @@ export function PlansScreen({
               </div>
             )}
 
-            {manualIntent && (
-              <div className="space-y-3">
-                <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-300">
-                  <p className="text-sm font-bold text-emerald-950">Pay ₹{manualIntent.amountRupees} to this UPI ID</p>
-                  <p className="text-base font-extrabold text-emerald-950 mt-1 select-all">{manualIntent.vpa}</p>
-                  <p className="text-xs text-emerald-900 mt-1">Use reference {manualIntent.upiReference} in your UPI app if it asks for one.</p>
-                  <a
-                    href={manualIntent.upiUri}
-                    className="mt-3 inline-flex w-full justify-center rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800"
-                  >
-                    Open UPI app
-                  </a>
-                </div>
-
-                {manualSubmitted ? (
-                  <div role="status" className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-950 ring-1 ring-amber-300">
-                    UTR submitted. Your plan will activate only after an admin verifies the payment in the bank account.
-                  </div>
-                ) : !manualPaid ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-slate-800">Complete the payment in your UPI app, then return here. The UTR field appears after you confirm the transfer.</p>
-                    <Button variant="secondary" className="w-full" onClick={() => setManualPaid(true)}>
-                      I completed the payment — enter UTR
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="upi-utr">UTR / transaction ID from your completed payment</Label>
-                    <Input
-                      id="upi-utr"
-                      value={utr}
-                      onChange={(event) => setUtr(event.target.value.replace(/\s/g, '').slice(0, 35))}
-                      placeholder="Find this in your UPI app's payment details"
-                      autoComplete="off"
-                      inputMode="text"
-                      maxLength={35}
-                    />
-                    <p className="text-xs text-slate-700">The UTR is generated by your bank after payment. A typed reference alone does not activate a plan.</p>
-                    <Button className="w-full" onClick={() => { void submitUtr() }} disabled={processing || utr.trim().length < 6}>
-                      {processing ? 'Submitting…' : 'Submit UTR for verification'}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
             {error && <div role="alert" className="rounded-lg bg-red-50 text-red-900 text-sm font-medium px-3 py-2 ring-1 ring-red-300">{error}</div>}
-            <p className="text-xs text-slate-700">Your plan activates only after Razorpay confirms a captured payment. Direct UPI requests wait for manual bank verification.</p>
+            <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
+              <p>1. Check the plan and amount, then open Razorpay Checkout.</p>
+              <p>2. In Razorpay choose a card, or UPI → PhonePe, Google Pay, another available app, or QR if offered. Approve payment only inside your bank/UPI app; never share your PIN or OTP here.</p>
+              <p>3. Return here and wait for server confirmation. If charged but not activated, do not pay again; use Check payment status or contact support with the payment ID.</p>
+              <p>Access begins after verified capture. Renewals add {selected.days} days to your existing expiry (or start now if expired).</p>
+            </div>
           </div>
         )}
       </Modal>

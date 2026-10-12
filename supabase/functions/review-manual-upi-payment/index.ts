@@ -7,8 +7,8 @@ Deno.serve(async (request: Request) => {
 
   const context = await authenticate(request)
   if (isResponse(context)) return context
-  if (!isAdmin(context.user.app_metadata)) {
-    return jsonResponse({ error: 'Only an administrator can review manual UPI payments.' }, 403)
+  if (!isAdmin(context.user.app_metadata) || !context.aal2) {
+    return jsonResponse({ error: 'A verified administrator authenticator is required.' }, 403)
   }
 
   const body = await readJson(request)
