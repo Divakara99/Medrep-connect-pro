@@ -185,11 +185,16 @@ export async function openApplication(
     p_payload: { ...record, id: undefined },
   })
   if (error) {
+    // Applications are recorded server-side; without the migration the record
+    // would exist only on this device, so we fail closed with a clear reason.
+    const missing = /could not find the function|record_application/i.test(error.message)
     return {
       ok: false,
       channel,
       to,
-      error: error.message || 'Your application could not be recorded. Please try again.',
+      error: missing
+        ? 'Applications are unavailable right now: the platform has not finished its update. Please try again shortly or contact support.'
+        : error.message || 'Your application could not be recorded. Please try again.',
     }
   }
   const stored = (data as { id?: string } | null)?.id ?? ''

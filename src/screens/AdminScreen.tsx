@@ -26,6 +26,7 @@ import {
   reviewManualUpiPayment,
   type PaymentRecord,
 } from '../data/payments'
+import { findConfidentialContact } from '../data/jobDescription'
 import { getTickets, updateTicket, type Ticket } from '../data/tickets'
 import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
 import { broadcast } from '../data/notifications'
@@ -322,21 +323,6 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
       />
     </div>
   )
-}
-
-/**
- * Mirrors the public.vacancy_public_description_guard trigger so the admin gets
- * an immediate message instead of a database error.
- */
-function findConfidentialContact(description: string): string | null {
-  if (/[^\s@]+@[^\s@]+\.[A-Za-z]{2,}/.test(description)) {
-    return 'The description is public. Remove the email address and put it in the "Manager email" field instead.'
-  }
-  const candidates = description.match(/\+?[0-9][0-9 ()\-.]{7,}[0-9]/g) ?? []
-  if (candidates.some((candidate) => candidate.replace(/[^0-9]/g, '').length >= 10)) {
-    return 'The description is public. Remove the phone number and use the "Contact" or "Manager alternate number" field instead.'
-  }
-  return null
 }
 
 function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: boolean; onClose: () => void; onSaved: () => void }) {

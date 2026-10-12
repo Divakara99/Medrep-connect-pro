@@ -32,8 +32,11 @@ export function AdminMfaScreen({ onVerified, onExit }: { onVerified: () => void;
       const verified = existing.some((factor) => factor.status === 'verified')
       if (!verified) {
         const result = await enrollTotp()
-        if (!result.ok) setError(result.error)
-        else setEnrollment(result.enrollment)
+        if (!result.ok) {
+          setError(`${result.error} Authenticator (TOTP) sign-in must be enabled for this project in Supabase → Authentication before the admin panel can be opened.`)
+        } else {
+          setEnrollment(result.enrollment)
+        }
       } else {
         setEnrollment(null)
       }
