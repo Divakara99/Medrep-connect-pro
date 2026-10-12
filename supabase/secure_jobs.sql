@@ -77,7 +77,10 @@ BEGIN
         'company', v.data ->> 'company',
         'manager', v.data ->> 'manager',
         'contact', v.data ->> 'contact',
+        'managerAltPhone', v.data ->> 'managerAltPhone',
         'managerEmail', v.data ->> 'managerEmail',
+        'hq', v.data ->> 'hq',
+        'division', v.data ->> 'division',
         'description', v.data ->> 'description'
       ) ELSE '{}'::jsonb END
   FROM public.vacancies AS v

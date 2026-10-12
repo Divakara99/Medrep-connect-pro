@@ -108,7 +108,7 @@ export function TopBar({ title, right, left }: { title?: ReactNode; right?: Reac
       <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">{left}</div>
         {title !== undefined && (
-          <div className="text-base font-bold text-slate-900 truncate flex-shrink-0">{title}</div>
+          <div className="text-base font-bold text-slate-900 truncate flex-shrink-0 hidden sm:block">{title}</div>
         )}
         <div className="flex items-center gap-2 flex-1 justify-end">{right}</div>
       </div>

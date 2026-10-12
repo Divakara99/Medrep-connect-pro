@@ -29,10 +29,15 @@ export function Logo({ size = 40 }: { size?: number }) {
 export function Wordmark({ size = 'text-lg' }: { size?: string }) {
   return (
     <div className="flex items-center gap-2">
-      <Logo size={32} />
-      <div className="leading-tight">
-        <div className={`font-extrabold text-slate-900 ${size}`}>MedRep <span className="text-brand-600">Connect</span></div>
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Pro · Pharma & Jobs Hub</div>
+      <Logo size={36} />
+      <div className="leading-tight min-w-0">
+        {/* Mobile requirement: the app name stays on ONE line, tagline below. */}
+        <div className={`font-extrabold text-slate-900 whitespace-nowrap ${size}`}>
+          MedRep <span className="text-brand-600">Connect Pro</span>
+        </div>
+        <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">
+          Pharma &amp; Jobs Hub
+        </div>
       </div>
     </div>
   )

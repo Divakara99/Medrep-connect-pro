@@ -1,6 +1,7 @@
 import type { Job } from './jobs'
 import type { User } from './auth'
 import { getProfile, type Profile } from './profile'
+import { getResume } from './resume'
 import { CREATOR } from './creator'
 import { mirror } from './supabase'
 import { read, write } from './storage'
@@ -17,6 +18,7 @@ export type ApplicationRecord = {
   applicantEmail: string
   subject?: string
   body: string
+  resumeFileName?: string
   sentAt: number
 }
 
@@ -60,6 +62,8 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
   if (profile.preferredRoles?.length) push('Preferred Roles', profile.preferredRoles.join(', '))
   if (profile.ctc) push('Expected CTC', profile.ctc)
   if (profile.noticePeriod) push('Notice Period', profile.noticePeriod)
+  const resume = getResume(user.email)
+  if (resume) push('Resume', `${resume.fileName} — sent along with this application (please find attached)`)
   if (profile.bio) {
     lines.push(''); lines.push(format === 'email' ? 'Profile Summary:' : '*Summary:*')
     lines.push(profile.bio)
@@ -145,6 +149,7 @@ export function openApplication(user: User, job: Job): { ok: boolean; channel: '
     applicantEmail: user.email,
     subject: channel === 'email' ? subject : undefined,
     body,
+    resumeFileName: getResume(user.email)?.fileName,
     sentAt: Date.now(),
   }
   const queue = read<ApplicationRecord[]>(QUEUE_KEY, [])

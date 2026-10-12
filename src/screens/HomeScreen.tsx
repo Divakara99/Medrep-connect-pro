@@ -13,12 +13,10 @@ export function HomeScreen({
   user,
   jobs,
   onOpenJob,
-  onGoPlans,
 }: {
   user: User
   jobs: Job[]
   onOpenJob: (j: Job) => void
-  onGoPlans: () => void
 }) {
   const [query, setQuery] = useState('')
   const [location, setLocation] = useState('')
@@ -73,37 +71,28 @@ export function HomeScreen({
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-28 pt-4 space-y-4">
-      {/* Hero — minimized creator pill */}
-      <Card className="p-4 bg-gradient-to-br from-brand-600 to-brand-800 text-white border-0 relative overflow-hidden">
-        <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/5 blur-2xl" />
+      {/* Hero — compact blue card (kept at half height; name highlighted) */}
+      <Card className="p-3 bg-gradient-to-br from-brand-600 to-brand-800 text-white border-0 relative overflow-hidden">
+        <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-white/5 blur-2xl" />
         <div className="flex items-center justify-between gap-2 relative flex-wrap">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-brand-100">India's 1st Pharma-Job Network</div>
+          <div className="text-[9px] font-bold uppercase tracking-widest text-brand-100">India's 1st Pharma-Job Network</div>
           <CreatorCredit variant="dark" size="sm" />
         </div>
-        <h1 className="text-xl sm:text-2xl font-extrabold mt-1 leading-tight">
-          Hello, {user.name.split(' ')[0]} 👋<br />
-          Find your next MR / ABM role.
+        <h1 className="text-lg sm:text-xl font-extrabold mt-1 leading-tight">
+          Hello,{' '}
+          <mark className="bg-amber-300 text-slate-900 rounded-md px-1.5 py-0.5 font-extrabold">
+            {user.name.split(' ')[0]}
+          </mark>{' '}
+          👋
         </h1>
-        <p className="text-xs sm:text-sm text-brand-100/90 mt-1">MR vacancies pinned first — plus multi-industry jobs across India.</p>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <div className="rounded-xl bg-white/10 p-2.5 ring-1 ring-white/20">
-            <div className="text-lg font-extrabold">{stats.total}</div>
-            <div className="text-[9px] uppercase tracking-wide text-brand-100">Live jobs</div>
-          </div>
-          <div className="rounded-xl bg-white/10 p-2.5 ring-1 ring-white/20">
-            <div className="text-lg font-extrabold">{stats.mr}</div>
-            <div className="text-[9px] uppercase tracking-wide text-brand-100">MR roles</div>
-          </div>
-          <div className="rounded-xl bg-white/10 p-2.5 ring-1 ring-white/20">
-            <div className="text-lg font-extrabold">{stats.pinned}</div>
-            <div className="text-[9px] uppercase tracking-wide text-brand-100">Pinned</div>
-          </div>
+        <p className="text-[11px] sm:text-xs text-brand-100/90 mt-1 leading-snug">
+          Find your next MR / ABM role — MR vacancies pinned first, plus multi-industry jobs across India.
+        </p>
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[10px] font-semibold text-brand-100">
+          <span className="rounded-full bg-white/10 px-2 py-1 ring-1 ring-white/20">{stats.total} live jobs</span>
+          <span className="rounded-full bg-white/10 px-2 py-1 ring-1 ring-white/20">{stats.mr} MR roles</span>
+          <span className="rounded-full bg-white/10 px-2 py-1 ring-1 ring-white/20">{stats.pinned} pinned</span>
         </div>
-        {!unlocked && (
-          <Button variant="accent" className="mt-3 w-full py-2 text-sm" onClick={onGoPlans}>
-            💎 Unlock jobs · Subscribe now
-          </Button>
-        )}
       </Card>
 
       {/* Search */}

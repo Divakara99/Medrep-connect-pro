@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Button, Badge, Modal } from './ui'
 import type { Job } from '../data/jobs'
+import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 
 function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
@@ -17,6 +19,50 @@ function timeAgo(ts: number): string {
   return `${days} day${days > 1 ? 's' : ''} ago`
 }
 
+function postedOn(ts: number): string {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function descriptionPoints(description?: string): string[] {
+  return (description || '')
+    .split(/\r?\n|•/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+/**
+ * Confidential job fields stay visible but blurred (never fully hidden).
+ * Tapping the value reveals it again — an anti-shoulder-surfing measure.
+ */
+function SensitiveValue({ label, value, plus = false }: { label: string; value: string; plus?: boolean }) {
+  const [revealed, setRevealed] = useState(false)
+  if (!value) {
+    return (
+      <div className="rounded-xl ring-1 ring-slate-200 p-3">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
+        <div className="text-sm font-semibold text-slate-400">—</div>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-xl ring-1 ring-slate-200 p-3">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
+      <button
+        type="button"
+        onClick={() => setRevealed((show) => !show)}
+        title={revealed ? 'Tap to blur again' : 'Tap to reveal'}
+        className={`mt-0.5 w-full text-left text-sm font-semibold text-slate-900 transition ${revealed ? '' : 'blur-[5px] select-none'}`}
+      >
+        {plus ? <span className="text-brand-700 font-extrabold">(+)</span> : null}{value}
+      </button>
+      <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400 mt-0.5">
+        {revealed ? 'Tap to blur' : 'Blurred · tap to reveal'}
+      </div>
+    </div>
+  )
+}
+
 export function JobDetail({
   job,
   unlocked,
@@ -30,7 +76,7 @@ export function JobDetail({
   onSubscribe: () => void
   onApply: (j: Job) => void
 }) {
-  const { channel, target: _target } = job ? resolveChannel(job) : { channel: 'email' as const, target: '' }
+  const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   return (
     <Modal open={!!job} onClose={onClose} title={job?.title}>
       {job && (
@@ -45,29 +91,37 @@ export function JobDetail({
                 {job.pinned && <Badge color="amber">★ Pinned priority</Badge>}
               </div>
               <div className="text-sm text-slate-600 mt-1">
-                {unlocked ? (
-                  <>
-                    {job.company} · {timeAgo(job.postedAt)}
-                  </>
-                ) : (
-                  <>
-                    Company hidden · {timeAgo(job.postedAt)}
-                  </>
-                )}
+                {unlocked ? job.company : 'Company confidential'} · {timeAgo(job.postedAt)}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                📅 Posted on <span className="font-semibold text-slate-700">{postedOn(job.postedAt)}</span>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Role" value={job.title} />
-            <Field label="Location" value={job.location} />
+            <SensitiveValue label="City" value={job.location} />
+            <SensitiveValue label="HQ" value={job.hq || ''} />
+            <SensitiveValue label="Division" value={job.division || ''} />
             <Field label="Experience" value={job.experience || '—'} />
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
           <div className="rounded-xl ring-1 ring-slate-200 p-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Description</div>
-            <div className="text-sm text-slate-800 leading-relaxed">{job.description || 'No description provided.'}</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Description</div>
+            {descriptionPoints(job.description).length === 0 ? (
+              <div className="text-sm text-slate-500">No description provided.</div>
+            ) : (
+              <ul className="space-y-1.5">
+                {descriptionPoints(job.description).map((point, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm text-slate-800 leading-relaxed">
+                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0 leading-relaxed">(+)</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="rounded-xl ring-1 ring-slate-200 p-3 relative overflow-hidden">
@@ -83,11 +137,13 @@ export function JobDetail({
                 </div>
               </>
             ) : (
-              <div className="text-sm text-slate-800 space-y-1">
-                <div><span className="font-semibold">Company:</span> {job.company}</div>
-                <div><span className="font-semibold">Manager:</span> {job.manager || '—'}</div>
-                <div><span className="font-semibold">Email:</span> <span className="text-brand-700 font-bold break-all">{job.managerEmail || CREATOR.adminEmail}</span></div>
-                <div><span className="font-semibold">Phone:</span> {job.contact || '—'}</div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <SensitiveValue label="Company name" value={job.company} />
+                <Field label="Manager" value={job.manager || '—'} />
+                <Field label="Email" value={job.managerEmail || CREATOR.adminEmail} />
+                <SensitiveValue label="ABM/ASM number" value={job.contact || ''} />
+                <SensitiveValue label="Manager alternate number" value={job.managerAltPhone || ''} plus />
+                <Field label="Posted on" value={postedOn(job.postedAt)} />
               </div>
             )}
           </div>
@@ -123,12 +179,14 @@ export function ApplyConfirmSheet({
   job,
   channel,
   target,
+  resume,
   onClose,
   onConfirm,
 }: {
   job: Job | null
   channel: 'email' | 'whatsapp'
   target: string
+  resume?: ResumeRecord | null
   onClose: () => void
   onConfirm: () => void
 }) {
@@ -178,6 +236,29 @@ export function ApplyConfirmSheet({
             <div><span className="font-semibold text-slate-900">Role:</span> {job.title}</div>
             <div><span className="font-semibold text-slate-900">Location:</span> {job.location}</div>
           </div>
+
+          {resume ? (
+            <div className="rounded-xl ring-1 ring-brand-200 bg-brand-50/40 p-3 flex items-center gap-3">
+              <div className="text-xl">📎</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-slate-900 truncate">{resume.fileName}</div>
+                <div className="text-xs text-slate-600 mt-0.5">
+                  Your resume goes out with this application. Download it now and attach it in the composer that opens next.
+                </div>
+              </div>
+              <a
+                href={resume.dataUrl}
+                download={resume.fileName}
+                className="shrink-0 rounded-xl bg-white ring-1 ring-slate-200 px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-50 transition"
+              >
+                Download
+              </a>
+            </div>
+          ) : (
+            <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              No resume saved yet — add one in Account → Resume so it can be sent along with every application.
+            </div>
+          )}
 
           <div className="text-xs text-slate-500">
             {channel === 'email'

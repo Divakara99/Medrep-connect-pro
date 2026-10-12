@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { LoginScreen } from './screens/LoginScreen'
 import { AdminLoginScreen } from './screens/AdminLoginScreen'
-import { AdminMfaScreen } from './screens/AdminMfaScreen'
+import { AdminPinScreen } from './screens/AdminPinScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { BottomNav, type UserTab } from './components/BottomNav'
-import { TopBar, Button, IconButton } from './components/ui'
+import { TopBar, IconButton } from './components/ui'
 import { NotificationsPanel } from './components/NotificationsPanel'
 import { HomeScreen } from './screens/HomeScreen'
 import { PriorityScreen } from './screens/PriorityScreen'
@@ -16,10 +16,11 @@ import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, ty
 import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { openApplication } from './data/apply'
-import { unreadCount } from './data/notifications'
+import { getResume } from './data/resume'
+import { refreshNotificationsFromServer, unreadCount } from './data/notifications'
 import { clearPaymentCache } from './data/payments'
 
-type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'user' | 'admin'
+type View = 'loading' | 'login' | 'admin-login' | 'admin-pin' | 'user' | 'admin'
 
 export default function App() {
   const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
@@ -45,7 +46,7 @@ export default function App() {
     if (snapshot.session.kind === 'admin') {
       if (adminPortal) {
         setUser(null)
-        setView(snapshot.adminVerified ? 'admin' : 'admin-mfa')
+        setView(snapshot.adminVerified ? 'admin' : 'admin-pin')
       } else {
         setUser(null)
         setView('login')
@@ -160,6 +161,15 @@ export default function App() {
     return () => { active = false }
   }, [view, userId, unlocked])
 
+  // Keep the broadcast feed (new job posts + every job update) in sync so the
+  // notification bell reflects admin activity without a manual refresh.
+  useEffect(() => {
+    if (view !== 'user' || !userId) return
+    void refreshNotificationsFromServer()
+    const interval = window.setInterval(() => { void refreshNotificationsFromServer() }, 60_000)
+    return () => window.clearInterval(interval)
+  }, [view, userId])
+
   function refreshUser() {
     const u = currentUser()
     if (u) setUser({ ...u })
@@ -205,9 +215,9 @@ export default function App() {
     return <AdminLoginScreen onAuthed={onAuthed} recoveryMode={recoveryMode} />
   }
 
-  if (view === 'admin-mfa') {
-    return <AdminMfaScreen onVerified={() => {
-      void getAuthSnapshot().then((snapshot) => applyAuthSnapshot(snapshot)).catch(() => setView('admin-mfa'))
+  if (view === 'admin-pin') {
+    return <AdminPinScreen onVerified={() => {
+      void getAuthSnapshot().then((snapshot) => applyAuthSnapshot(snapshot)).catch(() => setView('admin-pin'))
     }} onExit={onLogout} />
   }
 
@@ -245,9 +255,15 @@ export default function App() {
               </IconButton>
             )}
             {!unlocked && (
-              <Button variant="accent" onClick={() => setTab('plans')}>
-                💎 Subscribe
-              </Button>
+              <button
+                type="button"
+                title="Subscribe"
+                aria-label="Subscribe"
+                onClick={() => setTab('plans')}
+                className="w-8 h-8 shrink-0 rounded-xl bg-accent-500 hover:bg-accent-600 text-white text-base leading-none grid place-items-center shadow-sm transition active:scale-95 select-none"
+              >
+                💎
+              </button>
             )}
           </div>
         }
@@ -263,7 +279,6 @@ export default function App() {
           user={user}
           jobs={jobs}
           onOpenJob={openJob}
-          onGoPlans={() => setTab('plans')}
         />
       )}
       {tab === 'priority' && user && (
@@ -299,6 +314,7 @@ export default function App() {
         job={applyJob}
         channel={applyChannel}
         target={applyTarget}
+        resume={user ? getResume(user.email) : null}
         onClose={() => setApplyJob(null)}
         onConfirm={() => {
           if (applyJob && user) {

@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supa
 import { corsHeaders, jsonResponse } from './http.ts'
 
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
-type PaymentMethod = 'razorpay' | 'upi_manual'
+type PaymentMethod = 'razorpay' | 'upi_manual' | 'manual_grant'
 type PaymentStatus = 'pending' | 'manual_review' | 'paid' | 'failed' | 'rejected'
 
 type SubscriptionPaymentRow = {

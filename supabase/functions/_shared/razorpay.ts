@@ -29,6 +29,22 @@ function basicAuthorization(keyId: string, keySecret: string): string {
   return `Basic ${btoa(`${keyId}:${keySecret}`)}`
 }
 
+type RazorpayErrorPayload = { error?: { code?: unknown } }
+
+/**
+ * Sanitized gateway diagnostics: log ONLY the HTTP status and a tightly
+ * validated error code. Razorpay error descriptions/metadata (and any response
+ * body) can contain account or customer data — never log them, and never log
+ * credentials or Authorization headers.
+ */
+function logRazorpayFailure(label: string, httpStatus: number, payload: unknown): void {
+  const rawCode = (payload as RazorpayErrorPayload | null)?.error?.code
+  const errorCode = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode)
+    ? rawCode
+    : 'unavailable'
+  console.error(label, { httpStatus, errorCode })
+}
+
 export async function createRazorpayOrder(input: {
   amountPaise: number
   currency: 'INR'
@@ -50,17 +66,9 @@ export async function createRazorpayOrder(input: {
       notes: input.notes,
     }),
   })
-  const payload = await response.json().catch(() => null) as (RazorpayOrderResponse & {
-    error?: { code?: unknown }
-  }) | null
+  const payload = await response.json().catch(() => null) as (RazorpayOrderResponse & RazorpayErrorPayload) | null
   if (!response.ok || !payload?.id) {
-    // Only log the HTTP status and a tightly validated gateway error code.
-    // Razorpay's descriptions/metadata can include sensitive data; never log them.
-    const rawCode = payload?.error?.code
-    const errorCode = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode)
-      ? rawCode
-      : 'unavailable'
-    console.error('Razorpay order request failed:', { httpStatus: response.status, errorCode })
+    logRazorpayFailure('Razorpay order request failed:', response.status, payload)
     throw new Error('Razorpay could not create the payment order. Check the server credentials and merchant account.')
   }
   if (payload.amount !== input.amountPaise || payload.currency !== 'INR') {
@@ -74,8 +82,9 @@ export async function fetchRazorpayPayment(paymentId: string): Promise<RazorpayP
   const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
     headers: { Authorization: basicAuthorization(keyId, keySecret) },
   })
-  const payload = await response.json().catch(() => null) as RazorpayPayment | null
+  const payload = await response.json().catch(() => null) as (RazorpayPayment & RazorpayErrorPayload) | null
   if (!response.ok || !payload?.id) {
+    logRazorpayFailure('Razorpay payment fetch failed:', response.status, payload)
     throw new Error('Razorpay could not confirm this payment. Please try checking its status again.')
   }
   return payload
@@ -92,6 +101,8 @@ export async function captureRazorpayPayment(paymentId: string, amountPaise: num
     body: JSON.stringify({ amount: amountPaise, currency: 'INR' }),
   })
   if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    logRazorpayFailure('Razorpay capture request failed:', response.status, payload)
     throw new Error('Razorpay capture is still pending; payment must be captured before activating a plan.')
   }
 }

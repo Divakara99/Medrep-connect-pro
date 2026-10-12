@@ -1,4 +1,4 @@
-import { createRazorpayOrder, razorpayCredentials } from './razorpay.ts'
+import { captureRazorpayPayment, createRazorpayOrder, fetchRazorpayPayment, razorpayCredentials } from './razorpay.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -94,6 +94,41 @@ Deno.test('unsafe gateway error code is not logged', async () => {
       assert(JSON.stringify(logs[0]) === JSON.stringify([
         'Razorpay order request failed:', { httpStatus: 401, errorCode: 'unavailable' },
       ]), 'unexpected gateway code must be redacted')
+    },
+  )
+})
+
+Deno.test('payment fetch failure logs only status and code', async () => {
+  await withMockGateway(
+    Response.json({ error: { code: 'BAD_REQUEST_ERROR', description: 'private gateway text' } }, { status: 400 }),
+    async (calls, logs) => {
+      let message = ''
+      try { await fetchRazorpayPayment('pay_test') } catch (error) {
+        message = error instanceof Error ? error.message : ''
+      }
+      assert(message.includes('could not confirm'), 'expected generic client-facing error')
+      assert(calls[0].url === 'https://api.razorpay.com/v1/payments/pay_test', 'wrong payment endpoint')
+      assert(JSON.stringify(logs[0]) === JSON.stringify([
+        'Razorpay payment fetch failed:', { httpStatus: 400, errorCode: 'BAD_REQUEST_ERROR' },
+      ]), 'payment fetch must log only status and code')
+    },
+  )
+})
+
+Deno.test('capture failure logs only status and code', async () => {
+  await withMockGateway(
+    Response.json({ error: { code: 'SERVER_ERROR', description: 'must never be logged' } }, { status: 500 }),
+    async (calls, logs) => {
+      let message = ''
+      try { await captureRazorpayPayment('pay_test', 4900) } catch (error) {
+        message = error instanceof Error ? error.message : ''
+      }
+      assert(message.includes('capture is still pending'), 'expected generic client-facing error')
+      assert(calls[0].url === 'https://api.razorpay.com/v1/payments/pay_test/capture', 'wrong capture endpoint')
+      assert(JSON.stringify(JSON.parse(String(calls[0].options.body))) === JSON.stringify({ amount: 4900, currency: 'INR' }), 'capture must send amount in paise')
+      assert(JSON.stringify(logs[0]) === JSON.stringify([
+        'Razorpay capture request failed:', { httpStatus: 500, errorCode: 'SERVER_ERROR' },
+      ]), 'capture must log only status and code')
     },
   )
 })

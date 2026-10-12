@@ -1,5 +1,5 @@
 import { CREATOR } from './creator'
-import { mirror } from './supabase'
+import { mirror, supabase } from './supabase'
 import { read, write } from './storage'
 
 export type Notification = {
@@ -181,6 +181,47 @@ export function getNotifications(): Notification[] {
     return [seed]
   }
   return existing
+}
+
+function parseRemoteNotification(value: unknown): Notification | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Record<string, unknown>
+  if (typeof row.id !== 'string' || typeof row.title !== 'string' || typeof row.body !== 'string') return null
+  const type: Notification['type'] = row.type === 'job' || row.type === 'plan' || row.type === 'payment'
+    || row.type === 'update' || row.type === 'system'
+    ? row.type
+    : 'update'
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    type,
+    createdAt: typeof row.createdAt === 'number' ? row.createdAt : 0,
+    from: typeof row.from === 'string' ? row.from : 'MedRep Connect Pro',
+    target: 'all',
+  }
+}
+
+/**
+ * Merge broadcast notifications mirrored in Supabase into the local feed so
+ * every user device receives new job posts and job updates (plus plan/payment
+ * news) posted from the admin console. Failures are silent — the local feed
+ * keeps working offline.
+ */
+export async function refreshNotificationsFromServer(): Promise<void> {
+  try {
+    const { data, error } = await supabase.rpc('list_visible_notifications')
+    if (error || !Array.isArray(data)) return
+    const remote = (data as unknown[]).map(parseRemoteNotification).filter((n): n is Notification => n !== null)
+    if (remote.length === 0) return
+    const local = read<Notification[]>(NOTIF_KEY, [])
+    const known = new Set(local.map((n) => n.id))
+    const merged = [...local, ...remote.filter((n) => !known.has(n.id))]
+    merged.sort((a, b) => b.createdAt - a.createdAt)
+    write(NOTIF_KEY, merged.slice(0, 500))
+  } catch {
+    // Offline or RPC not installed yet — keep the local feed as-is.
+  }
 }
 
 const READ_KEY = 'mrc_notif_read_v1'

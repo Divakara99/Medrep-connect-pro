@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Badge, Button, Card, EmptyState, Modal } from './ui'
-import { getNotificationsForUser, markAllRead, markOneRead, unreadCount, type Notification } from '../data/notifications'
+import { getNotificationsForUser, markAllRead, markOneRead, refreshNotificationsFromServer, unreadCount, type Notification } from '../data/notifications'
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -46,6 +46,8 @@ export function NotificationsPanel({
   const [readSince, setReadSince] = useState(0)
 
   const refresh = () => {
+    // Pull the broadcast feed (job updates, new job posts) from the server.
+    void refreshNotificationsFromServer()
     setList(getNotificationsForUser(email))
     setCount(unreadCount(email))
     setReadSince(getReadSince(email))
