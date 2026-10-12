@@ -54,16 +54,21 @@ export function AdminMfaScreen({ onVerified, onExit }: { onVerified: () => void;
     if (!id || !/^\d{6}$/.test(code) || busy) return
     setBusy(true)
     setError(null)
-    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId: id, code })
-    setBusy(false)
-    if (verifyError) {
-      setError('Code incorrect or expired. Check your authenticator clock and try again.')
+    try {
+      const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId: id, code })
+      if (verifyError) {
+        setError('Code incorrect or expired. Check your authenticator clock and try again.')
+        setCode('')
+        return
+      }
+      setEnrollment(null)
       setCode('')
-      return
+      onVerified()
+    } catch {
+      setError('Could not reach the authentication service. Check your connection and try again.')
+    } finally {
+      setBusy(false)
     }
-    setEnrollment(null)
-    setCode('')
-    onVerified()
   }
 
   return (

@@ -251,7 +251,8 @@ export async function loginUser(
   if (hasAdminRole(data.user)) {
     activeUser = null
     await supabase.auth.signOut()
-    return { ok: false, error: 'Admin accounts must sign in from the dedicated Admin Login page.' }
+    // The public form should never advertise the restricted entry route.
+    return { ok: false, error: 'This account cannot sign in here. Contact support if you need help.' }
   }
 
   const user = toUser(data.user)

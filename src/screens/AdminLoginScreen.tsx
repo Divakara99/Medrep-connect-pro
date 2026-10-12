@@ -80,11 +80,11 @@ export function AdminLoginScreen({
             <div className="mt-4"><CreatorCredit variant="solid" /></div>
           </header>
 
-          <Card className="p-5 animate-fade-in">
+          <Card className="p-5">
             <h2 className="text-lg font-bold text-slate-900 mb-4">
               {activeMode === 'signin' ? 'Admin sign in' : activeMode === 'forgot' ? 'Reset admin password' : 'Choose a new password'}
             </h2>
-            <form key={activeMode} onSubmit={submit} className="space-y-3" autoComplete="off">
+            <form key={activeMode} onSubmit={submit} className="space-y-3">
               {activeMode !== 'update-password' && (
                 <div>
                   <Label htmlFor="admin-email">Admin email</Label>
@@ -95,7 +95,7 @@ export function AdminLoginScreen({
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="Enter admin email"
-                    autoComplete="off"
+                    autoComplete={activeMode === 'signin' ? 'username' : 'email'}
                     spellCheck={false}
                     required
                   />

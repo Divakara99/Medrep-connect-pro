@@ -101,7 +101,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
             <div className="mt-4"><CreatorCredit variant="solid" /></div>
           </header>
 
-          <Card className="p-5 animate-fade-in">
+          <Card className="p-5">
             <p className="text-base font-semibold text-slate-700 mb-4">Sign in to browse openings. New here? Create an account first.</p>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">
@@ -121,7 +121,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
               )}
             </div>
 
-            <form key={activeMode} onSubmit={submit} className="space-y-3" autoComplete="off">
+            <form key={activeMode} onSubmit={submit} className="space-y-3">
               {activeMode === 'signup' && (
                 <div>
                   <Label htmlFor="name">Full name</Label>
@@ -139,7 +139,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="you@example.com"
-                    autoComplete="off"
+                    autoComplete={activeMode === 'signin' ? 'username' : 'email'}
                     spellCheck={false}
                     required
                   />
