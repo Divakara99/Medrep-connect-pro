@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Wordmark } from '../components/Logo'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
-import { currentUser, deleteUserAccount, getUsers, refreshAdminUsers, type User } from '../data/auth'
+import { currentUser, deleteUserAccount, getUsers, grantManualAccess, refreshAdminUsers, type User } from '../data/auth'
 import {
   addJob,
   CATEGORIES,
@@ -25,6 +25,7 @@ import {
   reviewManualUpiPayment,
   type PaymentRecord,
 } from '../data/payments'
+import { getAltPaymentDetails, saveAltPaymentDetails } from '../data/altPayment'
 import { getTickets, updateTicket, type Ticket } from '../data/tickets'
 import { getApplicationQueue, type ApplicationRecord } from '../data/apply'
 import { broadcast } from '../data/notifications'
@@ -127,7 +128,8 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-5">
+      <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
+        <AdminSearchCard onNavigate={navigate} />
         {tab === 'dashboard' && <DashboardTab onNavigate={navigate} />}
         {tab === 'vacancies' && <VacanciesTab onMutate={bump} />}
         {tab === 'plans' && <PlansTab onMutate={bump} />}
@@ -304,8 +306,11 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
   const [company, setCompany] = useState(job?.company ?? '')
   const [manager, setManager] = useState(job?.manager ?? '')
   const [contact, setContact] = useState(job?.contact ?? '')
+  const [managerAltPhone, setManagerAltPhone] = useState(job?.managerAltPhone ?? '')
   const [managerEmail, setManagerEmail] = useState(job?.managerEmail ?? '')
   const [location, setLocation] = useState(job?.location ?? '')
+  const [hq, setHq] = useState(job?.hq ?? '')
+  const [division, setDivision] = useState(job?.division ?? '')
   const [category, setCategory] = useState<Exclude<Job['category'], 'All'>>(job?.category ?? 'MR')
   const [salary, setSalary] = useState(job?.salary ?? '')
   const [experience, setExperience] = useState(job?.experience ?? '')
@@ -322,10 +327,11 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
     setSaving(true)
     setError(null)
     try {
+      const fields = { title, company, manager, contact, managerAltPhone, managerEmail, location, hq, division, category, salary, experience, description, pinned }
       if (job) {
-        await updateJob(job.id, { title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
+        await updateJob(job.id, fields)
       } else {
-        await addJob({ title, company, manager, contact, managerEmail, location, category, salary, experience, description, pinned })
+        await addJob(fields)
       }
       onSaved()
     } catch (cause) {
@@ -358,16 +364,36 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
             <Input value={manager} onChange={(e) => setManager(e.target.value)} />
           </div>
           <div>
-            <Label>Contact (phone)</Label>
+            <Label>Contact (phone · ABM/ASM)</Label>
             <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="+91-…" />
+          </div>
+          <div>
+            <Label>Manager alternate number</Label>
+            <div className="flex items-stretch">
+              <span aria-hidden className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-slate-200 bg-slate-100 text-slate-700 font-extrabold">(+)</span>
+              <Input
+                value={managerAltPhone}
+                onChange={(e) => setManagerAltPhone(e.target.value)}
+                placeholder="Optional · +91-…"
+                className="rounded-l-none"
+              />
+            </div>
           </div>
           <div>
             <Label>Manager email</Label>
             <Input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} placeholder="hr@company.com" />
           </div>
           <div>
-            <Label>Location</Label>
+            <Label>City</Label>
             <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+          </div>
+          <div>
+            <Label>HQ</Label>
+            <Input value={hq} onChange={(e) => setHq(e.target.value)} placeholder="Optional · e.g. Hyderabad HO" />
+          </div>
+          <div>
+            <Label>Division</Label>
+            <Input value={division} onChange={(e) => setDivision(e.target.value)} placeholder="Optional · e.g. Cardiology" />
           </div>
           <div>
             <Label>Salary</Label>
@@ -383,10 +409,10 @@ function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: b
           </div>
         </div>
         <div>
-          <Label>Description</Label>
-          <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <Label>Description — one point per line (shown to users as (+) bullets)</Label>
+          <Textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={'(+) Role responsibility one\n(+) Requirement two'} />
         </div>
-        <p className="text-sm font-medium text-slate-700">Title, location, category, salary and experience are public. Company, manager, contact, email and description appear only to active subscribers. Do not put private details in public fields.</p>
+        <p className="text-sm font-medium text-slate-700">Title, category, salary and experience are public. City, HQ, Division, company, manager, contact numbers (ABM/ASM) and description appear only to active subscribers and are blurred in job details until tapped. Do not put private details in public fields.</p>
         {error && <p role="alert" className="text-sm font-bold text-red-800">{error}</p>}
         <Button className="w-full" onClick={() => { void save() }} disabled={saving}>{saving ? 'Saving securely…' : job ? 'Save changes' : 'Post vacancy'}</Button>
       </div>
@@ -458,6 +484,16 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
+  const [altUpiId, setAltUpiId] = useState(() => getAltPaymentDetails().upiId)
+  const [altBankDetails, setAltBankDetails] = useState(() => getAltPaymentDetails().bankDetails)
+  const [altInstructions, setAltInstructions] = useState(() => getAltPaymentDetails().instructions)
+  const [altSaved, setAltSaved] = useState(false)
+
+  function saveAltPayment() {
+    saveAltPaymentDetails({ upiId: altUpiId.trim(), bankDetails: altBankDetails.trim(), instructions: altInstructions.trim() })
+    setAltSaved(true)
+    window.setTimeout(() => setAltSaved(false), 2500)
+  }
   const [details, setDetails] = useState<PaymentRecord | null>(null)
 
   useEffect(() => {
@@ -505,6 +541,29 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
       </div>
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Alternative payment details</h3>
+            <p className="text-xs text-slate-600 mt-0.5">Shown to users on the Plans page as optional fallback options (manual verification required). Leave blank to hide them.</p>
+          </div>
+          {altSaved && <Badge color="green">Saved</Badge>}
+        </div>
+        <div>
+          <Label htmlFor="alt-upi-id">UPI ID (alternative)</Label>
+          <Input id="alt-upi-id" value={altUpiId} onChange={(event) => setAltUpiId(event.target.value)} placeholder="e.g. medrepconnect@upi" />
+        </div>
+        <div>
+          <Label htmlFor="alt-bank">Bank transfer details</Label>
+          <Textarea id="alt-bank" rows={3} value={altBankDetails} onChange={(event) => setAltBankDetails(event.target.value)} placeholder={'Account name: …\nAccount number: …\nIFSC: …\nBank / branch: …'} />
+        </div>
+        <div>
+          <Label htmlFor="alt-instructions">Extra instructions</Label>
+          <Textarea id="alt-instructions" rows={2} value={altInstructions} onChange={(event) => setAltInstructions(event.target.value)} placeholder="Optional note shown to users" />
+        </div>
+        <Button onClick={saveAltPayment}>Save alternative payment details</Button>
+      </Card>
 
       {loading && payments.length === 0 ? (
         <Card className="p-5 text-sm text-slate-700">Loading payment records…</Card>
@@ -664,6 +723,12 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
   const [error, setError] = useState<string | null>(null)
   const [target, setTarget] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [query, setQuery] = useState('')
+  const [grantTarget, setGrantTarget] = useState<User | null>(null)
+  const [grantDays, setGrantDays] = useState(15)
+  const [granting, setGranting] = useState(false)
+  const [grantError, setGrantError] = useState<string | null>(null)
+  const [grantNotice, setGrantNotice] = useState<string | null>(null)
   const currentAdminId = currentUser()?.id
 
   const refreshList = useCallback(async () => {
@@ -690,13 +755,37 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
   }, [])
 
   const now = useCurrentTime()
+  const searchDigits = query.replace(/\D/g, '')
   const users = all.filter((u) => {
     const active = u.subscribedUntil && u.subscribedUntil > now
     if (filter === 'active') return active
     if (filter === 'free') return !active
     return true
+  }).filter((u) => {
+    if (!query.trim()) return true
+    const haystack = `${u.name} ${u.email}`.toLowerCase()
+    if (haystack.includes(query.trim().toLowerCase())) return true
+    return Boolean(searchDigits) && (u.phone || '').includes(searchDigits)
   })
   const activeCount = all.filter((u) => u.subscribedUntil && u.subscribedUntil > now).length
+
+  async function confirmGrant() {
+    if (!grantTarget || granting) return
+    setGranting(true)
+    setGrantError(null)
+    const result = await grantManualAccess(grantTarget.id, grantDays)
+    setGranting(false)
+    if (!result.ok) {
+      setGrantError(result.error)
+      return
+    }
+    setGrantNotice(
+      `Access granted to ${grantTarget.name} for ${grantDays} days`
+      + (result.expiresAt ? ` · active until ${new Date(result.expiresAt).toLocaleString('en-IN')}` : ''),
+    )
+    setGrantTarget(null)
+    void refreshList()
+  }
 
   async function confirmDelete() {
     if (!target || deleting) return
@@ -722,6 +811,19 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
         </Button>
       </div>
       {error && <div className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 ring-1 ring-red-200" role="alert">{error}</div>}
+      {grantNotice && (
+        <div role="status" className="rounded-lg bg-emerald-50 text-emerald-900 text-sm font-semibold px-3 py-2 ring-1 ring-emerald-200">
+          {grantNotice}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search users by name, email or phone number…"
+          aria-label="Search users by name, email or phone number"
+        />
+      </div>
       <div className="flex gap-2 flex-wrap">
         {([['all', `All (${all.length})`], ['active', `Subscribers (${activeCount})`], ['free', `Free (${all.length - activeCount})`]] as const).map(([k, label]) => (
           <button
@@ -777,7 +879,17 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
                         {protectedAccount ? (
                           <span className="text-xs text-slate-400">Protected</span>
                         ) : (
-                          <Button variant="danger" className="px-3 py-1.5" onClick={() => setTarget(u)}>Delete</Button>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="secondary"
+                              className="px-3 py-1.5 text-sm"
+                              title="Manually grant special user access"
+                              onClick={() => { setGrantDays(15); setGrantError(null); setGrantTarget(u) }}
+                            >
+                              🎁 Grant access
+                            </Button>
+                            <Button variant="danger" className="px-3 py-1.5" onClick={() => setTarget(u)}>Delete</Button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -797,7 +909,147 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
         onConfirm={() => { void confirmDelete() }}
         onCancel={() => { if (!deleting) setTarget(null) }}
       />
+      <Modal open={!!grantTarget} onClose={() => { if (!granting) setGrantTarget(null) }} title="Grant special user access">
+        {grantTarget && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              Manually grant <span className="font-bold text-slate-900">{grantTarget.name}</span> ({grantTarget.email}) paid access without a payment.
+              The grant is recorded as a <span className="font-mono text-xs">manual_grant</span> audit row and extends any existing expiry.
+            </p>
+            <div>
+              <Label htmlFor="grant-days">Access days</Label>
+              <Input
+                id="grant-days"
+                type="number"
+                min={1}
+                max={3650}
+                value={grantDays}
+                onChange={(event) => setGrantDays(Math.max(1, Math.min(3650, Number(event.target.value) || 1)))}
+              />
+            </div>
+            {grantError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-900">{grantError}</p>}
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setGrantTarget(null)} disabled={granting}>Cancel</Button>
+              <Button className="flex-1" onClick={() => { void confirmGrant() }} disabled={granting}>
+                {granting ? 'Granting…' : `Grant ${grantDays} days`}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
       <p className="text-xs text-slate-500">Account deletion is handled by a server-side Supabase Edge Function. The browser never receives the service-role key.</p>
+    </div>
+  )
+}
+
+// -------------------- Global admin search --------------------
+/**
+ * One search box covering the datasets the admin needs: users (by phone
+ * number, name or email), recent transactions (payments), tickets,
+ * applications and payment records.
+ */
+function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
+  const [query, setQuery] = useState('')
+  const trimmed = query.trim()
+  const digits = trimmed.replace(/\D/g, '')
+  const lower = trimmed.toLowerCase()
+  const active = trimmed.length >= 2
+
+  const users = active ? getUsers().filter((u) =>
+    `${u.name} ${u.email}`.toLowerCase().includes(lower)
+    || (digits.length >= 3 && (u.phone || '').includes(digits)),
+  ).slice(0, 5) : []
+
+  const payments = active ? getPayments().filter((p) => {
+    const account = getUsers().find((candidate) => candidate.id === p.userId)
+    return [p.gatewayPaymentId, p.txRef, p.utr, p.planTitle, p.planId, account?.name, account?.email, account?.phone]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(lower) || (digits.length >= 3 && String(value).includes(digits)))
+  }).slice(0, 5) : []
+
+  const tickets = active ? getTickets().filter((t) =>
+    [t.subject, t.name, t.email, t.message].filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(lower)),
+  ).slice(0, 5) : []
+
+  const applications = active ? getApplicationQueue().filter((a) =>
+    [a.applicantName, a.applicantEmail, a.jobTitle, a.company, a.to].filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(lower) || (digits.length >= 3 && String(value).includes(digits))),
+  ).slice(0, 5) : []
+
+  const total = users.length + payments.length + tickets.length + applications.length
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xl">🔎</span>
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search phone number, users, transactions, tickets, applications, payments…"
+          aria-label="Admin search"
+        />
+      </div>
+      {active && total === 0 && (
+        <div className="text-sm text-slate-500">No matches for “{trimmed}”.</div>
+      )}
+      {active && total > 0 && (
+        <div className="space-y-3">
+          {users.length > 0 && (
+            <SearchGroup title="Users" count={users.length} onOpen={() => onNavigate('users', 'all')}>
+              {users.map((u) => (
+                <div key={u.id} className="text-sm text-slate-800">
+                  <span className="font-semibold">{u.name}</span> · {u.email}{u.phone ? ` · 📞 ${u.phone}` : ''}
+                </div>
+              ))}
+            </SearchGroup>
+          )}
+          {payments.length > 0 && (
+            <SearchGroup title="Recent transactions / payments" count={payments.length} onOpen={() => onNavigate('payments')}>
+              {payments.map((p) => {
+                const account = getUsers().find((candidate) => candidate.id === p.userId)
+                return (
+                  <div key={p.id} className="text-sm text-slate-800">
+                    <span className="font-semibold">₹{p.amount}</span> · {p.planTitle ?? p.planId} · {account?.name ?? p.userId} · {p.gatewayPaymentId ?? p.txRef ?? '—'} · {p.status}
+                  </div>
+                )
+              })}
+            </SearchGroup>
+          )}
+          {tickets.length > 0 && (
+            <SearchGroup title="Tickets" count={tickets.length} onOpen={() => onNavigate('tickets')}>
+              {tickets.map((t) => (
+                <div key={t.id} className="text-sm text-slate-800">
+                  <span className="font-semibold">{t.subject}</span> · {t.name ?? '—'} · {t.status.replace('_', ' ')}
+                </div>
+              ))}
+            </SearchGroup>
+          )}
+          {applications.length > 0 && (
+            <SearchGroup title="Applications" count={applications.length} onOpen={() => onNavigate('applications')}>
+              {applications.map((a) => (
+                <div key={a.id} className="text-sm text-slate-800">
+                  <span className="font-semibold">{a.applicantName}</span> → {a.jobTitle} ({a.company}) · {a.channel}
+                </div>
+              ))}
+            </SearchGroup>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function SearchGroup({ title, count, onOpen, children }: { title: string; count: number; onOpen: () => void; children: ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{title} ({count})</div>
+        <button type="button" onClick={onOpen} className="text-xs font-semibold text-brand-600 hover:underline">
+          Open {title.toLowerCase()} page →
+        </button>
+      </div>
+      <div className="mt-1 space-y-1 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-2.5">{children}</div>
     </div>
   )
 }

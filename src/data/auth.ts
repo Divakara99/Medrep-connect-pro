@@ -114,8 +114,10 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   const snapshot = snapshotFromSession(data.session)
   if (!snapshot.user) return snapshot
   if (snapshot.session.kind === 'admin') {
-    const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    return { ...snapshot, adminVerified: !assurance.error && assurance.data?.currentLevel === 'aal2' }
+    // The fixed app access code (box entry) replaces the old authenticator-code
+    // requirement. The code gate is app-level; the admin password + role remain
+    // the real authentication boundary checked by the server.
+    return { ...snapshot, adminVerified: isAdminPinVerified() }
   }
 
   try {
@@ -308,6 +310,24 @@ export async function updateCurrentPhone(
   return { ok: true, phone: phone ?? undefined }
 }
 
+/**
+ * Admin-only: grant special access to a user (audited server-side in
+ * subscription_payments as a manual_grant row).
+ */
+export async function grantManualAccess(
+  userId: string,
+  days: number,
+): Promise<{ ok: true; expiresAt?: string } | { ok: false; error: string }> {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !session || !hasAdminRole(session.user)) {
+    return { ok: false, error: 'Only a signed-in administrator can grant access.' }
+  }
+  const { data, error } = await supabase.rpc('grant_manual_access', { p_user_id: userId, p_days: days })
+  if (error) return { ok: false, error: error.message || 'Access could not be granted. Run supabase/admin_access.sql and try again.' }
+  const expiresAt = (data as { expires_at?: string } | null)?.expires_at
+  return { ok: true, expiresAt }
+}
+
 export async function deleteUserAccount(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession()
   if (sessionError) return { ok: false, error: sessionError.message }
@@ -341,7 +361,42 @@ export async function deleteUserAccount(userId: string): Promise<{ ok: true } | 
 export async function logout(): Promise<void> {
   activeUser = null
   remove(USERS_CACHE_KEY)
+  remove(ADMIN_PIN_KEY)
   await supabase.auth.signOut()
+}
+
+// ---------------------------------------------------------------------------
+// Admin access code (fixed 4-digit, box-type entry)
+// ---------------------------------------------------------------------------
+
+const ADMIN_PIN_KEY = 'mrc_admin_pin_ok_v1'
+
+/**
+ * Fixed administrator access code. This is an app-level lock that replaces the
+ * old emailed/authenticator code screen — it is NOT a security boundary. The
+ * admin password sign-in and the server-side admin role check remain the real
+ * protections for admin data.
+ */
+const ADMIN_ACCESS_CODE = '9676'
+
+export function verifyAdminPin(code: string): boolean {
+  return code === ADMIN_ACCESS_CODE
+}
+
+export function markAdminPinVerified(): void {
+  try {
+    sessionStorage.setItem(ADMIN_PIN_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isAdminPinVerified(): boolean {
+  try {
+    return sessionStorage.getItem(ADMIN_PIN_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 /** The current session user, refreshed by Auth events and getAuthSnapshot(). */

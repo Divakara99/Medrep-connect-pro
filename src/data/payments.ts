@@ -17,7 +17,7 @@ export type PaymentRecord = {
   orderId?: string
   activated?: boolean
   utr?: string
-  paymentMethod?: 'Razorpay' | 'UPI'
+  paymentMethod?: 'Razorpay' | 'UPI' | 'Manual grant'
   manualReview?: boolean
   refundStatus?: 'none' | 'requested' | 'approved' | 'rejected'
   refundRef?: string
@@ -32,7 +32,7 @@ type SubscriptionPaymentRow = {
   plan_title: string
   plan_days: number
   amount_paise: number | string
-  payment_method: 'razorpay' | 'upi_manual'
+  payment_method: 'razorpay' | 'upi_manual' | 'manual_grant'
   payment_status: 'pending' | 'manual_review' | 'paid' | 'failed' | 'rejected'
   razorpay_order_id: string | null
   razorpay_payment_id: string | null
@@ -80,7 +80,7 @@ function toPaymentRecord(row: SubscriptionPaymentRow): PaymentRecord {
     orderId: row.razorpay_order_id ?? undefined,
     activated: paid,
     utr: row.utr ?? undefined,
-    paymentMethod: row.payment_method === 'upi_manual' ? 'UPI' : 'Razorpay',
+    paymentMethod: row.payment_method === 'upi_manual' ? 'UPI' : row.payment_method === 'manual_grant' ? 'Manual grant' : 'Razorpay',
     manualReview: row.payment_status === 'manual_review',
     refundStatus: 'none',
   }

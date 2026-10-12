@@ -1,5 +1,6 @@
 import { read, remove, write } from './storage'
 import { supabase } from './supabase'
+import { broadcast } from './notifications'
 
 export type JobCategory =
   | 'MR' | 'ABM' | 'Part-time' | 'E-commerce' | 'Finance' | 'Banking'
@@ -23,8 +24,11 @@ export type Job = {
   company: string
   manager?: string
   contact?: string
+  managerAltPhone?: string // optional manager alternative number, shown with a (+) sign
   managerEmail?: string
   location: string
+  hq?: string
+  division?: string
   category: Exclude<JobCategory, 'All'>
   salary?: string
   experience?: string
@@ -75,9 +79,12 @@ function parseJob(value: unknown): Job | null {
     company: typeof row.company === 'string' ? row.company : '',
     manager: typeof row.manager === 'string' ? row.manager : undefined,
     contact: typeof row.contact === 'string' ? row.contact : undefined,
+    managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,
     managerEmail: typeof row.managerEmail === 'string' ? row.managerEmail : undefined,
     description: typeof row.description === 'string' ? row.description : undefined,
     location: row.location,
+    hq: typeof row.hq === 'string' ? row.hq : undefined,
+    division: typeof row.division === 'string' ? row.division : undefined,
     category: row.category as Job['category'],
     salary: typeof row.salary === 'string' ? row.salary : undefined,
     experience: typeof row.experience === 'string' ? row.experience : undefined,
@@ -128,15 +135,34 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
   const job: Job = { ...input, id: crypto.randomUUID(), postedAt: Date.now() }
   await storeJob(job)
   jobs = [job, ...jobs]
+  // Every new job post must notify users.
+  broadcast({
+    kind: 'job-posted',
+    jobTitle: job.title,
+    category: job.category,
+    location: job.location,
+    pinned: job.pinned,
+  }, { meta: { jobId: job.id } })
   return job
 }
 
-export async function updateJob(id: string, patch: Partial<Job>): Promise<Job> {
+const CONTENT_FIELDS: (keyof Job)[] = [
+  'title', 'company', 'manager', 'contact', 'managerAltPhone', 'managerEmail',
+  'location', 'hq', 'division', 'category', 'salary', 'experience', 'description',
+]
+
+export async function updateJob(id: string, patch: Partial<Job>, options?: { silent?: boolean }): Promise<Job> {
   const previous = jobs.find((job) => job.id === id)
   if (!previous) throw new Error('Reload vacancies and try again.')
   const updated = { ...previous, ...patch, id }
   await storeJob(updated)
   jobs = jobs.map((job) => job.id === id ? updated : job)
+  // Every real job update must notify users (silent is reserved for housekeeping
+  // such as pin toggles, which are not content updates).
+  const contentChanged = CONTENT_FIELDS.some((field) => updated[field] !== previous[field])
+  if (!options?.silent && contentChanged) {
+    broadcast({ kind: 'job-edited', jobTitle: updated.title }, { meta: { jobId: updated.id } })
+  }
   return updated
 }
 
@@ -150,7 +176,8 @@ export async function deleteJob(id: string): Promise<void> {
 }
 
 export async function togglePin(id: string, pinned: boolean): Promise<Job> {
-  return updateJob(id, { pinned })
+  // Pinning is housekeeping, not a content update — do not spam notifications.
+  return updateJob(id, { pinned }, { silent: true })
 }
 
 export function sortedJobs(jobs: Job[]): Job[] {

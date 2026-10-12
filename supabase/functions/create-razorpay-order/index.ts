@@ -45,7 +45,8 @@ Deno.serve(async (request: Request) => {
         razorpay_order_id: order.id,
       })
     if (insertError) {
-      console.error('Failed to store the pending Razorpay order:', insertError.message)
+      // Log only the database error code; the message can echo row values.
+      console.error('Failed to store the pending Razorpay order:', { dbErrorCode: insertError.code ?? 'unavailable' })
       return jsonResponse({ error: 'The payment order could not be recorded. Please contact support before retrying.' }, 500)
     }
 
