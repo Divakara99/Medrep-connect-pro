@@ -280,7 +280,7 @@ export function ApplyConfirmSheet({
             </div>
           ) : (
             <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-              No resume uploaded yet — add one in the <span className="font-bold">Resume</span> tab so you can attach it to
+              No resume uploaded yet — add one in <span className="font-bold">Account → Profile details</span> so you can attach it to
               every application.
             </div>
           )}
@@ -289,7 +289,7 @@ export function ApplyConfirmSheet({
             {channel === 'email'
               ? 'Your mail app will open — simply tap Send after reviewing.'
               : 'WhatsApp opens in a new tab with a pre-formatted message — tap Send to deliver it to the manager.'}
-            {' '}The application is also recorded in your Resume tab.
+            {' '}The application is also recorded in your Applications tab.
           </div>
 
           <Button className="w-full" onClick={onConfirm} disabled={busy}>

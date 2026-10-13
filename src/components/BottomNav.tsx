@@ -4,7 +4,7 @@ const TABS: { id: UserTab; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: '🏠' },
   { id: 'priority', label: 'Priority', icon: '⭐' },
   { id: 'plans', label: 'Plans', icon: '💎' },
-  { id: 'applications', label: 'Resume', icon: '📎' },
+  { id: 'applications', label: 'Applications', icon: '📎' },
   { id: 'ai', label: 'AI Help', icon: '🤖' },
   { id: 'account', label: 'Account', icon: '👤' },
 ]

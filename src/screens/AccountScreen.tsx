@@ -4,16 +4,19 @@ import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
 import { isSubscribed, type User } from '../data/auth'
 import { CREATOR } from '../data/creator'
+import type { ResumeRecord } from '../data/resume'
 import { APP_VERSION_LABEL } from '../data/version'
 
 export function AccountScreen({
   user,
   onLogout,
   onSubscribed,
+  onResumeChange,
 }: {
   user: User
   onLogout: () => void
   onSubscribed: (u: User) => void
+  onResumeChange: (resume: ResumeRecord | null) => void
 }) {
   const unlocked = isSubscribed(user)
   const editorRef = useRef<ProfileEditorHandle>(null)
@@ -45,7 +48,13 @@ export function AccountScreen({
           : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
       </Card>
 
-      <ProfileEditor ref={editorRef} email={user.email} phone={user.phone} onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })} />
+      <ProfileEditor
+        ref={editorRef}
+        email={user.email}
+        phone={user.phone}
+        onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })}
+        onResumeChange={onResumeChange}
+      />
 
       {/* About card: same brand mark that ships as the PWA icon, plus the
           released version (package.json → build-time constant, never typed twice). */}

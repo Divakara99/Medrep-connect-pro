@@ -253,7 +253,7 @@ export default function App() {
             {tab === 'home' && 'Home'}
             {tab === 'priority' && 'Priority Jobs'}
             {tab === 'plans' && 'Plans'}
-            {tab === 'applications' && 'Resume'}
+            {tab === 'applications' && 'Applications'}
             {tab === 'ai' && 'AI Help'}
             {tab === 'account' && 'Account'}
           </span>
@@ -303,11 +303,11 @@ export default function App() {
         <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
       )}
       {tab === 'applications' && user && (
-        <ApplicationsScreen user={user} onResumeChange={setResume} />
+        <ApplicationsScreen user={user} resume={resume} />
       )}
       {tab === 'ai' && user && <AIChatScreen user={user} />}
       {tab === 'account' && user && (
-        <AccountScreen user={user} onLogout={onLogout} onSubscribed={() => refreshUser()} />
+        <AccountScreen user={user} onLogout={onLogout} onSubscribed={() => refreshUser()} onResumeChange={setResume} />
       )}
 
       <BottomNav active={tab} onChange={setTab} />

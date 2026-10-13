@@ -2,13 +2,23 @@ import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
 import { getProfile, newEducation, newExperience, saveProfile, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
+import type { ResumeRecord } from '../data/resume'
+import { ResumeCard } from './ResumeCard'
 
 export type ProfileEditorHandle = {
   save: () => Promise<Profile | null>
 }
 
-export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; phone?: string; onSaved?: (p: Profile) => void }>(function ProfileEditor(
-  { email, phone, onSaved },
+export const ProfileEditor = forwardRef<
+  ProfileEditorHandle,
+  {
+    email: string
+    phone?: string
+    onSaved?: (p: Profile) => void
+    onResumeChange?: (resume: ResumeRecord | null) => void
+  }
+>(function ProfileEditor(
+  { email, phone, onSaved, onResumeChange },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
@@ -76,15 +86,7 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; ph
         </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="flex items-center gap-3">
-          <span aria-hidden className="text-2xl">📎</span>
-          <div className="text-sm text-slate-700">
-            Your resume is managed in the <span className="font-bold text-slate-900">Resume</span> tab, where it is
-            uploaded to private storage, downloaded when you apply, and deleted automatically after 30 days.
-          </div>
-        </div>
-      </Card>
+      <ResumeCard onResumeChange={onResumeChange} />
 
       <Card className="p-4 space-y-3">
         <div className="font-bold text-slate-900">Personal</div>

@@ -22,7 +22,8 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Home** — search, filters, hero, MR-first feed, live stats.
 - **Priority** — pinned jobs + horizontally scrollable category filters.
 - **Plans** — every tier (5/10/15/30/90/180/365 days) stays selectable. Prices and durations come from the server catalog (`public.billing_plans`); Razorpay Checkout is the only payment path and shows whichever methods the merchant account has enabled. Legacy manual UPI requests remain reviewable by an admin.
-- **Resume** — private resume upload (PDF/DOC/DOCX, ≤ 2 MB) plus the user's application history. Files go to a private Supabase Storage bucket, are readable only by their owner, and are deleted after 30 days. Uploading never navigates away from the screen.
+- **Account → Profile details** — private resume upload (PDF/DOC/DOCX, ≤ 2 MB). Files go to a private Supabase Storage bucket, are readable only by their owner, and are deleted after 30 days. Uploading never navigates away from the screen.
+- **Applications** — the user's application history, with the resume on file for reference.
 - **Account** — fixed tagline **Job Seeker**; full profile editor (personal · education · experience).
 - **Job detail** — role, **city**, HQ, division, salary, experience, posted date and the point-wise description are visible to every signed-in user and are never blurred. Exactly five fields are sent only to active subscribers — company name, manager name, manager email, primary contact number and the optional (+) manager alternate number; free users see blurred placeholders instead of values. Apply is locked for free users.
 - **AI chat** — answers pricing/jobs questions; hard issues automatically escalate to admin tickets.
@@ -98,7 +99,7 @@ src/data/tickets.ts         — support tickets
 src/data/profile.ts         — Job Seeker bio + education/experience
 src/data/storage.ts         — safe localStorage helpers
 src/screens/*               — Login, Admin, Home, Priority, Plans, Account, AI
-src/components/*            — JobCard (blur), ProfileEditor, PostVacancy, ui primitives
+src/components/*            — JobCard (blur), ProfileEditor, ResumeCard, PostVacancy, ui primitives
 src/assets/logo.svg         — single source of truth for the brand mark
 scripts/generate-icons.mjs  — derives favicon + all PWA icons from that SVG
 public/manifest.json, sw.js — PWA

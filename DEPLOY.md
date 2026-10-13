@@ -76,7 +76,7 @@ SQL is applied:
 | --- | --- |
 | Jobs | `list_visible_jobs()` still works; free users see no description and HQ/division show "—" until the new `secure_jobs.sql` is applied. |
 | Plans | The catalog read fails, so the screen shows the standard seven plans and prices from its built-in fallback. Checkout still works against the previously deployed `create-razorpay-order`. |
-| Resume tab | Upload is disabled with a "storage is being enabled" notice. |
+| Resume (Account → Profile details) | Upload is disabled with a "storage is being enabled" notice. |
 | Apply | The mail/WhatsApp composer still opens; the toast says the application could not be added to history yet. |
 | **Admin panel** | **Blocked.** The portal requires an `aal2` session, so an administrator must enable TOTP in Supabase Auth (step 1) before the panel opens. This is the intended fix — production currently has no second factor at all. |
 
@@ -194,7 +194,7 @@ accounts:
   catalog price;
 * an **admin** without a verified authenticator cannot open the admin panel,
   and cannot save a price change from the Plans tab;
-* uploading a resume keeps the user on the Resume tab and the file is not
+* uploading a resume keeps the user on the Account screen and the file is not
   visible in browser storage.
 
 On user devices with older versions, clear site data/old PWA cache once and
