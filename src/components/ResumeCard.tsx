@@ -106,25 +106,34 @@ export function ResumeCard({ onResumeChange }: { onResumeChange?: (resume: Resum
     <Card className="px-3 py-2.5 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Resume / CV</div>
-        <span className="text-[10px] text-slate-400">Private · deleted after {RESUME_RETENTION_DAYS} days</span>
+        {/* The app-wide 14px helper size applies here, so the wording is kept
+            short and unbreakable to stay on ONE line even on a 320px phone. */}
+        <span className="text-[10px] text-slate-400 whitespace-nowrap">Auto-delete: {RESUME_RETENTION_DAYS} days</span>
       </div>
 
       {resumesLoading ? (
         <div role="status" className="text-[11px] font-semibold text-slate-600">Checking secure storage…</div>
       ) : resume ? (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span aria-hidden className="text-sm">✅</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-bold text-slate-900 truncate">{resume.fileName}</div>
-            <div className="text-[10px] text-slate-500">
-              Auto-deleted {retentionLabel(resume)}
+        <div className="space-y-2">
+          {/* The file name and its auto-delete line get the full card width, and
+              the buttons wrap onto their own row, so the auto-delete message
+              never has to wrap inside a narrow column on a phone. */}
+          <div className="flex items-start gap-2">
+            <span aria-hidden className="text-sm leading-6">✅</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-slate-900 truncate">{resume.fileName}</div>
+              <div className="text-[10px] text-slate-500 whitespace-nowrap">
+                Auto-deleted {retentionLabel(resume)}
+              </div>
             </div>
           </div>
-          <Button variant="secondary" className="px-2 py-1 text-[11px]" onClick={() => { void download() }}>⬇ Download</Button>
-          <Button variant="secondary" className="px-2 py-1 text-[11px]" onClick={() => fileInput.current?.click()} disabled={uploading}>
-            {uploading ? 'Uploading…' : '↻ Replace'}
-          </Button>
-          <Button variant="danger" className="px-2 py-1 text-[11px]" onClick={() => { void remove() }}>🗑</Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="secondary" className="px-2 py-1 text-[11px]" onClick={() => { void download() }}>⬇ Download</Button>
+            <Button variant="secondary" className="px-2 py-1 text-[11px]" onClick={() => fileInput.current?.click()} disabled={uploading}>
+              {uploading ? 'Uploading…' : '↻ Replace'}
+            </Button>
+            <Button variant="danger" className="px-2 py-1 text-[11px]" onClick={() => { void remove() }}>🗑 Remove resume</Button>
+          </div>
         </div>
       ) : (
         <div className="flex items-center gap-2">
@@ -153,7 +162,7 @@ export function ResumeCard({ onResumeChange }: { onResumeChange?: (resume: Resum
       )}
 
       <p className="text-[10px] leading-snug text-slate-500">
-        Only you can open your resume. Attach it from your mail app when you apply.
+        Private — only you can open your resume. Attach it from your mail app when you apply.
       </p>
     </Card>
   )

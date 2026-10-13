@@ -1,9 +1,9 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Button, Card, Badge } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
-import { ApplicationHistory } from '../components/ApplicationHistory'
 import { MyRequests } from '../components/MyRequests'
+import { ApplicationsScreen } from './ApplicationsScreen'
 import { isSubscribed, type User } from '../data/auth'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
@@ -14,14 +14,28 @@ export function AccountScreen({
   onLogout,
   onSubscribed,
   onResumeChange,
+  onBrowseJobs,
 }: {
   user: User
   onLogout: () => void
   onSubscribed: (u: User) => void
   onResumeChange: (resume: ResumeRecord | null) => void
+  onBrowseJobs: () => void
 }) {
   const unlocked = isSubscribed(user)
   const editorRef = useRef<ProfileEditorHandle>(null)
+  // "My applications" opens as its own page over this one, so the phone's back
+  // button (and its Back button) return here.
+  const [applicationsOpen, setApplicationsOpen] = useState(false)
+
+  if (applicationsOpen) {
+    return (
+      <ApplicationsScreen
+        onClose={() => setApplicationsOpen(false)}
+        onBrowseJobs={() => { setApplicationsOpen(false); onBrowseJobs() }}
+      />
+    )
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-32 space-y-4">
@@ -45,9 +59,19 @@ export function AccountScreen({
 
       <Card className="p-4">
         <h2 className="font-bold text-slate-900">Subscription validity</h2>
-        <p className="text-xs text-slate-700 mt-1">{unlocked && user.subscribedUntil
-          ? `Active until ${new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}. Renewals extend the current expiry; new plans start after server-verified payment.`
-          : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
+        {unlocked && user.subscribedUntil ? (
+          <>
+            {/* The validity date itself is shown in green so it is unmissable. */}
+            <p className="text-sm font-bold text-emerald-700 mt-1">
+              Active until {new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+            <p className="text-xs text-slate-700 mt-1">
+              Renewals extend the current expiry; new plans start after server-verified payment.
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-slate-700 mt-1">No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.</p>
+        )}
       </Card>
 
       <ProfileEditor
@@ -58,7 +82,15 @@ export function AccountScreen({
         onResumeChange={onResumeChange}
       />
 
-      <ApplicationHistory />
+      <Card className="p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-slate-900">My applications</div>
+          <div className="text-xs text-slate-600">Every email / WhatsApp application you have sent, with the job it was sent for.</div>
+        </div>
+        <Button variant="secondary" className="shrink-0" onClick={() => setApplicationsOpen(true)}>
+          📄 My applications
+        </Button>
+      </Card>
 
       <MyRequests />
 

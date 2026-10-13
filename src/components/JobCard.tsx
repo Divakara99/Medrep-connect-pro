@@ -82,7 +82,7 @@ export function JobCard({
               <ul className="mt-2 space-y-1">
                 {preview.map((point, index) => (
                   <li key={index} className="flex items-start gap-1.5 text-sm text-slate-700 leading-snug">
-                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">(+)</span>
+                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">•</span>
                     <span className="line-clamp-1">{point}</span>
                   </li>
                 ))}

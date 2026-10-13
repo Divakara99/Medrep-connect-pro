@@ -213,13 +213,14 @@ export function filterJobs(
 }
 
 /**
- * Job descriptions are entered one point per line and rendered as (+) bullets.
- * A leading "(+)" typed by the admin is tolerated and stripped here.
+ * Job descriptions are entered one point per line and rendered as • bullets.
+ * A bullet typed by the admin at the start of a line — "(+)", "•", "*" or "-"
+ * — is tolerated and stripped here, so a line is never shown with two bullets.
  */
 export function descriptionPoints(description?: string): string[] {
   return (description || '')
     .split(/\r?\n|•/)
-    .map((line) => line.replace(/^\s*\(\+\)\s*/, '').trim())
+    .map((line) => line.replace(/^\s*(?:\(\+\)|[*•\u2022-])\s*/, '').trim())
     .filter(Boolean)
 }
 

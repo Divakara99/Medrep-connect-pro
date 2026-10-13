@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
@@ -46,8 +46,50 @@ export function PlansScreen({
   const [legacyError, setLegacyError] = useState<string | null>(null)
   const [legacySubmitting, setLegacySubmitting] = useState(false)
   const [payments, setPayments] = useState<PaymentRecord[]>(() => getPaymentsByUser(user.id))
+  // The plan confirmed by the checkout that just finished. The server ledger
+  // stays authoritative; this only covers the seconds until its read returns.
+  const [purchasedPlanId, setPurchasedPlanId] = useState<string | null>(null)
+  const checkoutPlanId = useRef<string | null>(null)
   const unlocked = isSubscribed(user)
   const activeUntil = user.subscribedUntil ? new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : null
+
+  /** Expiry date of a plan, in the same wording the Account page uses. */
+  const when = (ms: number) => new Date(ms).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+
+  // Which plan each successful payment bought, with the latest expiry it
+  // reached. Read from the server ledger only.
+  const purchasedPlans = useMemo(() => {
+    const bought = new Map<string, number>()
+    payments
+      .filter((payment) => payment.status === 'success')
+      .forEach((payment) => {
+        const at = payment.expiresAt ?? payment.createdAt
+        const known = bought.get(payment.planId)
+        if (known === undefined || at > known) bought.set(payment.planId, at)
+      })
+    return bought
+  }, [payments])
+
+  // The plan that is active now: the newest verified payment that still covers
+  // the subscription (a renewal moves the active plan to the newer one).
+  const activePlan = useMemo(() => {
+    const paid = payments
+      .filter((payment) => payment.status === 'success')
+      .sort((a, b) => (b.expiresAt ?? b.createdAt) - (a.expiresAt ?? a.createdAt))
+    const covering = paid.filter((payment) => (payment.expiresAt ?? 0) > Date.now())
+    const chosen = covering[0] ?? paid[0]
+    const planId = chosen?.planId ?? purchasedPlanId
+    if (!planId) return null
+    const expiresAt = Math.max(chosen?.expiresAt ?? 0, user.subscribedUntil ?? 0) || undefined
+    return { planId, expiresAt }
+  }, [payments, purchasedPlanId, user.subscribedUntil])
+
+  // Show the plan the user already owns as the selected one, so its button
+  // reads "Extend / Renew" instead of "Select plan".
+  useEffect(() => {
+    if (selectedId || !activePlan) return
+    setSelectedId(activePlan.planId)
+  }, [activePlan, selectedId])
 
   async function loadPaymentHistory() {
     try {
@@ -82,6 +124,7 @@ export function PlansScreen({
 
   function openCheckout(plan: Plan) {
     setSelectedId(plan.id)
+    checkoutPlanId.current = plan.id
     setError(null)
     setSuccess(false)
     setConfirmedUntil(null)
@@ -104,6 +147,7 @@ export function PlansScreen({
     setError(null)
     setVerificationPending(false)
     setPendingCheckout(null)
+    setPurchasedPlanId(checkoutPlanId.current)
   }
 
   async function verifyPayment(response: RazorpayCheckoutResponse) {
@@ -217,14 +261,22 @@ export function PlansScreen({
       <div className="grid gap-3 sm:grid-cols-2">
         {plans.map((plan) => {
           const isSelected = selected.id === plan.id
+          // Marked active/purchased: the plan the server ledger says is
+          // covering the subscription right now, or the one bought in this
+          // session a moment ago.
+          const isActive = activePlan?.planId === plan.id
+          const activeExpiry = isActive ? activePlan.expiresAt : undefined
+          const boughtAt = purchasedPlans.get(plan.id)
           return (
             <Card
               key={plan.id}
               onClick={() => selectPlan(plan.id)}
-              className={`p-4 relative cursor-pointer transition ${isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : 'hover:ring-1 hover:ring-brand-300'} ${plan.popular && !isSelected ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}
+              className={`p-4 relative cursor-pointer transition ${isActive ? 'ring-2 ring-emerald-500 ring-offset-2 bg-gradient-to-br from-emerald-50 to-white' : isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : 'hover:ring-1 hover:ring-brand-300'} ${plan.popular && !isSelected && !isActive ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}
             >
-              {isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
-              {!isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
+              {isActive && <div className="absolute -top-2 right-3"><Badge color="green">✓ Active</Badge></div>}
+              {!isActive && isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
+              {!isActive && !isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
+              {!isActive && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
               <div className="flex items-center justify-between gap-2">
                 <div className="font-bold text-slate-900">{plan.title}</div>
                 <div className="text-2xl font-extrabold text-brand-800">₹{plan.price}</div>
@@ -237,6 +289,16 @@ export function PlansScreen({
                     : `${plan.days} days`}
               </div>
               <div className="text-sm text-slate-800 mt-2">{plan.tagline}</div>
+              {isActive && activeExpiry !== undefined && (
+                <div className={`mt-2 text-sm font-extrabold ${activeExpiry > Date.now() ? 'text-emerald-700' : 'text-amber-800'}`}>
+                  {activeExpiry > Date.now() ? `Active until ${when(activeExpiry)}` : `Expired on ${when(activeExpiry)}`}
+                </div>
+              )}
+              {!isActive && boughtAt !== undefined && (
+                <div className="mt-2 text-xs font-semibold text-slate-600">
+                  {boughtAt > Date.now() ? `Purchased earlier · access till ${when(boughtAt)}` : `Purchased earlier · expired ${when(boughtAt)}`}
+                </div>
+              )}
               <Button
                 variant={isSelected ? 'primary' : 'secondary'}
                 className="w-full mt-3"
@@ -360,10 +422,16 @@ export function PlansScreen({
 
       <Modal open={showCheckout} onClose={() => { if (!processing) setShowCheckout(false) }} title="Confirm your plan">
         {success ? (
-          <div role="status" className="text-center py-8">
-            <div className="text-5xl mb-3">✅</div>
-            <h2 className="text-lg font-extrabold text-slate-900">Payment verified</h2>
-            <p className="text-sm text-slate-700 mt-1">Your {selected.days}-day plan is active. {confirmedUntil ? `Active until ${confirmedUntil}.` : ''}</p>
+          <div role="status" className="text-center py-6 space-y-2">
+            <div className="text-5xl">✅</div>
+            <h2 className="text-lg font-extrabold text-slate-900">Payment verified — plan active</h2>
+            <p className="text-sm text-slate-700">
+              {selected.title} ({selected.days} days) is marked active on your Plans page.
+            </p>
+            {confirmedUntil && (
+              <p className="text-base font-extrabold text-emerald-700">Active until {confirmedUntil}</p>
+            )}
+            <Button className="w-full mt-2" onClick={() => setShowCheckout(false)}>Done</Button>
           </div>
         ) : (
           <div className="space-y-4">

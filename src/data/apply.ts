@@ -34,18 +34,28 @@ export type ApplicationRecord = {
   sentAt: number
 }
 
+/**
+ * The salutation every application opens with.
+ *
+ * A vacancy records the manager's name and contact details, never their gender,
+ * so the message is addressed respectfully without guessing: "Respected
+ * Sir/Madam," is correct whether the reader is a man or a woman, and it stays
+ * right when no manager name is on file.
+ */
+const APPLICATION_SALUTATION = 'Respected Sir/Madam,'
+
 function buildTextContent(user: User, job: Job, profile: Profile, format: 'email' | 'whatsapp'): { subject: string; body: string } {
   const subject = `Application for ${job.title} position at ${job.company} – ${user.name}`
 
   const lines: string[] = []
   if (format === 'email') {
-    lines.push(`Dear ${job.manager || 'Hiring Manager'},`)
+    lines.push(APPLICATION_SALUTATION)
     lines.push('')
     lines.push(`I am writing to apply for the ${job.title} position at ${job.company} (${job.location}), as advertised on MedRep Connect Pro.`)
   } else {
     lines.push(`*Job Application via MedRep Connect Pro*`)
     lines.push('')
-    lines.push(`Hello ${job.manager || 'Hiring Manager'}, I would like to apply for the *${job.title}* position at *${job.company}* (${job.location}).`)
+    lines.push(`${APPLICATION_SALUTATION} I would like to apply for the *${job.title}* position at *${job.company}* (${job.location}).`)
   }
   lines.push('')
   lines.push(format === 'email' ? 'Please find my profile details below:' : '*My profile details:*')
@@ -92,16 +102,18 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
 
   lines.push('')
   if (format === 'email') {
-    lines.push('I would welcome the opportunity to discuss how my experience fits your requirement. Please feel free to reach out to me at the phone/email above.')
+    lines.push('I would welcome the opportunity to discuss how my experience fits your requirement. Please feel free to reach out to me at the phone number or email address given above.')
     lines.push('')
-    lines.push('Best regards,')
+    lines.push('Thank you for your time and consideration.')
+    lines.push('')
+    lines.push('Yours faithfully,')
     lines.push(user.name)
     lines.push('')
     lines.push(`— Sent via MedRep Connect Pro (platform by ${CREATOR.name}, ${CREATOR.role}).`)
   } else {
-    lines.push('Looking forward to your response. Please reach out to me at the contact above.')
+    lines.push('Thanking you. I look forward to your response and I am happy to share any further details you need.')
     lines.push('')
-    lines.push(`Regards,\n${user.name}`)
+    lines.push(`Yours faithfully,\n${user.name}`)
     lines.push('')
     lines.push(`_Sent via MedRep Connect Pro._`)
   }

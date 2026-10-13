@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import { useBackHandler } from './useBackHandler'
 
 export function Button({
   children,
@@ -76,6 +77,9 @@ export function Badge({ children, color = 'slate' }: { children: ReactNode; colo
 }
 
 export function Modal({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+  // The phone's back button closes the open sheet (page → sheet → page) instead
+  // of leaving the app.
+  useBackHandler(open, onClose)
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4 animate-fade-in" onClick={onClose}>
