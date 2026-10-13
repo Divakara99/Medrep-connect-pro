@@ -10,7 +10,6 @@ import { HomeScreen } from './screens/HomeScreen'
 import { PriorityScreen } from './screens/PriorityScreen'
 import { PlansScreen } from './screens/PlansScreen'
 import { AccountScreen } from './screens/AccountScreen'
-import { ApplicationsScreen } from './screens/ApplicationsScreen'
 import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
 import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
@@ -253,7 +252,6 @@ export default function App() {
             {tab === 'home' && 'Home'}
             {tab === 'priority' && 'Priority Jobs'}
             {tab === 'plans' && 'Plans'}
-            {tab === 'applications' && 'Applications'}
             {tab === 'ai' && 'AI Help'}
             {tab === 'account' && 'Account'}
           </span>
@@ -301,9 +299,6 @@ export default function App() {
       )}
       {tab === 'plans' && user && (
         <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
-      )}
-      {tab === 'applications' && user && (
-        <ApplicationsScreen user={user} resume={resume} />
       )}
       {tab === 'ai' && user && <AIChatScreen user={user} />}
       {tab === 'account' && user && (

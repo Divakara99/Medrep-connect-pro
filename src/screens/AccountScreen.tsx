@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { Button, Card, Badge } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
+import { ApplicationHistory } from '../components/ApplicationHistory'
 import { isSubscribed, type User } from '../data/auth'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
@@ -55,6 +56,8 @@ export function AccountScreen({
         onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })}
         onResumeChange={onResumeChange}
       />
+
+      <ApplicationHistory />
 
       {/* About card: same brand mark that ships as the PWA icon, plus the
           released version (package.json → build-time constant, never typed twice). */}

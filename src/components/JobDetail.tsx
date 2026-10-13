@@ -289,7 +289,7 @@ export function ApplyConfirmSheet({
             {channel === 'email'
               ? 'Your mail app will open — simply tap Send after reviewing.'
               : 'WhatsApp opens in a new tab with a pre-formatted message — tap Send to deliver it to the manager.'}
-            {' '}The application is also recorded in your Applications tab.
+            {' '}The application is also listed under Account → My applications.
           </div>
 
           <Button className="w-full" onClick={onConfirm} disabled={busy}>

@@ -23,7 +23,7 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 - **Priority** — pinned jobs + horizontally scrollable category filters.
 - **Plans** — every tier (5/10/15/30/90/180/365 days) stays selectable. Prices and durations come from the server catalog (`public.billing_plans`); Razorpay Checkout is the only payment path and shows whichever methods the merchant account has enabled. Legacy manual UPI requests remain reviewable by an admin.
 - **Account → Profile details** — private resume upload (PDF/DOC/DOCX, ≤ 2 MB). Files go to a private Supabase Storage bucket, are readable only by their owner, and are deleted after 30 days. Uploading never navigates away from the screen.
-- **Applications** — the user's application history, with the resume on file for reference.
+- **Account → My applications** — the user's application history (email and WhatsApp), listed under Account.
 - **Account** — fixed tagline **Job Seeker**; full profile editor (personal · education · experience).
 - **Job detail** — role, **city**, HQ, division, salary, experience, posted date and the point-wise description are visible to every signed-in user and are never blurred. Exactly five fields are sent only to active subscribers — company name, manager name, manager email, primary contact number and the optional (+) manager alternate number; free users see blurred placeholders instead of values. Apply is locked for free users.
 - **AI chat** — answers pricing/jobs questions; hard issues automatically escalate to admin tickets.
