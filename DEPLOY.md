@@ -6,6 +6,110 @@ PWA files. It runs on any static host. The build uses relative paths
 
 ---
 
+## Quick start — step by step
+
+Follow these steps in order. Each command is in a box with a **copy** button (top right of the box when you hover over it). You need Node.js 22, Git, your Supabase project, your Netlify site, and (for payments) a Razorpay account.
+
+### Step 1 — Get the code and check it (terminal)
+
+```bash
+git clone https://github.com/Divakara99/Medrep-connect-pro.git
+cd Medrep-connect-pro
+git checkout main
+npm ci
+npm run lint
+npm run build
+npm test
+```
+
+What each line does:
+
+| Command | Meaning |
+| --- | --- |
+| `git clone …` | Downloads the project into a folder named `Medrep-connect-pro`. |
+| `cd Medrep-connect-pro` | Moves into that folder. All later commands run from here. |
+| `git checkout main` | Uses the release branch that Netlify publishes. |
+| `npm ci` | Installs the exact dependency versions in `package-lock.json`. |
+| `npm run lint` | Checks the code for mistakes. It should report `0 errors`. |
+| `npm run build` | Type-checks and builds the website into `dist/`. It should end with `built in`. |
+| `npm test` | Runs the database and rule checks. Each line should end with `passed` or `agree on all 12 cases`. |
+
+If any step fails, stop and fix that step before continuing.
+
+### Step 2 — Create the database tables (SQL Editor, one click to copy)
+
+Run the migrations **in this order**, in the Supabase project that matches `VITE_SUPABASE_URL`. Each file is safe to run again.
+
+```bash
+npm run db:list          # shows the 9 files in the correct order
+npm run db:copy -- 1     # copies supabase/schema.sql to your clipboard
+```
+
+Then in the Supabase dashboard:
+
+1. Open **SQL Editor → New query**.
+2. Click in the editor and press **Ctrl+V** (Windows/Linux) or **⌘V** (Mac) to paste.
+3. Press **Run**. Wait for "Success", then go back to the terminal.
+4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 9`.
+
+**Prefer one paste?** Run `npm run db:copy -- all`, paste once, and press **Run**. If an error appears, fix it and run the same paste again: the files are safe to re-run.
+
+If the terminal says *"No clipboard tool was found"*, it prints the SQL instead. Select the text between `-----BEGIN SQL-----` and `-----END SQL-----` and copy it by hand.
+
+### Step 3 — Schedule the resume purge (SQL Editor)
+
+Resumes are deleted 30 days after upload. The schedule is set up in [section 4](#4-schedule-the-resume-retention-purge) below. Run it once after Step 2.
+
+### Step 4 — Deploy the payment and admin functions (terminal, Supabase CLI)
+
+These functions run on Supabase, not on Netlify. Netlify does not deploy them.
+
+```bash
+npx supabase login
+npx supabase functions deploy create-razorpay-order --project-ref <your-project-ref>
+npx supabase functions deploy verify-razorpay-payment --project-ref <your-project-ref>
+npx supabase functions deploy razorpay-webhook --project-ref <your-project-ref>
+npx supabase functions deploy create-upi-intent --project-ref <your-project-ref>
+npx supabase functions deploy admin-delete-user --project-ref <your-project-ref>
+```
+
+- `npx supabase login` opens a browser so you can sign in to Supabase. It does not ask for a password in the terminal.
+- Replace `<your-project-ref>` with the ID in your Supabase URL: `https://<your-project-ref>.supabase.co`.
+- The `create-upi-intent` line deploys the disabled version, so no new manual UPI payment can be created.
+
+### Step 5 — Add the secret keys (Supabase dashboard, never in chat or Git)
+
+In **Supabase → Edge Functions → Secrets**, add these three names and paste the values from your Razorpay dashboard:
+
+| Secret name | Where to get it |
+| --- | --- |
+| `RAZORPAY_KEY_ID` | Razorpay → Settings → API Keys (`rzp_test_…` for testing) |
+| `RAZORPAY_KEY_SECRET` | The secret shown with that key. Store it only here. |
+| `RAZORPAY_WEBHOOK_SECRET` | The secret you set on the Razorpay webhook (Step 7) |
+
+Use a matching pair from the same mode. Test with `rzp_test_` keys first.
+
+### Step 6 — Publish the website (Netlify)
+
+1. Open the Netlify site for the project, then **Site configuration → Environment variables**.
+2. If your Supabase project is not the built-in default, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the public anon key, not the secret key). See [`.env.example`](.env.example).
+3. Make sure the production branch is `main`, then click **Deploys → Trigger deploy**.
+
+### Step 7 — Connect Razorpay webhooks
+
+In the Razorpay dashboard, add the webhook URL `https://<your-project-ref>.supabase.co/functions/v1/razorpay-webhook`, subscribe to `payment.captured`, and set the same secret as `RAZORPAY_WEBHOOK_SECRET`.
+
+### Step 8 — Check it works
+
+- [ ] Sign in, open **Plans**, pick a plan, and check the amount shown matches the catalogue price.
+- [ ] Open **Account**: your profile, your resume card and **My applications** load.
+- [ ] Upload a small PDF on **Account → Profile details**, then download it again.
+- [ ] Open the **Terms** link on **Plans** (blue "Click here") and check the full text opens.
+
+For the detailed explanations, troubleshooting and the migration table, read the sections below.
+
+---
+
 ## Primary deployment — Netlify
 
 Netlify is the production host for this app. The live site is

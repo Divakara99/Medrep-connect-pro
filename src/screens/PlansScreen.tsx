@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
+import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
   createRazorpayOrder,
@@ -195,15 +196,13 @@ export function PlansScreen({
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-28 pt-4 space-y-5">
-      <Card className="p-5 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
-        <div className="text-xs font-bold uppercase tracking-widest text-brand-800">Subscription</div>
-        <h1 className="text-xl font-extrabold text-slate-900 mt-1">Unlock company details and apply</h1>
-        <p className="text-sm text-slate-800 mt-1">
-          Choose a plan and pay inside secure Razorpay Checkout. Use a credit/debit card or an available UPI app/QR option. We never ask you to send money to a UPI ID.
-        </p>
+      <Card className="p-3 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-brand-800">Subscription</div>
+        <h1 className="text-base font-extrabold text-slate-900 leading-tight">Unlock company details and apply</h1>
+        <p className="text-xs text-slate-700 mt-0.5">Pay inside secure Razorpay Checkout. Access starts once the server verifies payment.</p>
         {unlocked && activeUntil && (
-          <div className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-emerald-950 bg-emerald-100 px-3 py-1.5 rounded-full ring-1 ring-emerald-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
+          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-950 bg-emerald-100 px-2.5 py-1 rounded-full ring-1 ring-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
           </div>
         )}
       </Card>
@@ -251,7 +250,7 @@ export function PlansScreen({
 
       <Card className="p-4">
         <div className="text-sm font-bold text-slate-900 mb-1">Plan benefits</div>
-        <ul className="text-sm text-slate-800 space-y-1 list-disc pl-5">
+        <ul className="text-xs text-slate-800 space-y-1 list-disc pl-5">
           <li>Full company name, manager and contact number for every job</li>
           <li>One-tap Apply with confirmation</li>
           <li>Priority job alerts and pinned jobs</li>
@@ -264,7 +263,7 @@ export function PlansScreen({
           <div className="text-sm font-bold text-slate-900">How payment works</div>
           <Badge color="slate">Razorpay Checkout only</Badge>
         </div>
-        <p className="text-sm text-slate-700">
+        <p className="text-xs text-slate-700">
           Every plan is paid inside secure Razorpay Checkout, using whichever methods the merchant account has enabled —
           credit/debit cards, netbanking, and UPI apps such as PhonePe, Google Pay or Paytm, plus a Razorpay QR where
           offered. We never ask you to transfer money to a personal UPI ID or bank account, and merchant banking details
@@ -279,11 +278,18 @@ export function PlansScreen({
           <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
           <p>• One plan per payment. Renewals add days to your existing expiry.</p>
           <p>• Do not share your bank PIN, OTP or passwords with anyone, including support.</p>
-          <p>• By continuing you agree to the standard MedRep Connect Pro terms and conditions.</p>
+          <p>
+            • By continuing you agree to the MedRep Connect Pro terms and conditions.{' '}
+            <button
+              type="button"
+              onClick={() => setShowTerms(true)}
+              className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-800"
+            >
+              Click here
+            </button>{' '}
+            to read the full terms.
+          </p>
         </div>
-        <Button variant="secondary" className="mt-2.5 px-3.5 py-2 text-xs font-bold" onClick={() => setShowTerms(true)}>
-          Click Here
-        </Button>
       </Card>
 
       <Card className="p-4">
@@ -397,21 +403,22 @@ export function PlansScreen({
         )}
       </Modal>
 
-      <Modal open={showTerms} onClose={() => setShowTerms(false)} title="Standard terms and conditions">
-        <div className="space-y-3 text-sm text-slate-800 leading-relaxed">
+      <Modal open={showTerms} onClose={() => setShowTerms(false)} title="Terms and conditions">
+        <div className="space-y-4 text-sm text-slate-800 leading-relaxed">
           <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-900">
-            Draft — final wording is pending owner approval. The clauses below describe how the platform works today; the
-            published legal text will replace them without changing plan pricing or refund handling.
+            Draft — final wording is pending owner approval. Items in [square brackets] are completed before publication.
           </p>
-          <p><span className="font-bold">1. Platform role.</span> MedRep Connect Pro is a job-listing and subscription platform for pharma and multi-industry field roles. We list vacancies in good faith; hiring decisions rest with the employing companies and their managers.</p>
-          <p><span className="font-bold">2. Subscriptions.</span> Plans unlock company names, manager contacts and one-tap apply for the purchased period. Plan validity and amounts are fixed by the server-side catalog shown at checkout.</p>
-          <p><span className="font-bold">3. Payments.</span> Online payments run through Razorpay Checkout. Alternative payment options (manual UPI/bank transfer), when offered, are verified manually by an admin against the merchant bank statement before access activates.</p>
-          <p><span className="font-bold">4. Refunds.</span> If a payment was captured but access could not be activated, contact support with the payment ID/UTR. Verified duplicate or failed captures are reviewed and refunded to the source account.</p>
-          <p><span className="font-bold">5. Accounts.</span> Keep your profile and resume accurate. Applications sent through the platform are shared with the hiring manager of that vacancy. Do not share your account password, bank PIN or OTP with anyone.</p>
-          <p><span className="font-bold">6. Acceptable use.</span> Do not scrape listings, redistribute confidential vacancy details, or misuse manager contacts. Accounts abusing the service may be suspended.</p>
-          <p className="text-xs text-slate-500">These standard terms apply to all MedRep Connect Pro users. For questions, raise a support ticket from the AI Help / Account screens.</p>
+          <p className="text-xs text-slate-500">Last updated {TERMS_LAST_UPDATED}. These terms apply to every MedRep Connect Pro user.</p>
+          {TERMS_SECTIONS.map((section, index) => (
+            <section key={section.title} className="space-y-1.5">
+              <h3 className="font-bold text-slate-900">{index + 1}. {section.title}</h3>
+              {section.paragraphs.map((text) => (
+                <p key={text}>{text}</p>
+              ))}
+            </section>
+          ))}
         </div>
-        <Button className="w-full mt-4" onClick={() => setShowTerms(false)}>Close</Button>
+        <Button className="w-full mt-5" onClick={() => setShowTerms(false)}>Close</Button>
       </Modal>
     </div>
   )

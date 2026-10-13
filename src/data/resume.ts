@@ -47,6 +47,19 @@ function resolveContentType(file: File): string {
 }
 const SIGNED_URL_SECONDS = 300
 
+// In-memory only (never localStorage). Lets the Account screen paint at once
+// while the list refreshes in the background. Cleared on sign-out.
+let resumeCache: ResumeRecord[] | null = null
+
+/** The last known resume list, or null if it has not been loaded this session. */
+export function getCachedResumes(): ResumeRecord[] | null {
+  return resumeCache
+}
+
+export function clearResumeCache(): void {
+  resumeCache = null
+}
+
 // The earlier build kept the resume as a data: URL in localStorage, where any
 // script or shared device could read it. Purge every copy on start-up.
 try {
@@ -109,7 +122,9 @@ export async function listResumes(): Promise<ResumeRecord[]> {
     .order('uploaded_at', { ascending: false })
     .limit(20)
   if (error) throw new Error(failureMessage(error, 'Resumes could not be loaded.'))
-  return ((data ?? []) as unknown as ResumeRow[]).map(toResumeRecord)
+  const records = ((data ?? []) as unknown as ResumeRow[]).map(toResumeRecord)
+  resumeCache = records
+  return records
 }
 
 export async function getLatestResume(): Promise<ResumeRecord | null> {
@@ -162,13 +177,16 @@ export async function uploadResume(file: File): Promise<UploadResult> {
   if (error || !data) {
     return { ok: false, error: failureMessage(error, 'The resume was saved but could not be confirmed. Please refresh.') }
   }
-  return { ok: true, resume: toResumeRecord(data as unknown as ResumeRow) }
+  const resume = toResumeRecord(data as unknown as ResumeRow)
+  resumeCache = [resume, ...(resumeCache ?? []).filter((item) => item.id !== resume.id)]
+  return { ok: true, resume }
 }
 
 export async function deleteResume(resume: ResumeRecord): Promise<{ ok: true } | { ok: false; error: string }> {
   const { error: rowError } = await supabase.from('resume_documents').delete().eq('id', resume.id)
   if (rowError) return { ok: false, error: failureMessage(rowError, 'The resume record could not be removed.') }
   await supabase.storage.from(BUCKET).remove([resume.storagePath])
+  resumeCache = resumeCache?.filter((item) => item.id !== resume.id) ?? null
   return { ok: true }
 }
 

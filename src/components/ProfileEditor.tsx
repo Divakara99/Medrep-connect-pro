@@ -149,7 +149,7 @@ export const ProfileEditor = forwardRef<
           <div className="font-bold text-slate-900">Education</div>
           <Button variant="secondary" onClick={addEducation}>+ Add</Button>
         </div>
-        {p.education.length === 0 && <div className="text-sm text-slate-500">Add your degree(s).</div>}
+        {p.education.length === 0 && <div className="text-xs text-slate-500">Add your degree(s).</div>}
         {p.education.map((e) => (
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -170,7 +170,7 @@ export const ProfileEditor = forwardRef<
           <div className="font-bold text-slate-900">Experience</div>
           <Button variant="secondary" onClick={addExp}>+ Add</Button>
         </div>
-        {p.experience.length === 0 && <div className="text-sm text-slate-500">Add work experience (optional for freshers).</div>}
+        {p.experience.length === 0 && <div className="text-xs text-slate-500">Add work experience (optional for freshers).</div>}
         {p.experience.map((e) => (
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

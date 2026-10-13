@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "icons": "node scripts/generate-icons.mjs",
+    "db:list": "node scripts/copy-sql.mjs list",
+    "db:copy": "node scripts/copy-sql.mjs copy",
     "lint": "oxlint",
     "test:security": "node scripts/test-secure-jobs.mjs",
     "test:billing": "node scripts/test-billing-plans.mjs",

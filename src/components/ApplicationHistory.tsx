@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Badge, Card } from './ui'
-import { listMyApplications, type ApplicationRecord } from '../data/apply'
+import { getCachedMyApplications, listMyApplications, type ApplicationRecord } from '../data/apply'
 
 /**
  * "My applications": every email / WhatsApp application the user has sent.
- * Shown in Account, right after the profile details, so the history stays
- * reachable now that Applications is no longer a bottom-nav tab.
+ * Shown in Account, right after the profile details. It paints from the last
+ * known list at once and refreshes in the background.
  */
 export function ApplicationHistory() {
-  const [applications, setApplications] = useState<ApplicationRecord[]>([])
+  const [applications, setApplications] = useState<ApplicationRecord[]>(() => getCachedMyApplications() ?? [])
+  const [loaded, setLoaded] = useState(() => getCachedMyApplications() !== null)
   const [applicationsError, setApplicationsError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -17,6 +18,8 @@ export function ApplicationHistory() {
       setApplicationsError(null)
     } catch (cause) {
       setApplicationsError(cause instanceof Error ? cause.message : 'Applications could not be loaded.')
+    } finally {
+      setLoaded(true)
     }
   }, [])
 
@@ -26,12 +29,14 @@ export function ApplicationHistory() {
     <Card className="p-4">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div className="text-sm font-bold text-slate-900">My applications</div>
-        <Badge color="slate">{applications.length} sent</Badge>
+        <Badge color="slate">{loaded ? `${applications.length} sent` : 'Loading…'}</Badge>
       </div>
       {applicationsError ? (
-        <p role="alert" className="text-sm font-semibold text-red-800">{applicationsError}</p>
+        <p role="alert" className="text-xs font-semibold text-red-800">{applicationsError}</p>
+      ) : !loaded ? (
+        <p role="status" className="text-xs text-slate-600">Loading your applications…</p>
       ) : applications.length === 0 ? (
-        <p className="text-sm text-slate-600">No applications yet. Open a job and tap Apply — it will be listed here.</p>
+        <p className="text-xs text-slate-600">No applications yet. Open a job and tap Apply — it will be listed here.</p>
       ) : (
         <div className="space-y-2">
           {applications.map((application) => (

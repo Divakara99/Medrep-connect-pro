@@ -44,7 +44,7 @@ export function AccountScreen({
 
       <Card className="p-4">
         <h2 className="font-bold text-slate-900">Subscription validity</h2>
-        <p className="text-sm text-slate-700 mt-1">{unlocked && user.subscribedUntil
+        <p className="text-xs text-slate-700 mt-1">{unlocked && user.subscribedUntil
           ? `Active until ${new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}. Renewals extend the current expiry; new plans start after server-verified payment.`
           : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
       </Card>

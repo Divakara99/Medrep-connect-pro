@@ -3,6 +3,7 @@ import { Badge, Button, Card } from './ui'
 import {
   RESUME_RETENTION_DAYS,
   deleteResume,
+  getCachedResumes,
   listResumes,
   resumeDownloadUrl,
   retentionLabel,
@@ -18,8 +19,10 @@ import {
  * `onResumeChange` keeps the app-wide resume (used by the apply sheet) in sync.
  */
 export function ResumeCard({ onResumeChange }: { onResumeChange?: (resume: ResumeRecord | null) => void }) {
-  const [resume, setResume] = useState<ResumeRecord | null>(null)
-  const [resumesLoading, setResumesLoading] = useState(true)
+  // Start from the last known list so the card paints at once; the fresh list
+  // replaces it in the background.
+  const [resume, setResume] = useState<ResumeRecord | null>(() => getCachedResumes()?.[0] ?? null)
+  const [resumesLoading, setResumesLoading] = useState(() => getCachedResumes() === null)
   const [uploading, setUploading] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null)
   const [storageReady, setStorageReady] = useState(true)
@@ -104,7 +107,7 @@ export function ResumeCard({ onResumeChange }: { onResumeChange?: (resume: Resum
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Resume / CV</div>
-          <div className="text-sm text-slate-700 mt-0.5">
+          <div className="text-xs text-slate-700 mt-0.5">
             PDF, DOC or DOCX · max 2 MB · private · automatically deleted after {RESUME_RETENTION_DAYS} days.
           </div>
         </div>

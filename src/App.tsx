@@ -15,8 +15,8 @@ import { Wordmark } from './components/Logo'
 import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
 import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
-import { openApplication } from './data/apply'
-import { getLatestResume, type ResumeRecord } from './data/resume'
+import { clearMyApplicationCache, openApplication } from './data/apply'
+import { clearResumeCache, getLatestResume, type ResumeRecord } from './data/resume'
 import { refreshNotificationsFromServer, unreadCount } from './data/notifications'
 import { clearPaymentCache } from './data/payments'
 
@@ -101,13 +101,13 @@ export default function App() {
         setView(adminPortal ? 'admin-login' : 'login')
       } else if (event === 'SIGNED_OUT') {
         ++generation
-        clearPaymentCache()
+        clearPaymentCache(); clearResumeCache(); clearMyApplicationCache()
         clearJobs()
         setRecoveryMode(false)
         setUser(null)
         setView(adminPortal ? 'admin-login' : 'login')
       } else {
-        if (event === 'SIGNED_IN') { clearPaymentCache(); clearJobs() }
+        if (event === 'SIGNED_IN') { clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearJobs() }
         if (event === 'USER_UPDATED') setRecoveryMode(false)
         restore(event === 'SIGNED_IN')
       }
@@ -195,7 +195,7 @@ export default function App() {
   }
 
   async function onLogout() {
-    clearPaymentCache()
+    clearPaymentCache(); clearResumeCache(); clearMyApplicationCache()
     clearJobs()
     await doLogout()
     setRecoveryMode(false)
