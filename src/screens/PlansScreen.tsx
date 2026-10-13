@@ -72,6 +72,12 @@ export function PlansScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id])
 
+  // Clicking a plan only selects it (the blue ring moves there). Checkout opens
+  // from the selected plan's own button, so nothing is charged by accident.
+  function selectPlan(planId: string) {
+    setSelectedId(planId)
+  }
+
   function openCheckout(plan: Plan) {
     setSelectedId(plan.id)
     setError(null)
@@ -212,7 +218,11 @@ export function PlansScreen({
         {plans.map((plan) => {
           const isSelected = selected.id === plan.id
           return (
-            <Card key={plan.id} className={`p-4 relative ${isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : ''} ${plan.popular && !isSelected ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}>
+            <Card
+              key={plan.id}
+              onClick={() => selectPlan(plan.id)}
+              className={`p-4 relative cursor-pointer transition ${isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : 'hover:ring-1 hover:ring-brand-300'} ${plan.popular && !isSelected ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}
+            >
               {isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
               {!isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
               <div className="flex items-center justify-between gap-2">
@@ -230,7 +240,7 @@ export function PlansScreen({
               <Button
                 variant={isSelected ? 'primary' : 'secondary'}
                 className="w-full mt-3"
-                onClick={() => openCheckout(plan)}
+                onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
               >
                 {isSelected ? (unlocked ? 'Extend / Renew' : 'Choose plan') : 'Select plan'}
               </Button>
