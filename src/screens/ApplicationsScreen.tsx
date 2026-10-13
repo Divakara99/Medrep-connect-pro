@@ -72,12 +72,12 @@ export function ApplicationsScreen({ onClose, onBrowseJobs }: { onClose: () => v
                 <span aria-hidden className="text-xl">{application.channel === 'email' ? '✉️' : '💬'}</span>
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold text-slate-900 truncate">{application.jobTitle}</div>
-                  <div className="text-sm text-slate-700 truncate">
+                  <div className="text-sm text-slate-700 break-words">
                     {application.company || 'Company confidential'} · {application.channel === 'email' ? 'Email' : 'WhatsApp'} to{' '}
                     {application.manager || 'manager'}
                   </div>
                   {application.to && (
-                    <div className="text-xs text-slate-600 truncate">Sent to {application.to}</div>
+                    <div className="text-xs text-slate-600 break-all">Sent to {application.to}</div>
                   )}
                   <div className="text-xs text-slate-500 mt-0.5">
                     {application.sentAt ? new Date(application.sentAt).toLocaleString('en-IN') : '—'}

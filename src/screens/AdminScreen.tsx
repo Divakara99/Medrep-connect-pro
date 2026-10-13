@@ -36,6 +36,8 @@ import {
   listAllSupportRequests,
   requestEmail,
   requestName,
+  SUPPORT_REQUESTS_SETUP_STEPS,
+  supportRequestsSetupMissing,
   ticketNumber,
   updateSupportRequest,
   type AiVerdict,
@@ -222,29 +224,40 @@ function ApplicationsTab() {
       ) : (
         <div className="grid gap-2">
           {queue.map((m) => (
-            <Card key={m.id} className="p-3">
-              {/* Info row */}
+            <Card
+              key={m.id}
+              onClick={() => setView(m)}
+              className="p-3 active:bg-slate-50 transition cursor-pointer"
+            >
+              {/* One line per fact, wrapping instead of clipping, so a phone
+                  shows the same information a desktop does. */}
               <div className="flex items-start gap-3">
-                <div className={`w-10 h-10 rounded-lg grid place-items-center text-lg shrink-0 ${m.channel === 'email' ? 'bg-brand-100 text-brand-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                <div className={`w-9 h-9 rounded-lg grid place-items-center text-base shrink-0 ${m.channel === 'email' ? 'bg-brand-100 text-brand-700' : 'bg-emerald-100 text-emerald-700'}`}>
                   {m.channel === 'email' ? '✉️' : '💬'}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="font-semibold text-slate-900 truncate">{m.applicantName}</div>
+                    <span className="font-semibold text-slate-900 break-words">{m.applicantName}</span>
                     <Badge color={m.channel === 'email' ? 'brand' : 'green'}>{m.channel === 'email' ? 'Email' : 'WhatsApp'}</Badge>
                   </div>
-                  <div className="text-xs text-slate-500 truncate">
-                    {m.jobTitle} at {m.company} → {m.manager} ({m.to})
+                  <div className="text-sm text-slate-800 break-words">{m.jobTitle}</div>
+                  <div className="text-xs text-slate-600 break-words">
+                    {m.company || 'Company confidential'} · to {m.manager}
                   </div>
-                  <div className="text-[11px] text-slate-400">
-                {new Date(m.sentAt).toLocaleString()}
-                {m.resumeFileName ? ` · resume on file: ${m.resumeFileName}` : ''}
-              </div>
+                  <div className="text-xs text-slate-500 break-all">{m.to}</div>
+                  <div className="text-[11px] text-slate-400 break-words">
+                    {new Date(m.sentAt).toLocaleString('en-IN')}
+                    {m.resumeFileName ? ` · resume: ${m.resumeFileName}` : ''}
+                  </div>
                 </div>
+                <span aria-hidden className="text-slate-300 text-xl leading-none shrink-0">›</span>
               </div>
-              {/* Action row — always visible on mobile */}
-              <div className="flex items-center gap-2 mt-3">
-                <Button variant="secondary" className="flex-1" onClick={() => setView(m)}>
+              <div className="mt-2.5">
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => setView(m)}
+                >
                   👁 View full application
                 </Button>
               </div>
@@ -255,14 +268,17 @@ function ApplicationsTab() {
       <Modal open={!!view} onClose={() => setView(null)} title={view?.channel === 'whatsapp' ? 'WhatsApp application' : 'Email application'}>
         {view && (
           <div className="space-y-3">
-            <div className="text-xs text-slate-500 space-y-0.5">
-              <div><span className="font-semibold">Channel:</span> {view.channel === 'email' ? 'Email' : 'WhatsApp'}</div>
-              <div><span className="font-semibold">To:</span> {view.to}</div>
-              <div><span className="font-semibold">From (candidate):</span> {view.applicantEmail}</div>
-              {view.subject && <div><span className="font-semibold">Subject:</span> {view.subject}</div>}
-              <div><span className="font-semibold">When:</span> {new Date(view.sentAt).toLocaleString()}</div>
+            <div className="text-xs text-slate-500 space-y-1">
+              <div className="break-words"><span className="font-semibold">Channel:</span> {view.channel === 'email' ? 'Email' : 'WhatsApp'}</div>
+              <div className="break-all"><span className="font-semibold">To:</span> {view.to}</div>
+              <div className="break-all"><span className="font-semibold">From (candidate):</span> {view.applicantEmail}</div>
+              {view.subject && <div className="break-words"><span className="font-semibold">Subject:</span> {view.subject}</div>}
+              <div className="break-words"><span className="font-semibold">When:</span> {new Date(view.sentAt).toLocaleString('en-IN')}</div>
+              {view.resumeFileName && (
+                <div className="break-words"><span className="font-semibold">Resume on file:</span> {view.resumeFileName}</div>
+              )}
             </div>
-            <pre className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 text-xs overflow-auto whitespace-pre-wrap max-h-96 text-slate-800">{view.body}</pre>
+            <pre className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3 text-xs overflow-auto whitespace-pre-wrap break-words max-h-96 text-slate-800">{view.body}</pre>
           </div>
         )}
       </Modal>
@@ -770,7 +786,20 @@ function TicketsTab({ requests, error, onMutate }: { requests: SupportRequest[];
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold text-slate-900">Refund &amp; support requests ({openCount} open · {requests.length} total)</h2>
       </div>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {error && (supportRequestsSetupMissing(error) ? (
+        // The table is created by supabase/support_requests.sql. A missing
+        // migration is a setup step, not a failure — so say what to run.
+        <Card className="p-3 bg-amber-50 ring-1 ring-amber-200 space-y-1.5">
+          <div className="text-sm font-bold text-amber-900">Requests are not switched on in this project yet</div>
+          <div className="text-xs text-amber-900">
+            Until the Requests migration has been run, users cannot raise refund or support requests and this page
+            stays empty. It takes one paste:
+          </div>
+          <div className="text-xs text-amber-900 font-medium">{SUPPORT_REQUESTS_SETUP_STEPS}</div>
+        </Card>
+      ) : (
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>
+      ))}
       {actionError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{actionError}</p>}
       {requests.length === 0 ? (
         <Card className="p-8 text-center text-sm text-slate-500">No refund or support requests yet. Requests raised from AI Help appear here.</Card>

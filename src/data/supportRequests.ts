@@ -171,3 +171,23 @@ export function requestName(request: SupportRequest): string {
 export function ticketNumber(id: string): string {
   return id.replace(/-/g, '').slice(-5).toUpperCase()
 }
+
+/**
+ * Has the Requests migration been run in this project yet?
+ *
+ * The admin Requests page reads public.support_requests, which is created by
+ * supabase/support_requests.sql. Until that file has been run, PostgREST answers
+ * "Could not find the table 'public.support_requests' in the schema cache" — a
+ * setup gap, not a fault in the app, so the console says exactly what to run
+ * instead of showing the raw error in red.
+ */
+export function supportRequestsSetupMissing(message: string): boolean {
+  return /support_requests/i.test(message)
+    && /schema cache|could not find|does not exist|relation/i.test(message)
+}
+
+export const SUPPORT_REQUESTS_SETUP_STEPS = [
+  'In Supabase open SQL Editor → New query.',
+  'In the project terminal run: npm run db:copy -- 10 (copies supabase/support_requests.sql).',
+  'Paste it into the query box and press Run, then reload this page.',
+].join(' ')

@@ -22,7 +22,7 @@
     "test:vacancy-rules": "node scripts/test-vacancy-rules.mjs",
     "test": "npm run test:security && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:descriptions && npm run test:support && npm run test:refund-check && npm run test:vacancy-team && npm run test:vacancy-rules && npm run test:push",
     "preview": "vite preview",
-    "test:push": "node scripts/test-push-rules.mjs && node scripts/test-admin-access-rules.mjs && node scripts/test-webpush-crypto.mjs && node scripts/test-admin-mfa-toggle.mjs && node scripts/test-push-subscriptions.mjs"
+    "test:push": "node scripts/test-push-rules.mjs && node scripts/test-admin-access-rules.mjs && node scripts/test-webpush-crypto.mjs && node scripts/test-send-push-function.mjs && node scripts/test-admin-mfa-toggle.mjs && node scripts/test-push-subscriptions.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
