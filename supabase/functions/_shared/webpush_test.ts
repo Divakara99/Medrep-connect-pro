@@ -40,8 +40,14 @@ function concat(...parts: Uint8Array[]): Uint8Array {
 }
 
 async function hkdf(ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, bits: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits'])
-  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, bits))
+  // The casts keep the file type-checkable in Deno, whose lib types want an
+  // ArrayBuffer-backed view (the same casts the shipping helper uses).
+  const key = await crypto.subtle.importKey('raw', ikm as unknown as BufferSource, 'HKDF', false, ['deriveBits'])
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt as unknown as BufferSource, info: info as unknown as BufferSource },
+    key,
+    bits,
+  ))
 }
 
 /** A browser decrypting what the server sent (RFC 8291). */
@@ -53,7 +59,7 @@ async function decrypt(body: Uint8Array, privateKey: CryptoKey, publicBytes: Uin
   const ciphertext = body.slice(21 + keyIdLength)
 
   const serverPublicKey = await crypto.subtle.importKey(
-    'raw', serverPublicBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, [],
+    'raw', serverPublicBytes as unknown as BufferSource, { name: 'ECDH', namedCurve: 'P-256' }, false, [],
   )
   const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: serverPublicKey }, privateKey, 256))
   const ikm = await hkdf(
@@ -64,8 +70,12 @@ async function decrypt(body: Uint8Array, privateKey: CryptoKey, publicBytes: Uin
   )
   const cek = await hkdf(ikm, salt, encoder.encode('Content-Encoding: aes128gcm\0'), 128)
   const nonce = await hkdf(ikm, salt, encoder.encode('Content-Encoding: nonce\0'), 96)
-  const key = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['decrypt'])
-  const plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, key, ciphertext))
+  const key = await crypto.subtle.importKey('raw', cek as unknown as BufferSource, 'AES-GCM', false, ['decrypt'])
+  const plaintext = new Uint8Array(await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: nonce as unknown as BufferSource, tagLength: 128 },
+    key,
+    ciphertext as unknown as BufferSource,
+  ))
   if (plaintext[plaintext.length - 1] !== 2) throw new Error('the final record must end with the 0x02 delimiter')
   return decoder.decode(plaintext.slice(0, -1))
 }
@@ -138,13 +148,13 @@ Deno.test('VAPID JWT is signed for the push service origin', async () => {
   if (claims.exp * 1000 <= Date.now()) throw new Error('the token must not be expired')
 
   const verifyKey = await crypto.subtle.importKey(
-    'raw', base64UrlToBytes(vapid.publicKey), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
+    'raw', base64UrlToBytes(vapid.publicKey) as unknown as BufferSource, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
   )
   const valid = await crypto.subtle.verify(
     { name: 'ECDSA', hash: 'SHA-256' },
     verifyKey,
-    base64UrlToBytes(signature),
-    encoder.encode(`${header}.${payload}`),
+    base64UrlToBytes(signature) as unknown as BufferSource,
+    encoder.encode(`${header}.${payload}`) as unknown as BufferSource,
   )
   if (!valid) throw new Error('the VAPID JWT signature must verify against the public key')
 })
