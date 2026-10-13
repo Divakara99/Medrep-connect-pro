@@ -72,13 +72,14 @@ npx supabase functions deploy razorpay-webhook --project-ref <your-project-ref>
 npx supabase functions deploy create-upi-intent --project-ref <your-project-ref>
 npx supabase functions deploy admin-delete-user --project-ref <your-project-ref>
 npx supabase functions deploy admin-manage-employees --project-ref <your-project-ref>
-npx supabase functions deploy send-push --project-ref <your-project-ref>
+npx supabase functions deploy send-push --project-ref <your-project-ref> --use-api
 ```
 
 - `npx supabase login` opens a browser so you can sign in to Supabase. It does not ask for a password in the terminal.
 - Replace `<your-project-ref>` with the ID in your Supabase URL: `https://<your-project-ref>.supabase.co`.
 - The `create-upi-intent` line deploys the disabled version, so no new manual UPI payment can be created.
 - The `admin-manage-employees` line deploys the function that creates, resets and deletes vacancy team logins. It needs the migration in Step 2 (`vacancy_team.sql`) first.
+- **Re-deploy `admin-delete-user`, `review-manual-upi-payment` and `admin-manage-employees` from this release even if you deployed them before:** each of them now reads the sign-in-code switch, so an administrator who is allowed into the console is also allowed to use the buttons there. Without the re-deploy the functions keep refusing a password-only session after the code is switched OFF.
 - The `send-push` line deploys the phone-notification sender. It needs Step 2 (`push_subscriptions.sql`) and the three VAPID secrets from Step 5a first, otherwise users can switch notifications on but nothing can be delivered.
 
 ### Step 5 — Add the secret keys (Supabase dashboard, never in chat or Git)
