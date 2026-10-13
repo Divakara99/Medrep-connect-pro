@@ -201,6 +201,15 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
             </form>
           </Card>
 
+          <div className="mt-3 text-center">
+            <a
+              href="/?portal=vacancy"
+              className="inline-block rounded-lg px-3 py-1.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-300 hover:bg-brand-50"
+            >
+              Employee login
+            </a>
+          </div>
+
           <footer className="mt-5 text-center">
             <p className="text-sm font-medium text-slate-700">Use Forgot password if you cannot sign in. Never share your password or payment PIN.</p>
           </footer>

@@ -51,15 +51,15 @@ export function answer(q: string, subscribed: boolean): Answer {
   }
 
   if (intent === 'refund') {
+    // The chat screen runs the guided refund check itself (see AIChatScreen).
+    // This fallback only explains the policy.
     return {
       intent,
       text:
         'Refund policy 💳\n\n' +
-        '• If you were charged and your plan did NOT activate, or you were charged twice / a wrong amount, you are eligible for a review.\n' +
-        '• Approved refunds are returned to the original payment method (Razorpay / UPI) and tracked with a refund reference/UTR.\n' +
-        '• Refund requests are reviewed and approved by the admin in the Payments section — usually within 24–48 hours.\n\n' +
-        'Would you like me to raise a refund request ticket with your transaction details? The admin will review and update you.',
-      askTicket: { kind: 'refund', subject: 'Refund request' },
+        '• Refunds are only possible when money was deducted but your plan did not activate, you were charged twice for the same plan, or a payment failed but money was debited.\n' +
+        '• Once a plan is active, payments are otherwise non-refundable (see Terms section 6).\n\n' +
+        'Tap "Payment & refunds" or type "refund" and I will check your payment with you step by step.',
     }
   }
 
@@ -217,6 +217,6 @@ export const TICKET_ASK = {
 export function ticketCreatedMsg(kind: 'support' | 'refund', id: string): string {
   const num = id.slice(-5).toUpperCase()
   return kind === 'refund'
-    ? `✅ Refund request ticket #${num} created with your transaction details. The admin will review it in the Payments section and process approved refunds via Razorpay/UPI with a refund reference. You'll see updates under Tickets.`
-    : `✅ Support ticket #${num} created. The admin will respond shortly — track it under Tickets.`
+    ? `✅ Refund request #${num} is open. We sent the reason, your payment details and your account details to the administrator. Track it under Account → My requests.`
+    : `✅ Support request #${num} is open. The administrator will reply in Account → My requests.`
 }

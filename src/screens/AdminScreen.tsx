@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
+import { Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { VacancyForm } from '../components/VacancyForm'
+import { VacancyTeamAdmin } from '../components/VacancyTeamAdmin'
 import { Wordmark } from '../components/Logo'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 import { currentUser, deleteUserAccount, getUsers, grantManualAccess, refreshAdminUsers, type User } from '../data/auth'
 import {
-  addJob,
-  CATEGORIES,
   deleteJob,
-  descriptionPoints,
   getJobs,
   getLegacyJobs,
   importLegacyJobs,
   loadAdminJobs,
   sortedJobs,
   togglePin,
-  updateJob,
   type Job,
 } from '../data/jobs'
+import {
+  deleteReasonProblem,
+  paymentStatusLabel,
+  paymentStatusTone,
+  paymentTotals,
+  paymentTypeLabel,
+  type PaymentLike,
+} from '../data/vacancyRules'
 import { getAllPlansIncludingRetired, refreshPlans, savePlans, type Plan } from '../data/plans'
 import {
   getPayments,
@@ -26,14 +32,23 @@ import {
   reviewManualUpiPayment,
   type PaymentRecord,
 } from '../data/payments'
-import { findConfidentialContact } from '../data/jobDescription'
-import { getTickets, updateTicket, type Ticket } from '../data/tickets'
+import {
+  listAllSupportRequests,
+  requestEmail,
+  requestName,
+  ticketNumber,
+  updateSupportRequest,
+  type AiVerdict,
+  type SupportRequest,
+  type SupportStatus,
+} from '../data/supportRequests'
+import { reasonLabel } from '../data/refundCheck'
 import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
 import { broadcast } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
 import { getSyncStatus } from '../data/supabase'
 
-type AdminTab = 'dashboard' | 'vacancies' | 'plans' | 'payments' | 'applications' | 'tickets' | 'users' | 'profile'
+type AdminTab = 'dashboard' | 'vacancies' | 'team' | 'plans' | 'payments' | 'applications' | 'tickets' | 'users' | 'profile'
 
 const TABS: { id: AdminTab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -41,7 +56,8 @@ const TABS: { id: AdminTab; label: string; icon: string }[] = [
   { id: 'plans', label: 'Plans', icon: '💎' },
   { id: 'payments', label: 'Payments', icon: '💳' },
   { id: 'applications', label: 'Applications', icon: '✉️' },
-  { id: 'tickets', label: 'Tickets', icon: '🎫' },
+  { id: 'tickets', label: 'Requests', icon: '🎫' },
+  { id: 'team', label: 'Vacancy team', icon: '👥' },
   { id: 'users', label: 'Users', icon: '👥' },
   { id: 'profile', label: 'Profile', icon: '👤' },
 ]
@@ -67,6 +83,19 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
   const [version, setVersion] = useState(0) // re-render trigger after mutations
   const bump = () => setVersion((v) => v + 1)
+  const [requests, setRequests] = useState<SupportRequest[]>([])
+  const [requestsError, setRequestsError] = useState<string | null>(null)
+
+  // Refund and support requests live on the server; reload after each admin change.
+  useEffect(() => {
+    let active = true
+    void listAllSupportRequests()
+      .then((list) => { if (active) { setRequests(list); setRequestsError(null) } })
+      .catch((cause: unknown) => {
+        if (active) setRequestsError(cause instanceof Error ? cause.message : 'Requests could not be loaded.')
+      })
+    return () => { active = false }
+  }, [version])
 
   useEffect(() => {
     let active = true
@@ -133,13 +162,14 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
-        <AdminSearchCard onNavigate={navigate} />
-        {tab === 'dashboard' && <DashboardTab onNavigate={navigate} />}
+        <AdminSearchCard requests={requests} onNavigate={navigate} />
+        {tab === 'dashboard' && <DashboardTab requests={requests} onNavigate={navigate} />}
         {tab === 'vacancies' && <VacanciesTab onMutate={bump} />}
+        {tab === 'team' && <VacancyTeamAdmin />}
         {tab === 'plans' && <PlansTab onMutate={bump} />}
         {tab === 'payments' && <PaymentsTab onMutate={bump} />}
         {tab === 'applications' && <ApplicationsTab />}
-        {tab === 'tickets' && <TicketsTab onMutate={bump} />}
+        {tab === 'tickets' && <TicketsTab requests={requests} error={requestsError} onMutate={bump} />}
         {tab === 'users' && <UsersTab filter={usersFilter} onFilter={setUsersFilter} />}
         {tab === 'profile' && <ProfileTab />}
       </div>
@@ -233,9 +263,20 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
   const [editing, setEditing] = useState<Job | null>(null)
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const legacyCount = getLegacyJobs().length
+  const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
+
+  function confirmDelete() {
+    if (!deleteTarget || deleteReasonProblem(deleteReason)) return
+    const target = deleteTarget
+    const reason = deleteReason
+    setDeleteTarget(null)
+    setDeleteReason('')
+    void change(() => deleteJob(target.id, reason))
+  }
 
   async function change(action: () => Promise<unknown>) {
     setBusy(true)
@@ -286,7 +327,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
                   {j.pinned && <Badge color="amber">★ Pinned</Badge>}
                 </div>
                 <div className="text-xs text-slate-500 truncate">
-                  {j.company} · {j.location} · {j.salary || 'Salary not mentioned'}
+                  {j.company} · {j.location} · {j.salary || 'Salary not mentioned'}{j.postedBy ? ` · posted by ${j.postedBy}` : ''}
                 </div>
               </div>
             </div>
@@ -308,191 +349,32 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
 
       <VacancyForm key={editing?.id ?? 'new'} job={editing} open={open} onClose={() => setOpen(false)} onSaved={onSaved} />
 
-      <ConfirmDialog
-        open={!!deleteTarget}
-        title="Delete vacancy?"
-        message={deleteTarget ? `Are you sure you want to permanently delete "${deleteTarget.title}" at ${deleteTarget.company}? This cannot be undone.` : ''}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        danger
-        onConfirm={() => {
-          if (deleteTarget) void change(() => deleteJob(deleteTarget.id))
-          setDeleteTarget(null)
-        }}
-        onCancel={() => setDeleteTarget(null)}
-      />
-    </div>
-  )
-}
-
-function VacancyForm({ job, open, onClose, onSaved }: { job: Job | null; open: boolean; onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState(job?.title ?? '')
-  const [company, setCompany] = useState(job?.company ?? '')
-  const [manager, setManager] = useState(job?.manager ?? '')
-  const [contact, setContact] = useState(job?.contact ?? '')
-  const [managerAltPhone, setManagerAltPhone] = useState(job?.managerAltPhone ?? '')
-  const [managerEmail, setManagerEmail] = useState(job?.managerEmail ?? '')
-  const [location, setLocation] = useState(job?.location ?? '')
-  const [hq, setHq] = useState(job?.hq ?? '')
-  const [division, setDivision] = useState(job?.division ?? '')
-  const [category, setCategory] = useState<Exclude<Job['category'], 'All'>>(job?.category ?? 'MR')
-  const [salary, setSalary] = useState(job?.salary ?? '')
-  const [experience, setExperience] = useState(job?.experience ?? '')
-  const [description, setDescription] = useState(job?.description ?? '')
-  const [pinned, setPinned] = useState(job?.pinned ?? false)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  async function save() {
-    if (!title || !company || !location) {
-      setError('Title, company, and location are required.')
-      return
-    }
-    // Same rule the database enforces: the description is public, so it must
-    // not carry contact details. Catching it here gives an immediate message.
-    const confidential = findConfidentialContact(description)
-    if (confidential) {
-      setError(confidential)
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      const fields = { title, company, manager, contact, managerAltPhone, managerEmail, location, hq, division, category, salary, experience, description, pinned }
-      if (job) {
-        await updateJob(job.id, fields)
-      } else {
-        await addJob(fields)
-      }
-      onSaved()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save vacancy.')
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={job ? 'Edit vacancy' : 'Post vacancy'}>
-      <div className="space-y-3">
-        <div>
-          <Label>Title</Label>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Medical Representative" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <Label>Company</Label>
-            <Input value={company} onChange={(e) => setCompany(e.target.value)} />
-          </div>
-          <div>
-            <Label>Category</Label>
-            <Select value={category} onChange={(e) => setCategory(e.target.value as Exclude<Job['category'], 'All'>)}>
-              {CATEGORIES.filter((c) => c !== 'All').map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>Manager</Label>
-            <Input value={manager} onChange={(e) => setManager(e.target.value)} />
-          </div>
-          <div>
-            <Label>Contact (phone · ABM/ASM)</Label>
-            <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="+91-…" />
-          </div>
-          <div>
-            <Label>Manager alternate number</Label>
-            <div className="flex items-stretch">
-              <span aria-hidden className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-slate-200 bg-slate-100 text-slate-700 font-extrabold">(+)</span>
-              <Input
-                value={managerAltPhone}
-                onChange={(e) => setManagerAltPhone(e.target.value)}
-                placeholder="Optional · +91-…"
-                className="rounded-l-none"
+      <Modal open={!!deleteTarget} onClose={() => { setDeleteTarget(null); setDeleteReason('') }} title="Delete vacancy">
+        {deleteTarget && (
+          <div className="space-y-3">
+            <div className="text-sm text-slate-900">
+              <span className="font-semibold">{deleteTarget.title}</span> · {deleteTarget.company} · {deleteTarget.location}
+            </div>
+            <div>
+              <Label htmlFor="vacancy-delete-reason">Reason for deleting</Label>
+              <Textarea
+                id="vacancy-delete-reason"
+                rows={3}
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="e.g. Position filled, duplicate entry, closed by employer"
               />
+              <div className="mt-1 text-xs text-slate-600">Required · 5 to 300 characters · kept in Vacancy team → Deleted</div>
+            </div>
+            {reasonProblem && <p role="alert" className="text-sm font-semibold text-red-800">{reasonProblem}</p>}
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => { setDeleteTarget(null); setDeleteReason('') }}>Cancel</Button>
+              <Button variant="danger" className="flex-1" disabled={!!deleteReasonProblem(deleteReason) || busy} onClick={confirmDelete}>Delete vacancy</Button>
             </div>
           </div>
-          <div>
-            <Label>Manager email</Label>
-            <Input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} placeholder="hr@company.com" />
-          </div>
-          <div>
-            <Label>City</Label>
-            <Input value={location} onChange={(e) => setLocation(e.target.value)} />
-          </div>
-          <div>
-            <Label>HQ</Label>
-            <Input value={hq} onChange={(e) => setHq(e.target.value)} placeholder="Optional · e.g. Hyderabad HO" />
-          </div>
-          <div>
-            <Label>Division</Label>
-            <Input value={division} onChange={(e) => setDivision(e.target.value)} placeholder="Optional · e.g. Cardiology" />
-          </div>
-          <div>
-            <Label>Salary</Label>
-            <Input value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="₹2-3 LPA" />
-          </div>
-          <div>
-            <Label>Experience</Label>
-            <Input value={experience} onChange={(e) => setExperience(e.target.value)} placeholder="0-2 years" />
-          </div>
-          <div className="flex items-center gap-2 self-end pb-1">
-            <input type="checkbox" id="pinned" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-            <label htmlFor="pinned" className="text-sm font-semibold text-slate-700">Pin to Priority</label>
-          </div>
-        </div>
-        <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50/40 p-3 space-y-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <Label>Job description — one point per line</Label>
-            <Badge color="amber">PUBLIC · shown to every user</Badge>
-          </div>
-          <p className="text-xs font-medium text-amber-900">
-            Free users read this description before subscribing, so it must not contain confidential contact details.
-            Phone numbers and email addresses are rejected here and by the database — use the Manager, Contact,
-            Manager alternate number and Manager email fields above instead.
-          </p>
-          <Textarea
-            rows={6}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={'Field sales in the assigned territory\nDoctor and chemist calls as per the tour plan\nGraduate with 0-3 years of pharma experience'}
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              type="button"
-              variant="secondary"
-              className="px-3 py-1.5 text-xs"
-              onClick={() => setDescription((current) => (current.trim() ? `${current.replace(/\n+$/, '')}\n` : ''))}
-            >
-              + Add a point
-            </Button>
-            <span className="text-[11px] text-slate-600">
-              {descriptionPoints(description).length} point{descriptionPoints(description).length === 1 ? '' : 's'} · each line becomes a (+) bullet
-            </span>
-          </div>
-          {descriptionPoints(description).length > 0 && (
-            <div className="rounded-lg bg-white ring-1 ring-slate-200 p-2.5">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">How users will see it</div>
-              <ul className="space-y-1">
-                {descriptionPoints(description).map((point, index) => (
-                  <li key={index} className="flex items-start gap-1.5 text-xs text-slate-800 leading-snug">
-                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">(+)</span>
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-        <p className="text-sm font-medium text-slate-700">
-          <span className="font-bold">Public to every signed-in user:</span> title, category, city, salary, experience,
-          posted date and the description above.
-          <span className="font-bold"> Locked until an active subscription:</span> company name, manager name, manager
-          email, contact number (ABM/ASM), the optional (+) manager alternate number, HQ and division. Free users see
-          blurred placeholders only — those values are never sent to them.
-        </p>
-        {error && <p role="alert" className="text-sm font-bold text-red-800">{error}</p>}
-        <Button className="w-full" onClick={() => { void save() }} disabled={saving}>{saving ? 'Saving securely…' : job ? 'Save changes' : 'Post vacancy'}</Button>
-      </div>
-    </Modal>
+        )}
+      </Modal>
+    </div>
   )
 }
 
@@ -612,6 +494,13 @@ function PlansTab({ onMutate }: { onMutate: () => void }) {
 }
 
 // -------------------- Payments --------------------
+/** Date and time as "13 Oct 2026, 10:42", or a dash when there is none. */
+function formatDateTime(value?: number): string {
+  return value ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+}
+
+type PaymentFilter = 'all' | 'paid' | 'pending' | 'attention'
+
 function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [payments, setPayments] = useState<PaymentRecord[]>(() => getPayments())
   const [loading, setLoading] = useState(true)
@@ -619,6 +508,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [reviewing, setReviewing] = useState<string | null>(null)
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
   const [details, setDetails] = useState<PaymentRecord | null>(null)
+  const [filter, setFilter] = useState<PaymentFilter>('all')
 
   useEffect(() => {
     let active = true
@@ -654,74 +544,100 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
     }
   }
 
+  const totals = paymentTotals(payments)
+  const attention = (p: PaymentRecord) => Boolean(p.manualReview) || p.status === 'failed' || p.status === 'rejected'
+  const shown = payments.filter((p) => {
+    if (filter === 'paid') return p.status === 'success' && !p.manualReview
+    if (filter === 'pending') return p.status === 'pending' && !p.manualReview
+    if (filter === 'attention') return attention(p)
+    return true
+  })
+  const filters: { id: PaymentFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: payments.length },
+    { id: 'paid', label: 'Paid', count: totals.paidCount },
+    { id: 'pending', label: 'Pending', count: totals.pendingCount },
+    { id: 'attention', label: 'Needs action', count: payments.filter(attention).length },
+  ]
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Payment transactions</h2>
-          <p className="text-sm text-slate-700 mt-1">Razorpay payments are read-only here: only verified capture activates a plan. Legacy manual UPI requests can be approved only after checking the bank statement.</p>
-        </div>
-        <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh records'}</Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-bold text-slate-900">Payments ({payments.length})</h2>
+        <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
       </div>
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
 
-      <Card className="p-4">
-        <h3 className="text-base font-bold text-slate-900">Merchant payment details stay private</h3>
-        <p className="text-sm text-slate-700 mt-1">
-          Merchant UPI IDs, bank account numbers and IFSC codes are never stored in this app or shown to users. All
-          payments go through Razorpay Checkout using the methods enabled on the merchant account, so settlement details
-          live only in the Razorpay dashboard and the bank. Legacy manual UPI requests created before that change can
-          still be reviewed below from their recorded UTR.
-        </p>
-      </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <SummaryTile label="Paid" value={String(totals.paidCount)} detail={`₹${totals.paidAmount.toLocaleString('en-IN')} total`} tone="text-emerald-700" />
+        <SummaryTile label="Pending" value={String(totals.pendingCount)} detail="waiting for Razorpay" tone="text-amber-700" />
+        <SummaryTile label="Waiting bank check" value={String(totals.waitingBankCheck)} detail="UPI transfers" tone="text-amber-700" />
+        <SummaryTile label="Failed or rejected" value={String(totals.failedCount)} detail="no plan activated" tone="text-red-700" />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {filters.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setFilter(item.id)}
+            className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ${filter === item.id ? 'bg-brand-600 text-white ring-brand-600' : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'}`}
+          >
+            {item.label} <span className="opacity-80">({item.count})</span>
+          </button>
+        ))}
+      </div>
 
       {loading && payments.length === 0 ? (
-        <Card className="p-5 text-sm text-slate-700">Loading payment records…</Card>
-      ) : payments.length === 0 ? (
-        <Card className="p-5 text-sm text-slate-700">No payments recorded yet.</Card>
+        <Card className="p-5 text-sm text-slate-700">Loading payments…</Card>
+      ) : shown.length === 0 ? (
+        <Card className="p-5 text-sm text-slate-700">No payments in this list.</Card>
       ) : (
         <Card className="overflow-hidden">
-          <p className="px-3 pt-3 text-xs text-slate-600 sm:hidden">Scroll sideways to see transaction details and actions →</p>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[900px]">
-              <thead className="bg-slate-100 text-slate-800 text-left">
+            <table className="w-full text-sm min-w-[1040px]">
+              <thead className="bg-slate-100 text-left text-slate-800">
                 <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">User</th>
-                  <th className="px-3 py-2">Plan</th>
-                  <th className="px-3 py-2">Amount</th>
-                  <th className="px-3 py-2">Reference</th>
-                  <th className="px-3 py-2">UTR</th>
-                  <th className="px-3 py-2">Expiry</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Action</th>
+                  <th className="px-3 py-2 font-bold">Date</th>
+                  <th className="px-3 py-2 font-bold">Customer</th>
+                  <th className="px-3 py-2 font-bold">Plan</th>
+                  <th className="px-3 py-2 font-bold text-right">Amount</th>
+                  <th className="px-3 py-2 font-bold">Payment type</th>
+                  <th className="px-3 py-2 font-bold">Status</th>
+                  <th className="px-3 py-2 font-bold">Payment ID</th>
+                  <th className="px-3 py-2 font-bold">UTR</th>
+                  <th className="px-3 py-2 font-bold">Valid until</th>
+                  <th className="px-3 py-2 font-bold">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {payments.map((payment) => {
+                {shown.map((payment) => {
                   const account = getUsers().find((candidate) => candidate.id === payment.userId)
+                  const busy = reviewing === payment.id
                   return (
-                    <tr key={payment.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2 text-xs text-slate-700">{new Date(payment.createdAt).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">{account?.name ?? account?.email ?? payment.userId}</td>
-                      <td className="px-3 py-2 text-slate-800">{payment.planTitle ?? payment.planId} · {payment.planDays}d</td>
-                      <td className="px-3 py-2 font-bold text-slate-900">₹{payment.amount}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.utr || '—'}</td>
-                      <td className="px-3 py-2 text-slate-800">{payment.expiresAt ? new Date(payment.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</td>
+                    <tr key={payment.id} className="border-t border-slate-200 align-top">
+                      <td className="px-3 py-2 whitespace-nowrap text-slate-800">{formatDateTime(payment.createdAt)}</td>
                       <td className="px-3 py-2">
-                        <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
-                          {payment.manualReview ? 'UPI review needed' : payment.status === 'success' ? 'Paid' : payment.status}
-                        </Badge>
+                        <div className="font-semibold text-slate-900">{account?.name ?? '—'}</div>
+                        <div className="text-xs text-slate-600">{account?.email ?? payment.userId}</div>
                       </td>
+                      <td className="px-3 py-2">
+                        <div className="text-slate-900">{payment.planTitle ?? payment.planId}</div>
+                        <div className="text-xs text-slate-600">{payment.planDays ? `${payment.planDays} days` : '—'}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">₹{payment.amount.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-slate-800 whitespace-nowrap">{paymentTypeLabel(payment.paymentMethod)}</td>
+                      <td className="px-3 py-2"><Badge color={paymentStatusTone(payment)}>{paymentStatusLabel(payment)}</Badge></td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-800 break-all">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.utr || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-slate-800">{payment.expiresAt ? formatDateTime(payment.expiresAt) : 'Not active'}</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2 whitespace-nowrap">
                           <Button variant="secondary" onClick={() => setDetails(payment)}>Details</Button>
                           {payment.manualReview && (
                             <>
-                              <Button variant="secondary" disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: false })}>Reject</Button>
-                              <Button disabled={reviewing === payment.id} onClick={() => setDecision({ payment, approve: true })}>Verify & activate</Button>
+                              <Button variant="secondary" disabled={busy} onClick={() => setDecision({ payment, approve: false })}>Reject</Button>
+                              <Button disabled={busy} onClick={() => setDecision({ payment, approve: true })}>Verify</Button>
                             </>
                           )}
                         </div>
@@ -737,30 +653,41 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
 
       <Modal open={!!details} onClose={() => setDetails(null)} title="Payment details">
         {details && (
-          <div className="space-y-2 text-sm text-slate-800 break-all">
-            <p><strong>Method:</strong> {details.paymentMethod}</p>
-            <p><strong>Status:</strong> {details.manualReview ? 'Awaiting manual bank verification' : details.status}</p>
-            <p><strong>Plan:</strong> {details.planTitle ?? details.planId} · {details.planDays} days · ₹{details.amount}</p>
-            <p><strong>Order ID:</strong> {details.orderId ?? '—'}</p>
-            <p><strong>Payment ID / reference:</strong> {details.gatewayPaymentId ?? details.txRef ?? '—'}</p>
-            <p><strong>UTR:</strong> {details.utr ?? '—'}</p>
-            <p><strong>Expiry:</strong> {details.expiresAt ? new Date(details.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not activated'}</p>
-            <p className="rounded-lg bg-amber-50 p-3 text-amber-950">{details.manualReview
-              ? 'Approve only after independently matching the bank credit, amount, UTR and date.'
-              : details.status === 'pending'
-                ? 'Do not activate manually. Wait for Razorpay capture and the verified webhook, then refresh records.'
-                : 'Razorpay orders are read-only here; refunds must be handled in the Razorpay dashboard.'}</p>
+          <div className="space-y-3">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="font-semibold text-slate-600">Customer</dt>
+              <dd className="text-slate-900">{getUsers().find((u) => u.id === details.userId)?.name ?? '—'}</dd>
+              <dt className="font-semibold text-slate-600">Plan</dt>
+              <dd className="text-slate-900">{details.planTitle ?? details.planId} · {details.planDays ? `${details.planDays} days` : '—'}</dd>
+              <dt className="font-semibold text-slate-600">Amount</dt>
+              <dd className="text-slate-900">₹{details.amount.toLocaleString('en-IN')}</dd>
+              <dt className="font-semibold text-slate-600">Payment type</dt>
+              <dd className="text-slate-900">{paymentTypeLabel(details.paymentMethod)}</dd>
+              <dt className="font-semibold text-slate-600">Status</dt>
+              <dd><Badge color={paymentStatusTone(details)}>{paymentStatusLabel(details)}</Badge></dd>
+              <dt className="font-semibold text-slate-600">Order ID</dt>
+              <dd className="font-mono text-xs break-all text-slate-900">{details.orderId ?? '—'}</dd>
+              <dt className="font-semibold text-slate-600">Payment ID</dt>
+              <dd className="font-mono text-xs break-all text-slate-900">{details.gatewayPaymentId ?? details.txRef ?? '—'}</dd>
+              <dt className="font-semibold text-slate-600">UTR</dt>
+              <dd className="font-mono text-xs break-all text-slate-900">{details.utr || '—'}</dd>
+              <dt className="font-semibold text-slate-600">Created</dt>
+              <dd className="text-slate-900">{formatDateTime(details.createdAt)}</dd>
+              <dt className="font-semibold text-slate-600">Valid until</dt>
+              <dd className="text-slate-900">{details.expiresAt ? formatDateTime(details.expiresAt) : 'Not active'}</dd>
+            </dl>
+            <NextStep payment={details} />
           </div>
         )}
       </Modal>
 
       <ConfirmDialog
         open={!!decision}
-        title={decision?.approve ? 'Verify UPI payment?' : 'Reject UPI payment?'}
+        title={decision?.approve ? 'Verify UPI transfer?' : 'Reject UPI transfer?'}
         message={decision?.approve
-          ? `Only continue after matching the UTR ${decision.payment.utr ?? '—'}, amount ₹${decision.payment.amount}, and date in the merchant bank account. Approval activates ${decision.payment.planDays} days from the current expiry (or now).`
-          : 'Reject this manual UPI request? No subscription will be activated.'}
-        confirmLabel={decision?.approve ? 'Verified — activate plan' : 'Reject request'}
+          ? `Check UTR ${decision.payment.utr ?? '—'}, amount ₹${decision.payment.amount} and date in the bank statement first. Verifying activates ${decision.payment.planDays} days.`
+          : 'Reject this UPI transfer? No plan will be activated.'}
+        confirmLabel={decision?.approve ? 'Verified — activate' : 'Reject'}
         danger={decision ? !decision.approve : false}
         onConfirm={() => { if (decision) void review(decision.payment, decision.approve) }}
         onCancel={() => { if (!reviewing) setDecision(null) }}
@@ -769,59 +696,129 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   )
 }
 
-// -------------------- Tickets --------------------
-function TicketsTab({ onMutate }: { onMutate: () => void }) {
-  const tickets = getTickets()
-  const [reply, setReply] = useState<Record<string, string>>({})
+function SummaryTile({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: string }) {
+  return (
+    <Card className="p-3">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">{label}</div>
+      <div className={`text-2xl font-extrabold ${tone}`}>{value}</div>
+      <div className="text-xs text-slate-600">{detail}</div>
+    </Card>
+  )
+}
 
-  function setStatus(t: Ticket, status: Ticket['status']) {
-    updateTicket(t.id, { status })
-    onMutate()
-  }
-  function sendReply(t: Ticket) {
-    const text = reply[t.id]?.trim()
-    if (!text) return
-    updateTicket(t.id, { reply: text, status: 'resolved' })
-    setReply((r) => ({ ...r, [t.id]: '' }))
+/** One short line on what the administrator should do next, by payment type and status. */
+function NextStep({ payment }: { payment: PaymentLike & { status: PaymentRecord['status'] } }) {
+  let text: string
+  if (payment.manualReview) text = 'Next: match the UTR, amount and date in the bank statement, then verify or reject.'
+  else if (payment.status === 'pending') text = 'Next: nothing to do. The plan starts when Razorpay confirms the payment.'
+  else if (payment.status === 'success') text = 'Next: nothing to do. The plan is active. Refunds are made from the Razorpay dashboard.'
+  else text = 'Next: nothing to do. No plan was activated.'
+  return <div className="rounded-lg bg-slate-50 ring-1 ring-slate-200 px-3 py-2 text-xs font-semibold text-slate-800">{text}</div>
+}
+
+// -------------------- Requests (refunds & support) --------------------
+const STATUS_COLOR: Record<SupportStatus, 'red' | 'amber' | 'green'> = {
+  open: 'red',
+  in_progress: 'amber',
+  resolved: 'green',
+}
+const VERDICT_LABEL: Record<AiVerdict, string> = {
+  eligible: 'AI: eligible',
+  needs_review: 'AI: needs review',
+  not_eligible: 'AI: not eligible',
+}
+const VERDICT_COLOR: Record<AiVerdict, 'green' | 'amber' | 'slate'> = {
+  eligible: 'green',
+  needs_review: 'amber',
+  not_eligible: 'slate',
+}
+
+function TicketsTab({ requests, error, onMutate }: { requests: SupportRequest[]; error: string | null; onMutate: () => void }) {
+  const [reply, setReply] = useState<Record<string, string>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const openCount = requests.filter((r) => r.status !== 'resolved').length
+
+  async function change(r: SupportRequest, status: SupportStatus, text?: string) {
+    setBusyId(r.id)
+    setActionError(null)
+    const result = await updateSupportRequest(r.id, status, text)
+    setBusyId(null)
+    if (!result.ok) {
+      setActionError(result.error)
+      return
+    }
+    if (text?.trim()) setReply((all) => ({ ...all, [r.id]: '' }))
     onMutate()
   }
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold text-slate-900">Support tickets ({tickets.length})</h2>
-      {tickets.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500">No tickets yet. AI escalations will appear here.</Card>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-lg font-bold text-slate-900">Refund &amp; support requests ({openCount} open · {requests.length} total)</h2>
+      </div>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {actionError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{actionError}</p>}
+      {requests.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-slate-500">No refund or support requests yet. Requests raised from AI Help appear here.</Card>
       ) : (
-        tickets.map((t) => (
-          <Card key={t.id} className="p-3 space-y-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="font-semibold text-slate-900 truncate">{t.subject}</div>
-                {t.kind === 'refund' && <Badge color="red">Refund</Badge>}
-                <Badge color={t.source === 'ai' ? 'purple' : 'slate'}>{t.source}</Badge>
-                <Badge color={t.status === 'open' ? 'red' : t.status === 'in_progress' ? 'amber' : 'green'}>{t.status.replace('_', ' ')}</Badge>
+        requests.map((r) => {
+          const payment = r.paymentId ? getPayments().find((p) => p.id === r.paymentId) : undefined
+          const busy = busyId === r.id
+          return (
+            <Card key={r.id} className="p-3 space-y-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs text-slate-500">#{ticketNumber(r.id)}</span>
+                  <div className="font-semibold text-slate-900 truncate">{r.subject}</div>
+                  {r.kind === 'refund' && <Badge color="red">Refund</Badge>}
+                  {r.aiVerdict && <Badge color={VERDICT_COLOR[r.aiVerdict]}>{VERDICT_LABEL[r.aiVerdict]}</Badge>}
+                  <Badge color={STATUS_COLOR[r.status]}>{r.status.replace('_', ' ')}</Badge>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {requestName(r)} · {requestEmail(r)} · {String(r.details.phone ?? '—')} · {new Date(r.createdAt).toLocaleString('en-IN')}
+                </div>
               </div>
-              <div className="text-xs text-slate-500">
-                {t.name ?? '—'} · {t.email ?? '—'} · {new Date(t.createdAt).toLocaleString()}
+              {r.reasonCode && <div className="text-xs text-slate-700">Reason: {reasonLabel(r.reasonCode)}</div>}
+              {payment ? (
+                <div className="text-xs text-slate-700 bg-slate-50 rounded-lg p-2 ring-1 ring-slate-200">
+                  Payment: ₹{payment.amount} · {payment.planTitle ?? payment.planId} · TXN {payment.txRef ?? '—'} · UTR {payment.utr || '—'} · {payment.status}
+                </div>
+              ) : r.paymentId ? (
+                <div className="text-xs text-slate-500">Payment ID: {r.paymentId}</div>
+              ) : null}
+              <div className="text-sm text-slate-700 bg-slate-50 rounded-lg p-2 ring-1 ring-slate-200 whitespace-pre-wrap">{r.message}</div>
+              <details className="text-xs text-slate-600">
+                <summary className="cursor-pointer font-semibold">Account details</summary>
+                <dl className="mt-1 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
+                  <dt>City / state</dt><dd>{[r.details.city, r.details.state].filter(Boolean).join(', ') || '—'}</dd>
+                  <dt>Subscribed</dt><dd>{r.details.subscribed ? `yes, until ${r.details.subscribedUntil ?? '—'}` : 'no'}</dd>
+                  {typeof r.details.chatExcerpt === 'string' && (
+                    <>
+                      <dt>Chat</dt>
+                      <dd className="whitespace-pre-wrap">{r.details.chatExcerpt}</dd>
+                    </>
+                  )}
+                </dl>
+              </details>
+              {r.adminReply && (
+                <div className="text-sm text-emerald-800 bg-emerald-50 rounded-lg p-2 ring-1 ring-emerald-200">
+                  <span className="font-semibold">Reply:</span> {r.adminReply}
+                </div>
+              )}
+              {/* Action row — always visible on mobile */}
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" className="flex-1" disabled={busy || r.status === 'in_progress'} onClick={() => void change(r, 'in_progress')}>▶ Start</Button>
+                <Button variant="secondary" className="flex-1" disabled={busy || r.status === 'resolved'} onClick={() => void change(r, 'resolved')}>✓ Resolve</Button>
               </div>
-            </div>
-            <div className="text-sm text-slate-700 bg-slate-50 rounded-lg p-2 ring-1 ring-slate-200">{t.message}</div>
-            {t.reply && (
-              <div className="text-sm text-emerald-800 bg-emerald-50 rounded-lg p-2 ring-1 ring-emerald-200">
-                <span className="font-semibold">Reply:</span> {t.reply}
+              <div className="flex gap-2 flex-wrap">
+                <Input placeholder="Type a reply…" value={reply[r.id] ?? ''} onChange={(e) => setReply((all) => ({ ...all, [r.id]: e.target.value }))} />
+                <Button variant="secondary" className="shrink-0" disabled={busy || !reply[r.id]?.trim()} onClick={() => void change(r, r.status === 'open' ? 'in_progress' : r.status, reply[r.id])}>Reply</Button>
+                <Button className="shrink-0" disabled={busy || !reply[r.id]?.trim()} onClick={() => void change(r, 'resolved', reply[r.id])}>Reply &amp; resolve</Button>
               </div>
-            )}
-            {/* Action row — always visible on mobile */}
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setStatus(t, 'in_progress')}>▶ Start</Button>
-              <Button variant="secondary" className="flex-1" onClick={() => setStatus(t, 'resolved')}>✓ Resolve</Button>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <Input placeholder="Type a reply…" value={reply[t.id] ?? ''} onChange={(e) => setReply((r) => ({ ...r, [t.id]: e.target.value }))} />
-              <Button className="shrink-0" onClick={() => sendReply(t)}>Send</Button>
-            </div>
-          </Card>
-        ))
+            </Card>
+          )
+        })
       )}
     </div>
   )
@@ -1059,7 +1056,7 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
  * number, name or email), recent transactions (payments), tickets,
  * applications and payment records.
  */
-function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
+function AdminSearchCard({ requests, onNavigate }: { requests: SupportRequest[]; onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
   const [query, setQuery] = useState('')
   const trimmed = query.trim()
   const digits = trimmed.replace(/\D/g, '')
@@ -1078,8 +1075,8 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
       .some((value) => String(value).toLowerCase().includes(lower) || (digits.length >= 3 && String(value).includes(digits)))
   }).slice(0, 5) : []
 
-  const tickets = active ? getTickets().filter((t) =>
-    [t.subject, t.name, t.email, t.message].filter(Boolean)
+  const tickets = active ? requests.filter((t) =>
+    [t.subject, requestName(t), requestEmail(t), t.message, t.reasonCode ? reasonLabel(t.reasonCode) : '']
       .some((value) => String(value).toLowerCase().includes(lower)),
   ).slice(0, 5) : []
 
@@ -1097,7 +1094,7 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search phone number, users, transactions, tickets, applications, payments…"
+          placeholder="Search phone number, users, requests, applications, payments…"
           aria-label="Admin search"
         />
       </div>
@@ -1128,10 +1125,10 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
             </SearchGroup>
           )}
           {tickets.length > 0 && (
-            <SearchGroup title="Tickets" count={tickets.length} onOpen={() => onNavigate('tickets')}>
+            <SearchGroup title="Requests" count={tickets.length} onOpen={() => onNavigate('tickets')}>
               {tickets.map((t) => (
                 <div key={t.id} className="text-sm text-slate-800">
-                  <span className="font-semibold">{t.subject}</span> · {t.name ?? '—'} · {t.status.replace('_', ' ')}
+                  <span className="font-semibold">{t.subject}</span> · {requestName(t)} · {t.status.replace('_', ' ')}
                 </div>
               ))}
             </SearchGroup>
@@ -1166,11 +1163,11 @@ function SearchGroup({ title, count, onOpen, children }: { title: string; count:
 }
 
 // -------------------- Dashboard --------------------
-function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
+function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
   const users = getUsers()
   const jobs = getJobs()
   const payments = getPayments()
-  const tickets = getTickets()
+  const tickets = requests
   const queue = getCachedApplications()
 
   const now = useCurrentTime()
@@ -1194,7 +1191,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
         <StatCard label="Free users" value={free.length} color="amber" icon="🆓" hint="Open free users" onClick={() => onNavigate('users', 'free')} />
         <StatCard label="Live jobs" value={jobs.length} color="purple" icon="💼" hint="Open vacancies" onClick={() => onNavigate('vacancies')} />
         <StatCard label="New today" value={newToday} color="brand" icon="✨" hint="Open users" onClick={() => onNavigate('users', 'all')} />
-        <StatCard label="Open tickets" value={openTickets} color="red" icon="🎫" hint="Open tickets" onClick={() => onNavigate('tickets')} />
+        <StatCard label="Open requests" value={openTickets} color="red" icon="🎫" hint="Open requests" onClick={() => onNavigate('tickets')} />
         <StatCard label="Applications" value={queue.length} color="purple" icon="✉️" hint="Open applications" onClick={() => onNavigate('applications')} />
         <StatCard label="Revenue" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Open payments" onClick={() => onNavigate('payments')} />
       </div>

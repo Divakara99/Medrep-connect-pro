@@ -59,8 +59,8 @@ export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: st
   )
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl bg-white border border-slate-200/70 shadow-sm ${className}`}>{children}</div>
+export function Card({ children, className = '', onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
+  return <div onClick={onClick} className={`rounded-2xl bg-white border border-slate-200/70 shadow-sm ${className}`}>{children}</div>
 }
 
 export function Badge({ children, color = 'slate' }: { children: ReactNode; color?: 'slate' | 'brand' | 'amber' | 'green' | 'red' | 'purple' }) {

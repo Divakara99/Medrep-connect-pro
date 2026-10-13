@@ -200,6 +200,7 @@ export async function openApplication(
   // Admin-side mirror for the dashboard listing; the RPC row is authoritative.
   if (stored) mirror('applications', record)
 
+  myApplicationCache = null
   openComposer(href)
   return { ok: true, channel, to, record, historyError }
 }
@@ -229,12 +230,27 @@ function toApplicationRecord(value: unknown): ApplicationRecord | null {
 }
 
 /** The signed-in user's own application history. */
+// In-memory only: the Account screen shows the last known history immediately
+// and refreshes it in the background. Cleared on sign-out and on a new application.
+let myApplicationCache: ApplicationRecord[] | null = null
+
+/** The last known application history, or null if not loaded this session. */
+export function getCachedMyApplications(): ApplicationRecord[] | null {
+  return myApplicationCache
+}
+
+export function clearMyApplicationCache(): void {
+  myApplicationCache = null
+}
+
 export async function listMyApplications(): Promise<ApplicationRecord[]> {
   const { data, error } = await supabase.rpc('list_my_applications')
   if (error) throw new Error(error.message || 'Your applications could not be loaded.')
-  return ((data ?? []) as unknown[])
+  const records = ((data ?? []) as unknown[])
     .map(toApplicationRecord)
     .filter((record): record is ApplicationRecord => record !== null)
+  myApplicationCache = records
+  return records
 }
 
 let applicationCache: ApplicationRecord[] = []

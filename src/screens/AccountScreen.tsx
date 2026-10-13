@@ -2,18 +2,23 @@ import { useRef } from 'react'
 import { Button, Card, Badge } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
+import { ApplicationHistory } from '../components/ApplicationHistory'
+import { MyRequests } from '../components/MyRequests'
 import { isSubscribed, type User } from '../data/auth'
 import { CREATOR } from '../data/creator'
+import type { ResumeRecord } from '../data/resume'
 import { APP_VERSION_LABEL } from '../data/version'
 
 export function AccountScreen({
   user,
   onLogout,
   onSubscribed,
+  onResumeChange,
 }: {
   user: User
   onLogout: () => void
   onSubscribed: (u: User) => void
+  onResumeChange: (resume: ResumeRecord | null) => void
 }) {
   const unlocked = isSubscribed(user)
   const editorRef = useRef<ProfileEditorHandle>(null)
@@ -40,12 +45,22 @@ export function AccountScreen({
 
       <Card className="p-4">
         <h2 className="font-bold text-slate-900">Subscription validity</h2>
-        <p className="text-sm text-slate-700 mt-1">{unlocked && user.subscribedUntil
+        <p className="text-xs text-slate-700 mt-1">{unlocked && user.subscribedUntil
           ? `Active until ${new Date(user.subscribedUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}. Renewals extend the current expiry; new plans start after server-verified payment.`
           : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
       </Card>
 
-      <ProfileEditor ref={editorRef} email={user.email} phone={user.phone} onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })} />
+      <ProfileEditor
+        ref={editorRef}
+        email={user.email}
+        phone={user.phone}
+        onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })}
+        onResumeChange={onResumeChange}
+      />
+
+      <ApplicationHistory />
+
+      <MyRequests />
 
       {/* About card: same brand mark that ships as the PWA icon, plus the
           released version (package.json → build-time constant, never typed twice). */}
@@ -56,6 +71,10 @@ export function AccountScreen({
             <div className="min-w-0">
               <div className="text-sm font-bold text-slate-900">MedRep Connect Pro</div>
               <div className="text-xs text-slate-500 truncate">{CREATOR.tagline}</div>
+              <div className="text-[11px] text-slate-500 truncate">Operated by {CREATOR.owner} · {CREATOR.location}</div>
+              <a href={`mailto:${CREATOR.contactEmail}`} className="text-[11px] font-semibold text-blue-600 underline underline-offset-2 truncate block">
+                {CREATOR.contactEmail}
+              </a>
             </div>
           </div>
           <Badge color="brand">{APP_VERSION_LABEL}</Badge>

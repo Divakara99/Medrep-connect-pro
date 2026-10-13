@@ -2,13 +2,23 @@ import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
 import { getProfile, newEducation, newExperience, saveProfile, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
+import type { ResumeRecord } from '../data/resume'
+import { ResumeCard } from './ResumeCard'
 
 export type ProfileEditorHandle = {
   save: () => Promise<Profile | null>
 }
 
-export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; phone?: string; onSaved?: (p: Profile) => void }>(function ProfileEditor(
-  { email, phone, onSaved },
+export const ProfileEditor = forwardRef<
+  ProfileEditorHandle,
+  {
+    email: string
+    phone?: string
+    onSaved?: (p: Profile) => void
+    onResumeChange?: (resume: ResumeRecord | null) => void
+  }
+>(function ProfileEditor(
+  { email, phone, onSaved, onResumeChange },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
@@ -76,15 +86,7 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; ph
         </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="flex items-center gap-3">
-          <span aria-hidden className="text-2xl">📎</span>
-          <div className="text-sm text-slate-700">
-            Your resume is managed in the <span className="font-bold text-slate-900">Resume</span> tab, where it is
-            uploaded to private storage, downloaded when you apply, and deleted automatically after 30 days.
-          </div>
-        </div>
-      </Card>
+      <ResumeCard onResumeChange={onResumeChange} />
 
       <Card className="p-4 space-y-3">
         <div className="font-bold text-slate-900">Personal</div>
@@ -147,7 +149,7 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; ph
           <div className="font-bold text-slate-900">Education</div>
           <Button variant="secondary" onClick={addEducation}>+ Add</Button>
         </div>
-        {p.education.length === 0 && <div className="text-sm text-slate-500">Add your degree(s).</div>}
+        {p.education.length === 0 && <div className="text-xs text-slate-500">Add your degree(s).</div>}
         {p.education.map((e) => (
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -168,7 +170,7 @@ export const ProfileEditor = forwardRef<ProfileEditorHandle, { email: string; ph
           <div className="font-bold text-slate-900">Experience</div>
           <Button variant="secondary" onClick={addExp}>+ Add</Button>
         </div>
-        {p.experience.length === 0 && <div className="text-sm text-slate-500">Add work experience (optional for freshers).</div>}
+        {p.experience.length === 0 && <div className="text-xs text-slate-500">Add work experience (optional for freshers).</div>}
         {p.experience.map((e) => (
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

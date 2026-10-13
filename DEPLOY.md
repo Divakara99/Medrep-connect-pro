@@ -6,6 +6,114 @@ PWA files. It runs on any static host. The build uses relative paths
 
 ---
 
+## Quick start — step by step
+
+Follow these steps in order. Each command is in a box with a **copy** button (top right of the box when you hover over it). You need Node.js 22, Git, your Supabase project, your Netlify site, and (for payments) a Razorpay account.
+
+### Step 1 — Get the code and check it (terminal)
+
+```bash
+git clone https://github.com/Divakara99/Medrep-connect-pro.git
+cd Medrep-connect-pro
+git checkout main
+npm ci
+npm run lint
+npm run build
+npm test
+```
+
+What each line does:
+
+| Command | Meaning |
+| --- | --- |
+| `git clone …` | Downloads the project into a folder named `Medrep-connect-pro`. |
+| `cd Medrep-connect-pro` | Moves into that folder. All later commands run from here. |
+| `git checkout main` | Uses the release branch that Netlify publishes. |
+| `npm ci` | Installs the exact dependency versions in `package-lock.json`. |
+| `npm run lint` | Checks the code for mistakes. It should report `0 errors`. |
+| `npm run build` | Type-checks and builds the website into `dist/`. It should end with `built in`. |
+| `npm test` | Runs the database and rule checks. Each line should end with `passed` or `agree on all 12 cases`. |
+
+If any step fails, stop and fix that step before continuing.
+
+### Step 2 — Create the database tables (SQL Editor, one click to copy)
+
+Run the migrations **in this order**, in the Supabase project that matches `VITE_SUPABASE_URL`. Each file is safe to run again.
+
+```bash
+npm run db:list          # shows the 11 files in the correct order
+npm run db:copy -- 1     # copies supabase/schema.sql to your clipboard
+```
+
+Then in the Supabase dashboard:
+
+1. Open **SQL Editor → New query**.
+2. Click in the editor and press **Ctrl+V** (Windows/Linux) or **⌘V** (Mac) to paste.
+3. Press **Run**. Wait for "Success", then go back to the terminal.
+4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 11`.
+
+**Prefer one paste?** Run `npm run db:copy -- all`, paste once, and press **Run**. If an error appears, fix it and run the same paste again: the files are safe to re-run.
+
+If the terminal says *"No clipboard tool was found"*, it prints the SQL instead. Select the text between `-----BEGIN SQL-----` and `-----END SQL-----` and copy it by hand.
+
+### Step 3 — Schedule the resume purge (SQL Editor)
+
+Resumes are deleted 30 days after upload. The schedule is set up in [section 4](#4-schedule-the-resume-retention-purge) below. Run it once after Step 2.
+
+### Step 4 — Deploy the payment and admin functions (terminal, Supabase CLI)
+
+These functions run on Supabase, not on Netlify. Netlify does not deploy them.
+
+```bash
+npx supabase login
+npx supabase functions deploy create-razorpay-order --project-ref <your-project-ref>
+npx supabase functions deploy verify-razorpay-payment --project-ref <your-project-ref>
+npx supabase functions deploy razorpay-webhook --project-ref <your-project-ref>
+npx supabase functions deploy create-upi-intent --project-ref <your-project-ref>
+npx supabase functions deploy admin-delete-user --project-ref <your-project-ref>
+npx supabase functions deploy admin-manage-employees --project-ref <your-project-ref>
+```
+
+- `npx supabase login` opens a browser so you can sign in to Supabase. It does not ask for a password in the terminal.
+- Replace `<your-project-ref>` with the ID in your Supabase URL: `https://<your-project-ref>.supabase.co`.
+- The `create-upi-intent` line deploys the disabled version, so no new manual UPI payment can be created.
+- The `admin-manage-employees` line deploys the function that creates, resets and deletes vacancy team logins. It needs the migration in Step 2 (`vacancy_team.sql`) first.
+
+### Step 5 — Add the secret keys (Supabase dashboard, never in chat or Git)
+
+In **Supabase → Edge Functions → Secrets**, add these three names and paste the values from your Razorpay dashboard:
+
+| Secret name | Where to get it |
+| --- | --- |
+| `RAZORPAY_KEY_ID` | Razorpay → Settings → API Keys (`rzp_test_…` for testing) |
+| `RAZORPAY_KEY_SECRET` | The secret shown with that key. Store it only here. |
+| `RAZORPAY_WEBHOOK_SECRET` | The secret you set on the Razorpay webhook (Step 7) |
+
+Use a matching pair from the same mode. Test with `rzp_test_` keys first.
+
+### Step 6 — Publish the website (Netlify)
+
+1. Open the Netlify site for the project, then **Site configuration → Environment variables**.
+2. If your Supabase project is not the built-in default, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the public anon key, not the secret key). See [`.env.example`](.env.example).
+3. Make sure the production branch is `main`, then click **Deploys → Trigger deploy**.
+
+### Step 7 — Connect Razorpay webhooks
+
+In the Razorpay dashboard, add the webhook URL `https://<your-project-ref>.supabase.co/functions/v1/razorpay-webhook`, subscribe to `payment.captured`, and set the same secret as `RAZORPAY_WEBHOOK_SECRET`.
+
+### Step 8 — Check it works
+
+- [ ] Sign in, open **Plans**, pick a plan, and check the amount shown matches the catalogue price.
+- [ ] Open **Account**: your profile, your resume card and **My applications** load.
+- [ ] Upload a small PDF on **Account → Profile details**, then download it again.
+- [ ] Open the **Terms** link on **Plans** (blue "Click here") and check the full text opens.
+- [ ] Open the admin panel, go to **Vacancy team**, create a test login, sign in at `/?portal=vacancy` with it, post a vacancy and delete it with a reason. The deletion then shows in the activity list.
+- [ ] In **AI Help**, type "refund", pick the reason and payment, describe the problem, and check the verdict. Nothing is sent until you tap the yes button. Then open **Account → My requests** to see the new request.
+
+For the detailed explanations, troubleshooting and the migration table, read the sections below.
+
+---
+
 ## Primary deployment — Netlify
 
 Netlify is the production host for this app. The live site is
@@ -76,7 +184,7 @@ SQL is applied:
 | --- | --- |
 | Jobs | `list_visible_jobs()` still works; free users see no description and HQ/division show "—" until the new `secure_jobs.sql` is applied. |
 | Plans | The catalog read fails, so the screen shows the standard seven plans and prices from its built-in fallback. Checkout still works against the previously deployed `create-razorpay-order`. |
-| Resume tab | Upload is disabled with a "storage is being enabled" notice. |
+| Resume (Account → Profile details) | Upload is disabled with a "storage is being enabled" notice. |
 | Apply | The mail/WhatsApp composer still opens; the toast says the application could not be added to history yet. |
 | **Admin panel** | **Blocked.** The portal requires an `aal2` session, so an administrator must enable TOTP in Supabase Auth (step 1) before the panel opens. This is the intended fix — production currently has no second factor at all. |
 
@@ -124,6 +232,12 @@ Run each file in the SQL Editor of the SAME project used by
 | 7 | `supabase/billing_plans.sql` | **New.** Server-side plan catalog (`public.billing_plans`) seeded with the seven existing plans; `save_billing_plan()` is admin+MFA only and refuses to retire the last purchasable plan. |
 | 8 | `supabase/resumes.sql` | **New.** Private `resumes` storage bucket, owner-only `resume_documents`, forced 30-day retention and `delete_expired_resumes()`. |
 | 9 | `supabase/applications.sql` | **New.** `record_application()` / `list_my_applications()` so a user's application history is stored server-side with the verified identity. |
+| 10 | `supabase/support_requests.sql` | **New.** `public.support_requests` for refund and support requests. `create_support_request()` re-checks refund eligibility on the server and stores the account snapshot. Users read only their own requests; `admin_update_support_request()` is admin + MFA only. |
+| 11 | `supabase/vacancy_team.sql` | **New.** Vacancy team logins (`vacancy_editor` role) that can only post, list and delete vacancies, through `employee_post_vacancy()`, `employee_list_vacancies()` and `employee_delete_vacancy()`. Adds `vacancy_audit`, which records every vacancy added or deleted, by admin or team, with the delete reason. Only an administrator with MFA can read it. Earlier vacancies are backfilled once. |
+
+**Vacancy team logins (new).** The administrator creates one login ID and password for the employee in **Admin → Vacancy team**. Only one employee login exists at a time, and the database enforces this. To change employee, delete the current login first, then create the new one. Team members sign in at `/?portal=vacancy` and see one page: post a vacancy, and delete one with a required reason. The admin sees how many vacancies were added and deleted, who did it, and every deletion reason. The team cannot see users, payments, the audit log or other team logins. The login ID is the employee's email address, because the sign-in system requires one. Passwords must be 12 to 72 characters. New team accounts are created already confirmed, so no confirmation email is sent. Team logins use a password only (no authenticator code), so choose strong passwords and remove a login as soon as someone leaves.
+
+**Support requests replace device-only tickets.** Earlier builds kept tickets only in each browser (`mrc_tickets_v1`), so the administrator never saw them. The app removes that browser copy on first load. Requests raised from now on are stored in `support_requests`, and users track them under Account → My requests.
 
 **Existing subscriptions and orders are preserved.** `billing_plans.sql` seeds
 with `ON CONFLICT DO NOTHING`, `subscription_payments` keeps its own
@@ -194,7 +308,7 @@ accounts:
   catalog price;
 * an **admin** without a verified authenticator cannot open the admin panel,
   and cannot save a price change from the Plans tab;
-* uploading a resume keeps the user on the Resume tab and the file is not
+* uploading a resume keeps the user on the Account screen and the file is not
   visible in browser storage.
 
 On user devices with older versions, clear site data/old PWA cache once and
