@@ -3,6 +3,7 @@ import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
+import { CREATOR } from '../data/creator'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
   createRazorpayOrder,
@@ -278,6 +279,10 @@ export function PlansScreen({
           <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
           <p>• One plan per payment. Renewals add days to your existing expiry.</p>
           <p>• Do not share your bank PIN, OTP or passwords with anyone, including support.</p>
+          <p>
+            • Questions about a payment? Email{' '}
+            <a href={`mailto:${CREATOR.contactEmail}`} className="font-semibold text-blue-600 underline underline-offset-2">{CREATOR.contactEmail}</a>.
+          </p>
           <p>
             • By continuing you agree to the MedRep Connect Pro terms and conditions.{' '}
             <button

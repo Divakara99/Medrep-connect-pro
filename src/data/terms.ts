@@ -8,6 +8,8 @@
  *
  * Text in [square brackets] must be completed by the owner before publication.
  */
+import { CREATOR } from './creator'
+
 export const TERMS_LAST_UPDATED = '13 October 2026'
 
 export type TermsSection = { title: string; paragraphs: string[] }
@@ -16,7 +18,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'About this service',
     paragraphs: [
-      'MedRep Connect Pro ("the App", "we", "us") is a job-listing and subscription service for pharmaceutical field roles, such as Medical Representative (MR) and Area Business Manager (ABM), and for multi-industry vacancies. The App is operated by [registered owner name and address — to be completed by the owner].',
+      `MedRep Connect Pro ("the App", "we", "us") is a job-listing and subscription service for pharmaceutical field roles, such as Medical Representative (MR) and Area Business Manager (ABM), and for multi-industry vacancies. The App is operated by ${CREATOR.owner}, ${CREATOR.location}.`,
       'We publish vacancies supplied by employers and their hiring managers. We connect job seekers with those managers. We are not the employer, not a recruitment agency, and not a party to any employment contract.',
     ],
   },
@@ -152,7 +154,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Contact',
     paragraphs: [
-      'Support: raise a support ticket in the App. Grievance and business contact: [owner to add name, email address and postal address].',
+      `Email: ${CREATOR.contactEmail}. You can also raise a support ticket in the App. Operator: ${CREATOR.owner}, ${CREATOR.location}.`,
     ],
   },
 ]

@@ -68,6 +68,10 @@ export function AccountScreen({
             <div className="min-w-0">
               <div className="text-sm font-bold text-slate-900">MedRep Connect Pro</div>
               <div className="text-xs text-slate-500 truncate">{CREATOR.tagline}</div>
+              <div className="text-[11px] text-slate-500 truncate">Operated by {CREATOR.owner} · {CREATOR.location}</div>
+              <a href={`mailto:${CREATOR.contactEmail}`} className="text-[11px] font-semibold text-blue-600 underline underline-offset-2 truncate block">
+                {CREATOR.contactEmail}
+              </a>
             </div>
           </div>
           <Badge color="brand">{APP_VERSION_LABEL}</Badge>
