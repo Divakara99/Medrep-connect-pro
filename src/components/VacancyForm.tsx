@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Badge, Button, Input, Label, Modal, Select, Textarea } from './ui'
 import { addJob, CATEGORIES, descriptionPoints, updateJob, type Job } from '../data/jobs'
 import { findConfidentialContact } from '../data/jobDescription'
+import { digitsOnly, hasNonPhoneCharacters, mobileNumberProblem, MOBILE_MAX_DIGITS } from '../data/vacancyRules'
 import { teamPostVacancy } from '../data/vacancyTeam'
 
 /**
@@ -13,8 +14,14 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
   const [title, setTitle] = useState(job?.title ?? '')
   const [company, setCompany] = useState(job?.company ?? '')
   const [manager, setManager] = useState(job?.manager ?? '')
-  const [contact, setContact] = useState(job?.contact ?? '')
-  const [managerAltPhone, setManagerAltPhone] = useState(job?.managerAltPhone ?? '')
+  // Mobile fields hold digits only — any formatting already on an older
+  // vacancy is dropped here, so what is saved is always a clean number.
+  const [contact, setContact] = useState(() => digitsOnly(job?.contact ?? ''))
+  const [managerAltPhone, setManagerAltPhone] = useState(() => digitsOnly(job?.managerAltPhone ?? ''))
+  // Shown inside the field itself (red border + red text), never in a list
+  // below the form.
+  const [contactError, setContactError] = useState<string | null>(null)
+  const [altPhoneError, setAltPhoneError] = useState<string | null>(null)
   const [managerEmail, setManagerEmail] = useState(job?.managerEmail ?? '')
   const [location, setLocation] = useState(job?.location ?? '')
   const [hq, setHq] = useState(job?.hq ?? '')
@@ -27,9 +34,29 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  /**
+   * Mobile fields accept digits only. A letter is refused as it is typed and
+   * the complaint stays inside that one field; formatting characters (space,
+   * +, -, brackets) are silently dropped, so a pasted number still works.
+   */
+  function changeMobile(raw: string, setValue: (value: string) => void, setProblem: (problem: string | null) => void) {
+    setValue(digitsOnly(raw).slice(0, MOBILE_MAX_DIGITS))
+    setProblem(hasNonPhoneCharacters(raw) ? 'Letters are not allowed here — digits only.' : null)
+  }
+
   async function save() {
     if (!title || !company || !location) {
       setError('Title, company, and location are required.')
+      return
+    }
+    // Each mobile number is checked on its own and reported inside its own box.
+    const contactProblem = mobileNumberProblem(contact)
+    const altPhoneProblem = mobileNumberProblem(managerAltPhone, { optional: true })
+    setContactError(contactProblem)
+    setAltPhoneError(altPhoneProblem)
+    if (contactProblem || altPhoneProblem) {
+      // The message lives in the number's own box, never in a list below the form.
+      setError(null)
       return
     }
     // Same rule the database enforces: the description is public, so it must
@@ -84,19 +111,51 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
           </div>
           <div>
             <Label>Contact (phone · ABM/ASM)</Label>
-            <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="+91-…" />
+            <Input
+              type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="tel"
+              value={contact}
+              onChange={(e) => changeMobile(e.target.value, setContact, setContactError)}
+              placeholder="10-digit mobile number"
+              aria-invalid={contactError ? true : undefined}
+              aria-describedby={contactError ? 'vacancy-contact-error' : undefined}
+              /* Inline style: the shared Input's own border/text classes must lose here. */
+              style={contactError ? { borderColor: '#dc2626', color: '#b91c1c', backgroundColor: '#fef2f2' } : undefined}
+            />
+            {contactError && (
+              <p id="vacancy-contact-error" role="alert" className="mt-1.5 text-sm font-bold text-red-700">{contactError}</p>
+            )}
           </div>
           <div>
             <Label>Manager alternate number</Label>
             <div className="flex items-stretch">
-              <span aria-hidden className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-slate-200 bg-slate-100 text-slate-700 font-extrabold">(+)</span>
+              <span
+                aria-hidden
+                className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-slate-200 bg-slate-100 text-slate-700 font-extrabold"
+                style={altPhoneError ? { borderColor: '#dc2626', color: '#b91c1c' } : undefined}
+              >
+                (+)
+              </span>
               <Input
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
                 value={managerAltPhone}
-                onChange={(e) => setManagerAltPhone(e.target.value)}
-                placeholder="Optional · +91-…"
+                onChange={(e) => changeMobile(e.target.value, setManagerAltPhone, setAltPhoneError)}
+                placeholder="Optional · 10-digit number"
                 className="rounded-l-none"
+                aria-invalid={altPhoneError ? true : undefined}
+                aria-describedby={altPhoneError ? 'vacancy-alt-phone-error' : undefined}
+                /* Inline style: the shared Input's own border/text classes must lose here. */
+                style={altPhoneError ? { borderColor: '#dc2626', color: '#b91c1c', backgroundColor: '#fef2f2' } : undefined}
               />
             </div>
+            {altPhoneError && (
+              <p id="vacancy-alt-phone-error" role="alert" className="mt-1.5 text-sm font-bold text-red-700">{altPhoneError}</p>
+            )}
           </div>
           <div>
             <Label>Manager email</Label>
@@ -155,7 +214,7 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
               + Add a point
             </Button>
             <span className="text-[11px] text-slate-600">
-              {descriptionPoints(description).length} point{descriptionPoints(description).length === 1 ? '' : 's'} · each line becomes a (+) bullet
+              {descriptionPoints(description).length} point{descriptionPoints(description).length === 1 ? '' : 's'} · each line becomes a • bullet
             </span>
           </div>
           {descriptionPoints(description).length > 0 && (
@@ -164,7 +223,7 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
               <ul className="space-y-1">
                 {descriptionPoints(description).map((point, index) => (
                   <li key={index} className="flex items-start gap-1.5 text-xs text-slate-800 leading-snug">
-                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">(+)</span>
+                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0">•</span>
                     <span>{point}</span>
                   </li>
                 ))}

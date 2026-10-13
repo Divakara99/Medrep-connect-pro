@@ -5,12 +5,16 @@ import { supabase } from './supabase'
  *
  * This is a real second factor: the six-digit code is checked by Supabase Auth,
  * and only a successful verification upgrades the session's authenticator
- * assurance level to `aal2`. Every admin-only database policy
- * (`public.is_app_admin()`) and every admin Edge Function requires that `aal2`
- * claim, which is signed by Supabase Auth and cannot be produced by the browser.
+ * assurance level to `aal2`. While the sign-in code is switched ON — the default
+ * on every project — each admin-only database policy (`public.is_app_admin()`)
+ * and every admin Edge Function requires that `aal2` claim, which is signed by
+ * Supabase Auth and cannot be produced by the browser.
  *
- * Nothing about MFA is stored in localStorage/sessionStorage — the state lives
- * in the Auth session itself.
+ * The owner can switch the code OFF from the admin console
+ * (`setAdminMfaRequired`). That state lives server side in public.app_settings
+ * and is read by `is_app_admin()` itself, so with the switch off a password-only
+ * (aal1) admin session is accepted — a deliberate, audited reduction of admin
+ * security. Nothing about MFA is stored in localStorage/sessionStorage.
  */
 export type TotpFactor = {
   id: string
@@ -113,4 +117,96 @@ export async function hasVerifiedTotpFactor(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+export type AdminSecurityState = {
+  mfaRequired: boolean
+  mfaVerified: boolean
+  aal: string
+  isAdmin: boolean
+  changedBy: string | null
+  changedAt: string | null
+}
+
+/**
+ * The server's view of admin security: whether the sign-in code is required,
+ * whether THIS session satisfied it, and who last changed the switch.
+ */
+export async function adminSecurityState(): Promise<AdminSecurityState | null> {
+  const { data, error } = await supabase.rpc('admin_security_state')
+  if (error || !data) return null
+  const row = data as Record<string, unknown>
+  return {
+    mfaRequired: row.mfaRequired !== false,
+    mfaVerified: row.mfaVerified === true,
+    aal: typeof row.aal === 'string' ? row.aal : 'aal1',
+    isAdmin: row.isAdmin === true,
+    changedBy: typeof row.changedBy === 'string' ? row.changedBy : null,
+    changedAt: typeof row.changedAt === 'string' ? row.changedAt : null,
+  }
+}
+
+/**
+ * Is the code switch ON? Fails safe: any problem counts as "required", which is
+ * the same answer the database gives.
+ */
+export async function adminMfaRequired(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('admin_mfa_required')
+  if (error || typeof data !== 'boolean') return true
+  return data
+}
+
+export type SecurityToggleResult =
+  | { ok: true; state: AdminSecurityState }
+  | { ok: false; error: string }
+
+/**
+ * Switch the administrator sign-in code on or off. The database performs the
+ * authorization (administrator only) and records who changed it and with which
+ * code state.
+ */
+export async function setAdminMfaRequired(required: boolean): Promise<SecurityToggleResult> {
+  const { data, error } = await supabase.rpc('set_admin_mfa_required', { p_required: required })
+  if (error) {
+    return {
+      ok: false,
+      error: /could not find the function|schema cache/i.test(error.message)
+        ? 'The sign-in code switch is not available yet — run supabase/admin_mfa.sql in the Supabase project.'
+        : /Only an administrator|42501/i.test(error.message)
+          ? 'Only an administrator can change the sign-in code setting.'
+          : error.message || 'The sign-in code setting could not be changed.',
+    }
+  }
+  const row = (data ?? {}) as Record<string, unknown>
+  return {
+    ok: true,
+    state: {
+      mfaRequired: row.mfaRequired !== false,
+      mfaVerified: row.mfaVerified === true,
+      aal: typeof row.aal === 'string' ? row.aal : 'aal1',
+      isAdmin: row.isAdmin === true,
+      changedBy: typeof row.changedBy === 'string' ? row.changedBy : null,
+      changedAt: typeof row.changedAt === 'string' ? row.changedAt : null,
+    },
+  }
+}
+
+export type SecurityChange = { changedBy: string; changedAal: string; required: boolean; changedAt: string }
+
+/** The audit trail of sign-in code changes (administrators only, newest first). */
+export async function adminSecurityAudit(limit = 5): Promise<SecurityChange[]> {
+  const { data, error } = await supabase
+    .from('app_settings_audit')
+    .select('value,changed_by,changed_aal,changed_at')
+    .eq('key', 'admin_mfa')
+    .order('id', { ascending: false })
+    .limit(limit)
+  if (error || !data) return []
+  return (data as unknown as { value: Record<string, unknown>; changed_by: string | null; changed_aal: string | null; changed_at: string }[])
+    .map((row) => ({
+      changedBy: row.changed_by ?? 'unknown',
+      changedAal: row.changed_aal ?? 'aal1',
+      required: row.value?.required !== false,
+      changedAt: row.changed_at,
+    }))
 }

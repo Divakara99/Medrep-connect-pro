@@ -15,6 +15,38 @@ export function deleteReasonProblem(reason: string): string | null {
   return null
 }
 
+// ---------------------------------------------------------------------------
+// Mobile numbers. The vacancy form accepts digits only, so a letter can never
+// reach a stored contact number, and the field itself carries the message.
+// ---------------------------------------------------------------------------
+
+/** A mobile number is stored as these local digits (or with 91 / a leading 0). */
+export const MOBILE_DIGITS = 10
+/** Digits accepted while typing: the local number plus its 91 / 0 prefix. */
+export const MOBILE_MAX_DIGITS = 12
+
+/** Everything that is not a digit, removed — spaces, +, dashes, letters. */
+export function digitsOnly(raw: string): string {
+  return (raw || '').replace(/\D/g, '')
+}
+
+/** True when the typed text contains something no phone number contains. */
+export function hasNonPhoneCharacters(raw: string): boolean {
+  // Formatting characters (space + - ( ) . /) are allowed and simply dropped;
+  // letters and any other symbol are not.
+  return /[^\d\s()+\-./]/.test(raw || '')
+}
+
+/** Returns a message when the number is not acceptable, otherwise null. */
+export function mobileNumberProblem(raw: string, options: { optional?: boolean } = {}): string | null {
+  const digits = digitsOnly(raw)
+  if (!digits) return options.optional ? null : `Enter the ${MOBILE_DIGITS}-digit mobile number (digits only).`
+  if (digits.length === MOBILE_DIGITS) return null
+  if (digits.length === MOBILE_DIGITS + 1 && digits.startsWith('0')) return null
+  if (digits.length === MOBILE_MAX_DIGITS && digits.startsWith('91')) return null
+  return `Enter a ${MOBILE_DIGITS}-digit mobile number — digits only.`
+}
+
 export type ActorRole = 'admin' | 'vacancy_editor' | 'system' | 'earlier'
 
 export type AuditRow = {

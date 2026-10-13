@@ -1,6 +1,6 @@
 import { read, remove, write } from './storage'
 import { supabase } from './supabase'
-import { broadcast } from './notifications'
+import { broadcast, publish } from './notifications'
 import { deleteReasonProblem } from './vacancyRules'
 
 export type JobCategory =
@@ -136,14 +136,15 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
   const job: Job = { ...input, id: crypto.randomUUID(), postedAt: Date.now() }
   await storeJob(job)
   jobs = [job, ...jobs]
-  // Every new job post must notify users.
-  broadcast({
+  // Every new job post must notify users — in the app and on their phones.
+  const notice = broadcast({
     kind: 'job-posted',
     jobTitle: job.title,
     category: job.category,
     location: job.location,
     pinned: job.pinned,
   }, { meta: { jobId: job.id } })
+  void publish(notice)
   return job
 }
 
@@ -162,7 +163,8 @@ export async function updateJob(id: string, patch: Partial<Job>, options?: { sil
   // such as pin toggles, which are not content updates).
   const contentChanged = CONTENT_FIELDS.some((field) => updated[field] !== previous[field])
   if (!options?.silent && contentChanged) {
-    broadcast({ kind: 'job-edited', jobTitle: updated.title }, { meta: { jobId: updated.id } })
+    const notice = broadcast({ kind: 'job-edited', jobTitle: updated.title }, { meta: { jobId: updated.id } })
+    void publish(notice)
   }
   return updated
 }
@@ -213,13 +215,14 @@ export function filterJobs(
 }
 
 /**
- * Job descriptions are entered one point per line and rendered as (+) bullets.
- * A leading "(+)" typed by the admin is tolerated and stripped here.
+ * Job descriptions are entered one point per line and rendered as • bullets.
+ * A bullet typed by the admin at the start of a line — "(+)", "•", "*" or "-"
+ * — is tolerated and stripped here, so a line is never shown with two bullets.
  */
 export function descriptionPoints(description?: string): string[] {
   return (description || '')
     .split(/\r?\n|•/)
-    .map((line) => line.replace(/^\s*\(\+\)\s*/, '').trim())
+    .map((line) => line.replace(/^\s*(?:\(\+\)|[*•\u2022-])\s*/, '').trim())
     .filter(Boolean)
 }
 

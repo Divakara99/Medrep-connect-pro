@@ -19,9 +19,12 @@ import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jo
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { clearMyApplicationCache, openApplication } from './data/apply'
 import { clearResumeCache, getLatestResume, type ResumeRecord } from './data/resume'
-import { refreshNotificationsFromServer, unreadCount } from './data/notifications'
+import { playNotifSound, refreshNotificationsAndAlert, soundEnabled, unreadCount } from './data/notifications'
+import { showSystemNotification, syncPushSubscription } from './data/push'
 import { clearSupportCache } from './data/supportRequests'
 import { clearPaymentCache } from './data/payments'
+import { installBackGuard } from './data/backstack'
+import { useBackHandler } from './components/useBackHandler'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
 
@@ -34,7 +37,11 @@ export default function App() {
   const [authTimedOut, setAuthTimedOut] = useState(false)
   const [now, setClock] = useState(Date.now)
   const [user, setUser] = useState<User | null>(null)
-  const [tab, setTab] = useState<UserTab>('home')
+  // The tab the user is on plus the tabs they came from, so the phone's back
+  // button steps back through the pages they visited here (Home → Plans →
+  // back → Home) instead of closing the app.
+  const [nav, setNav] = useState<{ tab: UserTab; stack: UserTab[] }>({ tab: 'home', stack: [] })
+  const tab = nav.tab
   const [jobs, setJobs] = useState<Job[]>([])
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState<string | null>(null)
@@ -89,13 +96,35 @@ export default function App() {
       } else {
         setUser(snapshot.user)
         setView('user')
-        if (resetTab) setTab('home')
+        if (resetTab) setNav({ tab: 'home', stack: [] })
       }
     } else {
       setUser(null)
       setView(portalLoginView)
     }
   }, [adminPortal, portalLoginView, vacancyPortal])
+
+  /** Opens a tab, remembering the page it was opened from. */
+  const navigate = useCallback((next: UserTab) => {
+    setNav((current) => next === current.tab
+      ? current
+      : { tab: next, stack: [...current.stack, current.tab].slice(-20) })
+  }, [])
+
+  /** The back step inside the app: the previous tab, or nothing on Home. */
+  const goBackInApp = useCallback(() => {
+    setNav((current) => {
+      const previous = current.stack[current.stack.length - 1]
+      if (!previous) return current
+      return { tab: previous, stack: current.stack.slice(0, -1) }
+    })
+  }, [])
+
+  // Arm the history guard for every page of the app (sign-in included) and let
+  // the signed-in page stack answer the back gesture. Sheets and the
+  // applications page register above this one, so they close first.
+  useEffect(() => { installBackGuard() }, [])
+  useBackHandler(view === 'user', goBackInApp)
 
   // Wait for session restoration before showing either login screen. Supabase
   // sends INITIAL_SESSION before the subscription/entitlement query finishes;
@@ -199,13 +228,40 @@ export default function App() {
     return () => { active = false }
   }, [view, userId])
 
-  // Keep the broadcast feed (new job posts + every job update) in sync so the
-  // notification bell reflects admin activity without a manual refresh.
+  // Keep the broadcast feed (announcements + every job update) in sync so the
+  // bell reflects admin activity without a manual refresh — and ring for what
+  // arrived since the last check, so an announcement reaches every user with
+  // sound even while they are on another screen.
   useEffect(() => {
     if (view !== 'user' || !userId) return
-    void refreshNotificationsFromServer()
-    const interval = window.setInterval(() => { void refreshNotificationsFromServer() }, 60_000)
-    return () => window.clearInterval(interval)
+    let active = true
+    const check = async () => {
+      const fresh = await refreshNotificationsAndAlert()
+      if (!active || fresh.length === 0) return
+      if (soundEnabled()) playNotifSound()
+      const first = fresh[0]
+      await showSystemNotification(
+        fresh.length === 1 ? first.title : `${fresh.length} new updates`,
+        first.body,
+        first.id,
+      )
+    }
+    void check()
+    const interval = window.setInterval(() => { void check() }, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') void check() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [view, userId])
+
+  // A signed-in account keeps this device's notification subscription in its own
+  // name, so a phone that switched accounts stops reaching the previous one.
+  useEffect(() => {
+    if (view !== 'user' || !userId) return
+    void syncPushSubscription()
   }, [view, userId])
 
   function refreshUser() {
@@ -305,7 +361,7 @@ export default function App() {
                 type="button"
                 title="Subscribe"
                 aria-label="Subscribe"
-                onClick={() => setTab('plans')}
+                onClick={() => navigate('plans')}
                 className="w-8 h-8 shrink-0 rounded-xl bg-accent-500 hover:bg-accent-600 text-white text-base leading-none grid place-items-center shadow-sm transition active:scale-95 select-none"
               >
                 💎
@@ -335,16 +391,22 @@ export default function App() {
       )}
       {tab === 'ai' && user && <AIChatScreen user={user} />}
       {tab === 'account' && user && (
-        <AccountScreen user={user} onLogout={onLogout} onSubscribed={() => refreshUser()} onResumeChange={setResume} />
+        <AccountScreen
+          user={user}
+          onLogout={onLogout}
+          onSubscribed={() => refreshUser()}
+          onResumeChange={setResume}
+          onBrowseJobs={() => navigate('home')}
+        />
       )}
 
-      <BottomNav active={tab} onChange={setTab} />
+      <BottomNav active={tab} onChange={navigate} />
 
       <JobDetail
         job={selectedJob}
         unlocked={unlocked}
         onClose={() => setSelectedJob(null)}
-        onSubscribe={() => { setSelectedJob(null); setTab('plans') }}
+        onSubscribe={() => { setSelectedJob(null); navigate('plans') }}
         onApply={(j) => {
           const email = (j.managerEmail || '').trim()
           const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)

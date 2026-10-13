@@ -1,6 +1,6 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
 import { hasAdminRole, hasVacancyRole, supabase } from './supabase'
-import { isMfaVerifiedSession } from './mfa'
+import { adminMfaRequired, isMfaVerifiedSession } from './mfa'
 import { read, remove, write } from './storage'
 
 export type User = {
@@ -19,7 +19,16 @@ export type Session =
   | { kind: 'admin' }
   | { kind: 'vacancy' }
 
-export type AuthSnapshot = { session: Session; user: User | null; adminVerified?: boolean }
+export type AuthSnapshot = {
+  session: Session
+  user: User | null
+  /** May this session open the admin console? (verified code, or the switch is OFF) */
+  adminVerified?: boolean
+  /** Did this session actually pass the authenticator challenge? */
+  mfaVerified?: boolean
+  /** Is the owner still requiring the six-digit code? */
+  mfaRequired?: boolean
+}
 
 const USERS_CACHE_KEY = 'mrc_admin_users_cache_v1'
 const USER_STATE_KEY = 'mrc_user_state_v1'
@@ -120,10 +129,13 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
     return snapshot
   }
   if (snapshot.session.kind === 'admin') {
-    // Admin data needs a verified authenticator. `adminVerified` mirrors the
-    // session's authenticator assurance level reported by Supabase Auth, which
-    // is the same `aal2` claim the database and Edge Functions require.
-    return { ...snapshot, adminVerified: await isMfaVerifiedSession() }
+    // Admin data needs a verified authenticator — unless the owner switched the
+    // sign-in code off, which the database's is_app_admin() honours as well. The
+    // switch is read from the server, so the console never promises access the
+    // database would refuse.
+    const mfaVerified = await isMfaVerifiedSession()
+    const mfaRequired = mfaVerified ? true : await adminMfaRequired()
+    return { ...snapshot, mfaVerified, mfaRequired, adminVerified: mfaVerified || !mfaRequired }
   }
 
   try {

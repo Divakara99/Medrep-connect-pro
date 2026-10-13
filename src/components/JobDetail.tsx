@@ -136,7 +136,7 @@ export function JobDetail({
               <ul className="space-y-1.5">
                 {points.map((point, index) => (
                   <li key={index} className="flex items-start gap-2 text-sm text-slate-800 leading-relaxed">
-                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0 leading-relaxed">(+)</span>
+                    <span aria-hidden className="text-brand-600 font-extrabold shrink-0 leading-relaxed">•</span>
                     <span>{point}</span>
                   </li>
                 ))}
@@ -267,8 +267,10 @@ export function ApplyConfirmSheet({
                 <div className="text-xl">📎</div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-slate-900 truncate">{resume.fileName}</div>
-                  <div className="text-xs text-slate-600 mt-0.5">
-                    Stored privately · auto-deleted after {RESUME_RETENTION_DAYS} days.
+                  {/* Kept short and unbreakable so the auto-delete message stays
+                      on one line on a phone. */}
+                  <div className="text-xs text-slate-600 mt-0.5 whitespace-nowrap">
+                    Private · auto-deleted after {RESUME_RETENTION_DAYS} days
                   </div>
                 </div>
               </div>

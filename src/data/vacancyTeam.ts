@@ -1,4 +1,5 @@
 import { hasAdminRole, supabase } from './supabase'
+import { notifyDevices } from './push'
 import type { Job } from './jobs'
 import { deleteReasonProblem, type ActorRole, type AuditRow } from './vacancyRules'
 
@@ -171,7 +172,11 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
   }
   const { data, error } = await supabase.rpc('employee_post_vacancy', { p_fields: payload })
   if (error) return { ok: false, error: error.message || 'The vacancy could not be posted.' }
-  return { ok: true, id: (data as { id: string }).id }
+  const id = (data as { id: string }).id
+  // The database already wrote the notice for every user; ask the send-push
+  // function to ring their phones as well (the team role may push a vacancy).
+  void notifyDevices({ jobId: id })
+  return { ok: true, id }
 }
 
 export async function teamListVacancies(): Promise<TeamVacancy[]> {

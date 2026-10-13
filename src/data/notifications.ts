@@ -1,6 +1,8 @@
 import { CREATOR } from './creator'
 import { mirror, supabase } from './supabase'
 import { read, write } from './storage'
+import { announcementBody, nextWatermark, notificationsToAlert, shouldChime } from './pushRules'
+import { publishToEveryone } from './push'
 
 export type Notification = {
   id: string
@@ -34,11 +36,24 @@ type EventKind =
   | { kind: 'payment-confirmed'; planName: string; days: number; expiresAt: number; amount: number }
   | { kind: 'refund-processed'; amount: number; refundRef: string; method: string }
   | { kind: 'platform-update'; message?: string }
+  | { kind: 'announcement'; title: string; message: string }
   | { kind: 'welcome'; userName: string }
 
 // ---------- Notification sound (WebAudio chime, no asset needed) ----------
+const SOUND_KEY = 'mrc_notif_sound_v1'
+
+/** Sound is on unless the user switched it off on this device. */
+export function soundEnabled(): boolean {
+  return read<boolean>(SOUND_KEY, true) !== false
+}
+
+export function setSoundEnabled(enabled: boolean): void {
+  write(SOUND_KEY, enabled !== false)
+}
+
 let audioCtx: AudioContext | null = null
 export function playNotifSound() {
+  if (!soundEnabled()) return
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     if (!Ctx) return
@@ -112,6 +127,9 @@ function generateCopy(ev: EventKind): { title: string; body: string } {
           `Your refund of ₹${ev.amount.toLocaleString('en-IN')} has been approved by the admin and processed via ${ev.method}.\n\n` +
           `Refund reference: ${ev.refundRef}\nIt should reflect in your account shortly (usually within 3–5 working days as per bank timelines).`,
       }
+    case 'announcement':
+      // The administrator writes the words; nothing is templated.
+      return { title: ev.title.trim(), body: ev.message.trim() }
     case 'platform-update':
       return {
         title: 'Platform update',
@@ -140,6 +158,7 @@ export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' 
     'payment-confirmed': 'payment',
     'refund-processed': 'payment',
     'platform-update': 'update',
+    announcement: 'update',
     welcome: 'system',
   }
   const notif: Notification = {
@@ -256,3 +275,87 @@ export function markOneRead(email: string, id: string) {
   read[email.toLowerCase()] = Math.max(prev, n.createdAt)
   write(READ_KEY, read)
 }
+
+// ---------------------------------------------------------------------------
+// Announcements to everyone
+// ---------------------------------------------------------------------------
+
+/** The sign-off every broadcast carries, so the sender is always obvious. */
+export function announcementSignOff(): string {
+  return SIGN_OFF
+}
+
+export type AnnouncementResult =
+  | { ok: true; notification: Notification; delivery: { sent: number; failed: number; removed: number; devices: number } | null; warning?: string }
+  | { ok: false; error: string }
+
+/**
+ * Send an announcement to every user: the words are stored in the broadcast feed
+ * (so it is visible in the app for good) and then pushed to every subscribed
+ * phone, with sound. The push step is reported separately — the announcement
+ * itself never fails because a phone could not be reached.
+ */
+export async function sendAnnouncement(title: string, message: string): Promise<AnnouncementResult> {
+  const cleanTitle = title.trim()
+  const cleanMessage = message.trim()
+  if (!cleanTitle || !cleanMessage) return { ok: false, error: 'Write a title and a message before sending.' }
+
+  const notification = broadcast({ kind: 'announcement', title: cleanTitle, message: cleanMessage })
+  return publish(notification)
+}
+
+/**
+ * Store a broadcast on the server and push it to every subscribed device. Used
+ * for announcements and for vacancy posts/updates.
+ */
+export async function publish(notification: Notification): Promise<AnnouncementResult> {
+  const { delivery, error } = await publishToEveryone(notification)
+  if (error && !delivery) {
+    return {
+      ok: true,
+      notification,
+      delivery: null,
+      warning: `Saved for every user. Phone notifications were not sent: ${error}`,
+    }
+  }
+  return {
+    ok: true,
+    notification,
+    delivery,
+    warning: delivery && delivery.sent === 0 && delivery.devices === 0
+      ? 'Saved for every user. No phone has notifications switched on yet — ask users to turn them on in the app.'
+      : undefined,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Arriving announcements on a signed-in device
+// ---------------------------------------------------------------------------
+
+const SEEN_KEY = 'mrc_notif_seen_v1'
+/** Never flood a phone: at most these many alerts per check. */
+const MAX_ALERTS_PER_CHECK = 3
+
+/**
+ * Pull new broadcasts from the server and report the ones this device has not
+ * seen yet, so the app can chime (and raise a system notification) even when the
+ * user is sitting on another screen. The first check on a device only records a
+ * watermark — a fresh install must not ring for the whole backlog.
+ */
+export async function refreshNotificationsAndAlert(): Promise<Notification[]> {
+  const watermark = read<number>(SEEN_KEY, 0)
+  const known = read<Notification[]>(NOTIF_KEY, []).map((item) => item.id)
+  await refreshNotificationsFromServer()
+  const merged = read<Notification[]>(NOTIF_KEY, [])
+  const fresh = notificationsToAlert(merged, known, watermark, MAX_ALERTS_PER_CHECK)
+  const next = nextWatermark(watermark, merged, fresh)
+  if (next !== watermark) write(SEEN_KEY, next)
+  return fresh
+}
+
+/** True when a new broadcast deserves a sound on this device. */
+export function shouldChimeForAlert(alerted: Notification[]): boolean {
+  return shouldChime(soundEnabled(), alerted.length)
+}
+
+export { announcementBody }

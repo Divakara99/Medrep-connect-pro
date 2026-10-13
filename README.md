@@ -37,16 +37,20 @@ India's first pharma-job network — **MR vacancies pinned first**, then multi-i
 | Apply blocked — "Subscribe to apply" | Apply + confirmation sheet enabled |
 
 ## Admin panel (full access)
-Horizontally scrollable tabs: **Vacancies · Plans · Payments · Tickets · Users · Profile**
+Horizontally scrollable tabs: **Vacancies · Announcements · Plans · Payments · Applications · Requests · Vacancy team · Users · Security · Profile**
 - **Vacancies** — add / edit / delete / pin priority (MR, ABM, multi-industry).
 - **Plans** — edit titles, taglines, popularity, **checkout prices and validity**; every change is written to `public.billing_plans` by `save_billing_plan()`, which the database only accepts from an MFA-verified administrator. Existing orders keep the price they were created with.
 - **Vacancies** — the description field is marked PUBLIC, previews its (+) bullets as you type, and refuses phone numbers and email addresses (mirrored by a database trigger).
 - **Payments** — server-backed transaction monitor; legacy manual UPI requests require bank-statement review before activation. Razorpay credentials and merchant banking details never go in the browser and are never shown to users.
 - **Tickets** — AI-escaped and manual support tickets with replies & status.
 - **Users** — Auth-backed registered-user list; delete non-admin accounts through the verified server-side Edge Function (administrator accounts are protected).
+- **Announcements** — write one title and message; it is stored for every user's notification list and pushed to every phone that switched notifications on (with sound). The same tab shows how many devices are reachable and what the last sends reached.
+- **Security** — the administrator sign-in code (authenticator app) can be switched **ON/OFF**. ON is the default and is enforced by the database (`is_app_admin()` requires the `aal2` claim); OFF is a deliberate, audited exception for a lost authenticator, and a password-only admin can switch it back ON. Every change records the email, the session's code state and the time.
 - **Profile** — frozen creator identity + hidden admin mobile.
 
-Only an authenticated admin with verified MFA can post/edit/delete vacancies (enforced by Supabase RLS). No demo jobs are shipped to user browsers; admins can explicitly import older local posts after review.
+Only an authenticated admin with verified MFA (or the code switched OFF, see **Security**) can post/edit/delete vacancies (enforced by Supabase RLS). No demo jobs are shipped to user browsers; admins can explicitly import older local posts after review.
+
+**Phone notifications.** Every user can switch Web Push on for their own device (🔔 in the top bar → *Turn on notifications*). Announcements, new vacancies and vacancy updates are then delivered by the `send-push` Edge Function even when the app is closed, with the operating system's notification sound and a vibration pattern; while the app is open the same arrival also plays the in-app chime. The message text always comes from the server-side notification row — a signed-in account can never push arbitrary words to other phones. Devices the push service reports as gone are removed automatically.
 
 ## Data (localStorage keys)
 | Concept | Key |
