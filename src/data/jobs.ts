@@ -1,6 +1,7 @@
 import { read, remove, write } from './storage'
 import { supabase } from './supabase'
 import { broadcast } from './notifications'
+import { deleteReasonProblem } from './vacancyRules'
 
 export type JobCategory =
   | 'MR' | 'ABM' | 'Part-time' | 'E-commerce' | 'Finance' | 'Banking'
@@ -166,10 +167,14 @@ export async function updateJob(id: string, patch: Partial<Job>, options?: { sil
   return updated
 }
 
-export async function deleteJob(id: string): Promise<void> {
+export async function deleteJob(id: string, reason: string): Promise<void> {
+  // Every deletion needs a reason; the audit log keeps it with the vacancy.
+  const problem = deleteReasonProblem(reason)
+  if (problem) throw new Error(problem)
   // Tombstone rather than delete so a stale client cannot resurrect a row.
   const { error } = await supabase.from('vacancies').update({
-    data: { deleted: true, deletedAt: Date.now() }, synced_at: new Date().toISOString(),
+    data: { deleted: true, deletedAt: Date.now(), deleteReason: reason.trim() },
+    synced_at: new Date().toISOString(),
   }).eq('id', id).select('id').single()
   if (error) throw new Error('Vacancy could not be deleted. Check permissions and try again.')
   jobs = jobs.filter((job) => job.id !== id)

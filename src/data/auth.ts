@@ -1,5 +1,5 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
-import { hasAdminRole, supabase } from './supabase'
+import { hasAdminRole, hasVacancyRole, supabase } from './supabase'
 import { isMfaVerifiedSession } from './mfa'
 import { read, remove, write } from './storage'
 
@@ -17,6 +17,7 @@ export type Session =
   | { kind: 'none' }
   | { kind: 'user'; userId: string }
   | { kind: 'admin' }
+  | { kind: 'vacancy' }
 
 export type AuthSnapshot = { session: Session; user: User | null; adminVerified?: boolean }
 
@@ -82,10 +83,9 @@ function snapshotFromSession(session: Awaited<ReturnType<typeof supabase.auth.ge
 
   const user = toUser(session.user)
   activeUser = user
-  return {
-    session: user.isAdmin ? { kind: 'admin' } : { kind: 'user', userId: user.id },
-    user,
-  }
+  if (user.isAdmin) return { session: { kind: 'admin' }, user }
+  if (hasVacancyRole(session.user)) return { session: { kind: 'vacancy' }, user }
+  return { session: { kind: 'user', userId: user.id }, user }
 }
 
 async function withServerSubscription(user: User): Promise<User> {
@@ -114,6 +114,11 @@ export async function getAuthSnapshot(): Promise<AuthSnapshot> {
   if (error) throw error
   const snapshot = snapshotFromSession(data.session)
   if (!snapshot.user) return snapshot
+  if (snapshot.session.kind === 'vacancy') {
+    // Team logins have no subscription and no admin data; the vacancy portal
+    // checks what it needs through its own functions.
+    return snapshot
+  }
   if (snapshot.session.kind === 'admin') {
     // Admin data needs a verified authenticator. `adminVerified` mirrors the
     // session's authenticator assurance level reported by Supabase Auth, which
@@ -251,10 +256,10 @@ export async function loginUser(
   })
   if (error) return { ok: false, error: authErrorMessage(error.message) }
   if (!data.user) return { ok: false, error: 'Sign-in did not return an account. Please try again.' }
-  if (hasAdminRole(data.user)) {
+  if (hasAdminRole(data.user) || hasVacancyRole(data.user)) {
     activeUser = null
     await supabase.auth.signOut()
-    // The public form should never advertise the restricted entry route.
+    // The public form should never advertise the restricted entry routes.
     return { ok: false, error: 'This account cannot sign in here. Contact support if you need help.' }
   }
 
@@ -275,6 +280,26 @@ export async function loginAdmin(
   if (!data.user || !hasAdminRole(data.user)) {
     await supabase.auth.signOut()
     return { ok: false, error: 'This account is not an administrator.' }
+  }
+
+  activeUser = toUser(data.user)
+  return { ok: true }
+}
+
+/** Vacancy team sign-in. Logins are created by the administrator only. */
+export async function loginVacancyTeam(
+  email: string,
+  password: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  })
+  if (error) return { ok: false, error: authErrorMessage(error.message) }
+  if (!data.user || !hasVacancyRole(data.user)) {
+    activeUser = null
+    await supabase.auth.signOut()
+    return { ok: false, error: 'This login is not a vacancy team account. Ask the administrator for your login.' }
   }
 
   activeUser = toUser(data.user)

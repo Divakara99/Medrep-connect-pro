@@ -17,7 +17,9 @@
     "test:descriptions": "node scripts/test-description-guard.mjs",
     "test:support": "node scripts/test-support-requests.mjs",
     "test:refund-check": "node scripts/test-refund-check.mjs",
-    "test": "npm run test:security && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:descriptions && npm run test:support && npm run test:refund-check",
+    "test:vacancy-team": "node scripts/test-vacancy-team.mjs",
+    "test:vacancy-rules": "node scripts/test-vacancy-rules.mjs",
+    "test": "npm run test:security && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:descriptions && npm run test:support && npm run test:refund-check && npm run test:vacancy-team && npm run test:vacancy-rules",
     "preview": "vite preview"
   },
   "dependencies": {

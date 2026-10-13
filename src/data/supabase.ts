@@ -24,6 +24,11 @@ export function hasAdminRole(user: Pick<SupabaseUser, 'app_metadata'> | null | u
   return metadata?.role === 'admin' || metadata?.is_admin === true || metadata?.is_admin === 'true'
 }
 
+/** Vacancy team logins: set by the administrator, can only post and delete vacancies. */
+export function hasVacancyRole(user: Pick<SupabaseUser, 'app_metadata'> | null | undefined): boolean {
+  return user?.app_metadata?.role === 'vacancy_editor'
+}
+
 export type SupabaseSyncState = 'off' | 'idle' | 'ok' | 'error'
 
 export type SupabaseSyncStatus = {

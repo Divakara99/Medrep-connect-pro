@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { LoginScreen } from './screens/LoginScreen'
 import { AdminLoginScreen } from './screens/AdminLoginScreen'
 import { AdminMfaScreen } from './screens/AdminMfaScreen'
+import { VacancyLoginScreen } from './screens/VacancyLoginScreen'
+import { VacancyPortal } from './screens/VacancyPortal'
 import { AdminScreen } from './screens/AdminScreen'
 import { BottomNav, type UserTab } from './components/BottomNav'
 import { TopBar, IconButton } from './components/ui'
@@ -21,10 +23,13 @@ import { refreshNotificationsFromServer, unreadCount } from './data/notification
 import { clearSupportCache } from './data/supportRequests'
 import { clearPaymentCache } from './data/payments'
 
-type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'user' | 'admin'
+type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
 
 export default function App() {
   const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
+  // ?portal=vacancy: the vacancy team's own login and page (post and delete only).
+  const [vacancyPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'vacancy')
+  const portalLoginView: View = vacancyPortal ? 'vacancy-login' : adminPortal ? 'admin-login' : 'login'
   const [view, setView] = useState<View>('loading')
   const [authTimedOut, setAuthTimedOut] = useState(false)
   const [now, setClock] = useState(Date.now)
@@ -46,6 +51,25 @@ export default function App() {
   void notifTick
 
   const applyAuthSnapshot = useCallback((snapshot: AuthSnapshot, resetTab = false) => {
+    if (vacancyPortal) {
+      // The team portal accepts only a vacancy team session. Anything else is
+      // signed out here, as the admin portal does for user sessions.
+      setUser(null)
+      if (snapshot.session.kind === 'vacancy') {
+        setView('vacancy')
+        return
+      }
+      setView('vacancy-login')
+      if (snapshot.session.kind !== 'none') window.setTimeout(() => { void doLogout() }, 0)
+      return
+    }
+    if (snapshot.session.kind === 'vacancy') {
+      // A team login has no place in the user or admin portals.
+      setUser(null)
+      setView(portalLoginView)
+      window.setTimeout(() => { void doLogout() }, 0)
+      return
+    }
     if (snapshot.session.kind === 'admin') {
       if (adminPortal) {
         setUser(null)
@@ -69,9 +93,9 @@ export default function App() {
       }
     } else {
       setUser(null)
-      setView(adminPortal ? 'admin-login' : 'login')
+      setView(portalLoginView)
     }
-  }, [adminPortal])
+  }, [adminPortal, portalLoginView, vacancyPortal])
 
   // Wait for session restoration before showing either login screen. Supabase
   // sends INITIAL_SESSION before the subscription/entitlement query finishes;
@@ -85,7 +109,7 @@ export default function App() {
       const request = ++generation
       void getAuthSnapshot()
         .then((snapshot) => { if (mounted && request === generation) applyAuthSnapshot(snapshot, resetTab) })
-        .catch(() => { if (mounted && request === generation) setView(adminPortal ? 'admin-login' : 'login') })
+        .catch(() => { if (mounted && request === generation) setView(portalLoginView) })
     }
     const unsubscribe = onAuthStateChange((event) => {
       if (!mounted) return
@@ -99,14 +123,14 @@ export default function App() {
         ++generation
         setRecoveryMode(true)
         setUser(null)
-        setView(adminPortal ? 'admin-login' : 'login')
+        setView(portalLoginView)
       } else if (event === 'SIGNED_OUT') {
         ++generation
         clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache()
         clearJobs()
         setRecoveryMode(false)
         setUser(null)
-        setView(adminPortal ? 'admin-login' : 'login')
+        setView(portalLoginView)
       } else {
         if (event === 'SIGNED_IN') { clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache(); clearJobs() }
         if (event === 'USER_UPDATED') setRecoveryMode(false)
@@ -116,7 +140,7 @@ export default function App() {
     // Supabase must finish restoring the persisted session before we decide
     // which page to show. Calling getSession earlier can briefly render login.
     return () => { mounted = false; ++generation; window.clearTimeout(timeout); unsubscribe() }
-  }, [adminPortal, applyAuthSnapshot])
+  }, [portalLoginView, applyAuthSnapshot])
 
   // Keep time-based access in sync without a page reload. Recheck the server
   // on returning to the app (e.g. after a Razorpay UPI-app handoff/webhook).
@@ -201,7 +225,7 @@ export default function App() {
     await doLogout()
     setRecoveryMode(false)
     setUser(null)
-    setView(adminPortal ? 'admin-login' : 'login')
+    setView(portalLoginView)
   }
 
   function openJob(j: Job) {
@@ -237,6 +261,14 @@ export default function App() {
 
   if (view === 'admin') {
     return <AdminScreen onExit={onLogout} />
+  }
+
+  if (view === 'vacancy-login') {
+    return <VacancyLoginScreen onAuthed={onAuthed} />
+  }
+
+  if (view === 'vacancy') {
+    return <VacancyPortal onExit={onLogout} />
   }
 
   // User app

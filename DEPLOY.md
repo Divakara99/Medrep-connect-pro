@@ -41,7 +41,7 @@ If any step fails, stop and fix that step before continuing.
 Run the migrations **in this order**, in the Supabase project that matches `VITE_SUPABASE_URL`. Each file is safe to run again.
 
 ```bash
-npm run db:list          # shows the 10 files in the correct order
+npm run db:list          # shows the 11 files in the correct order
 npm run db:copy -- 1     # copies supabase/schema.sql to your clipboard
 ```
 
@@ -50,7 +50,7 @@ Then in the Supabase dashboard:
 1. Open **SQL Editor → New query**.
 2. Click in the editor and press **Ctrl+V** (Windows/Linux) or **⌘V** (Mac) to paste.
 3. Press **Run**. Wait for "Success", then go back to the terminal.
-4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 10`.
+4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 11`.
 
 **Prefer one paste?** Run `npm run db:copy -- all`, paste once, and press **Run**. If an error appears, fix it and run the same paste again: the files are safe to re-run.
 
@@ -71,11 +71,13 @@ npx supabase functions deploy verify-razorpay-payment --project-ref <your-projec
 npx supabase functions deploy razorpay-webhook --project-ref <your-project-ref>
 npx supabase functions deploy create-upi-intent --project-ref <your-project-ref>
 npx supabase functions deploy admin-delete-user --project-ref <your-project-ref>
+npx supabase functions deploy admin-manage-employees --project-ref <your-project-ref>
 ```
 
 - `npx supabase login` opens a browser so you can sign in to Supabase. It does not ask for a password in the terminal.
 - Replace `<your-project-ref>` with the ID in your Supabase URL: `https://<your-project-ref>.supabase.co`.
 - The `create-upi-intent` line deploys the disabled version, so no new manual UPI payment can be created.
+- The `admin-manage-employees` line deploys the function that creates, resets and deletes vacancy team logins. It needs the migration in Step 2 (`vacancy_team.sql`) first.
 
 ### Step 5 — Add the secret keys (Supabase dashboard, never in chat or Git)
 
@@ -105,6 +107,7 @@ In the Razorpay dashboard, add the webhook URL `https://<your-project-ref>.supab
 - [ ] Open **Account**: your profile, your resume card and **My applications** load.
 - [ ] Upload a small PDF on **Account → Profile details**, then download it again.
 - [ ] Open the **Terms** link on **Plans** (blue "Click here") and check the full text opens.
+- [ ] Open the admin panel, go to **Vacancy team**, create a test login, sign in at `/?portal=vacancy` with it, post a vacancy and delete it with a reason. The deletion then shows in the activity list.
 - [ ] In **AI Help**, type "refund", pick the reason and payment, describe the problem, and check the verdict. Nothing is sent until you tap the yes button. Then open **Account → My requests** to see the new request.
 
 For the detailed explanations, troubleshooting and the migration table, read the sections below.
@@ -230,6 +233,9 @@ Run each file in the SQL Editor of the SAME project used by
 | 8 | `supabase/resumes.sql` | **New.** Private `resumes` storage bucket, owner-only `resume_documents`, forced 30-day retention and `delete_expired_resumes()`. |
 | 9 | `supabase/applications.sql` | **New.** `record_application()` / `list_my_applications()` so a user's application history is stored server-side with the verified identity. |
 | 10 | `supabase/support_requests.sql` | **New.** `public.support_requests` for refund and support requests. `create_support_request()` re-checks refund eligibility on the server and stores the account snapshot. Users read only their own requests; `admin_update_support_request()` is admin + MFA only. |
+| 11 | `supabase/vacancy_team.sql` | **New.** Vacancy team logins (`vacancy_editor` role) that can only post, list and delete vacancies, through `employee_post_vacancy()`, `employee_list_vacancies()` and `employee_delete_vacancy()`. Adds `vacancy_audit`, which records every vacancy added or deleted, by admin or team, with the delete reason. Only an administrator with MFA can read it. Earlier vacancies are backfilled once. |
+
+**Vacancy team logins (new).** The administrator creates a login ID and password for each team member in **Admin → Vacancy team**. Team members sign in at `/?portal=vacancy` and see one page: post a vacancy, and delete one with a required reason. The admin sees how many vacancies were added and deleted, who did it, and every deletion reason. The team cannot see users, payments, the audit log or other team logins. The login ID is the employee's email address, because the sign-in system requires one. Passwords must be 12 to 72 characters. New team accounts are created already confirmed, so no confirmation email is sent. Team logins use a password only (no authenticator code), so choose strong passwords and remove a login as soon as someone leaves.
 
 **Support requests replace device-only tickets.** Earlier builds kept tickets only in each browser (`mrc_tickets_v1`), so the administrator never saw them. The app removes that browser copy on first load. Requests raised from now on are stored in `support_requests`, and users track them under Account → My requests.
 
