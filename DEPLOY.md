@@ -41,7 +41,7 @@ If any step fails, stop and fix that step before continuing.
 Run the migrations **in this order**, in the Supabase project that matches `VITE_SUPABASE_URL`. Each file is safe to run again.
 
 ```bash
-npm run db:list          # shows the 9 files in the correct order
+npm run db:list          # shows the 10 files in the correct order
 npm run db:copy -- 1     # copies supabase/schema.sql to your clipboard
 ```
 
@@ -50,7 +50,7 @@ Then in the Supabase dashboard:
 1. Open **SQL Editor → New query**.
 2. Click in the editor and press **Ctrl+V** (Windows/Linux) or **⌘V** (Mac) to paste.
 3. Press **Run**. Wait for "Success", then go back to the terminal.
-4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 9`.
+4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 10`.
 
 **Prefer one paste?** Run `npm run db:copy -- all`, paste once, and press **Run**. If an error appears, fix it and run the same paste again: the files are safe to re-run.
 
@@ -105,6 +105,7 @@ In the Razorpay dashboard, add the webhook URL `https://<your-project-ref>.supab
 - [ ] Open **Account**: your profile, your resume card and **My applications** load.
 - [ ] Upload a small PDF on **Account → Profile details**, then download it again.
 - [ ] Open the **Terms** link on **Plans** (blue "Click here") and check the full text opens.
+- [ ] In **AI Help**, type "refund", pick the reason and payment, describe the problem, and check the verdict. Nothing is sent until you tap the yes button. Then open **Account → My requests** to see the new request.
 
 For the detailed explanations, troubleshooting and the migration table, read the sections below.
 
@@ -228,6 +229,9 @@ Run each file in the SQL Editor of the SAME project used by
 | 7 | `supabase/billing_plans.sql` | **New.** Server-side plan catalog (`public.billing_plans`) seeded with the seven existing plans; `save_billing_plan()` is admin+MFA only and refuses to retire the last purchasable plan. |
 | 8 | `supabase/resumes.sql` | **New.** Private `resumes` storage bucket, owner-only `resume_documents`, forced 30-day retention and `delete_expired_resumes()`. |
 | 9 | `supabase/applications.sql` | **New.** `record_application()` / `list_my_applications()` so a user's application history is stored server-side with the verified identity. |
+| 10 | `supabase/support_requests.sql` | **New.** `public.support_requests` for refund and support requests. `create_support_request()` re-checks refund eligibility on the server and stores the account snapshot. Users read only their own requests; `admin_update_support_request()` is admin + MFA only. |
+
+**Support requests replace device-only tickets.** Earlier builds kept tickets only in each browser (`mrc_tickets_v1`), so the administrator never saw them. The app removes that browser copy on first load. Requests raised from now on are stored in `support_requests`, and users track them under Account → My requests.
 
 **Existing subscriptions and orders are preserved.** `billing_plans.sql` seeds
 with `ON CONFLICT DO NOTHING`, `subscription_payments` keeps its own

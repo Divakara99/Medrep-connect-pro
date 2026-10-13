@@ -25,6 +25,7 @@ const MIGRATIONS = [
   { file: 'supabase/billing_plans.sql', what: 'Server-side plan catalog and admin-only pricing' },
   { file: 'supabase/resumes.sql', what: 'Private resume bucket, owner-only access, 30-day retention' },
   { file: 'supabase/applications.sql', what: 'Server-side application history' },
+  { file: 'supabase/support_requests.sql', what: 'Server-side refund and support requests; admin-only updates' },
 ]
 
 const root = fileURLToPath(new URL('..', import.meta.url))

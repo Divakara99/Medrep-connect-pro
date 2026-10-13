@@ -4,7 +4,7 @@
  * Shown from the Plans screen ("Click here"). Keep this file in step with what
  * the app actually does: plans and payments (src/data/plans.ts, payments.ts),
  * job visibility (supabase/secure_jobs.sql), applications (src/data/apply.ts),
- * resume storage (supabase/resumes.sql) and support tickets (src/data/tickets.ts).
+ * resume storage (supabase/resumes.sql), and support and refund requests (src/data/supportRequests.ts, supabase/support_requests.sql).
  *
  * Text in [square brackets] must be completed by the owner before publication.
  */
@@ -52,7 +52,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: 'Payments',
     paragraphs: [
       'Online payments are processed by Razorpay through Razorpay Checkout. The methods available (cards, netbanking, UPI apps or QR codes) depend on what Razorpay enables for our merchant account. We do not store your card or bank details.',
-      'We never ask you to transfer money to a personal UPI ID or bank account. If anyone asks you to do so in our name, do not pay, and report it through a support ticket.',
+      'We never ask you to transfer money to a personal UPI ID or bank account. If anyone asks you to do so in our name, do not pay, and report it through a support request in AI Help.',
       'For any older manual UPI request, our administrator may verify the payment against the bank statement before access is activated. This can take longer than an online payment.',
       'Never share your bank PIN, UPI PIN, OTP or password with anyone, including our support staff.',
     ],
@@ -61,7 +61,9 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: 'Refunds and cancellations',
     paragraphs: [
       'Plans give immediate access to digital content once the payment is verified, so plans are non-refundable after activation, except as described below.',
-      'You may request a refund by raising a support ticket with your payment ID or UTR if: (a) your payment was captured but your plan was not activated and we cannot fix this; (b) you were charged more than once for the same plan; or (c) a payment failed but the amount was debited.',
+      'You may request a refund in AI Help (choose "Payment & refunds"). The assistant asks you for the reason and the payment, then checks it against these rules. A refund request is raised only if: (a) your payment was captured but your plan was not activated and we cannot fix this; (b) you were charged more than once for the same plan; or (c) a payment failed but the amount was debited. A request is sent only when you confirm it.',
+      'A refund request sends the reason, your payment details (payment ID, UTR and amount) and your account details to the administrator. A payment that does not meet these rules, or that already has a refund request, cannot be sent as a refund request. You can still send a support request about it.',
+      'You can follow every request, and the administrator\'s reply, under Account → My requests.',
       'Approved refunds are returned to the original payment source through Razorpay. The time to reach your account depends on your bank.',
       'Nothing in these terms limits any right you have under applicable consumer protection law.',
     ],
@@ -90,6 +92,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
       'When you choose to apply, the information in the application (such as your name, phone number, email address and resume) is shared with the hiring manager of that vacancy.',
       'Do not put sensitive personal information (for example Aadhaar, PAN, bank details or medical records) in your profile, resume or applications unless an employer specifically asks for it.',
       'How we process personal data is described in our privacy policy. [Owner to publish the privacy policy and add its link here.]',
+      'When you send a refund or support request, we store it with your name, account email, phone number, city and state, subscription dates and the recent AI Help messages. The administrator uses these details only to review your request. You can see your own requests under Account → My requests.',
     ],
   },
   {
@@ -114,7 +117,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Support',
     paragraphs: [
-      'Ask questions or report problems through a support ticket in the App. We aim to respond within a reasonable time, but we do not guarantee a response time. For payment problems, include your payment ID or UTR.',
+      'Ask questions or report problems through a support request in AI Help in the App. We aim to respond within a reasonable time, but we do not guarantee a response time. For payment problems, include your payment ID or UTR.',
     ],
   },
   {
@@ -135,7 +138,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Ending your use',
     paragraphs: [
-      'You may stop using the App at any time. To request deletion of your account, raise a support ticket. We may keep records that the law requires us to keep, such as payment and refund records.',
+      'You may stop using the App at any time. To request deletion of your account, send a support request in AI Help. We may keep records that the law requires us to keep, such as payment and refund records.',
       'We may suspend or end your access if you break these terms.',
     ],
   },
@@ -154,7 +157,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Contact',
     paragraphs: [
-      `Email: ${CREATOR.contactEmail}. You can also raise a support ticket in the App. Operator: ${CREATOR.owner}, ${CREATOR.location}.`,
+      `Email: ${CREATOR.contactEmail}. You can also send a support request from AI Help in the App. Operator: ${CREATOR.owner}, ${CREATOR.location}.`,
     ],
   },
 ]

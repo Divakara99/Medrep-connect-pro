@@ -112,21 +112,6 @@ export function getPaymentsByUser(userId: string): PaymentRecord[] {
   return getPayments().filter((payment) => payment.userId === userId)
 }
 
-/**
- * Keep the existing ticket flow usable without pretending that a refund has
- * been processed. Refund status shown here is local UI state only; actual
- * refunds still require an authorized Razorpay dashboard/API action.
- */
-export function requestRefund(userId: string): PaymentRecord | null {
-  const payments = getPayments()
-  const index = payments.findIndex((payment) => payment.userId === userId && payment.status === 'success')
-  if (index < 0) return null
-  const updated = { ...payments[index], refundStatus: 'requested' as const }
-  payments[index] = updated
-  paymentCache = payments
-  return updated
-}
-
 export function resolveRefund(
   paymentId: string,
   options: { approve: boolean; refundRef?: string; refundMethod?: PaymentRecord['refundMethod'] },

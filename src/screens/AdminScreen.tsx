@@ -27,7 +27,17 @@ import {
   type PaymentRecord,
 } from '../data/payments'
 import { findConfidentialContact } from '../data/jobDescription'
-import { getTickets, updateTicket, type Ticket } from '../data/tickets'
+import {
+  listAllSupportRequests,
+  requestEmail,
+  requestName,
+  ticketNumber,
+  updateSupportRequest,
+  type AiVerdict,
+  type SupportRequest,
+  type SupportStatus,
+} from '../data/supportRequests'
+import { reasonLabel } from '../data/refundCheck'
 import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
 import { broadcast } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
@@ -41,7 +51,7 @@ const TABS: { id: AdminTab; label: string; icon: string }[] = [
   { id: 'plans', label: 'Plans', icon: '💎' },
   { id: 'payments', label: 'Payments', icon: '💳' },
   { id: 'applications', label: 'Applications', icon: '✉️' },
-  { id: 'tickets', label: 'Tickets', icon: '🎫' },
+  { id: 'tickets', label: 'Requests', icon: '🎫' },
   { id: 'users', label: 'Users', icon: '👥' },
   { id: 'profile', label: 'Profile', icon: '👤' },
 ]
@@ -67,6 +77,19 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
   const [version, setVersion] = useState(0) // re-render trigger after mutations
   const bump = () => setVersion((v) => v + 1)
+  const [requests, setRequests] = useState<SupportRequest[]>([])
+  const [requestsError, setRequestsError] = useState<string | null>(null)
+
+  // Refund and support requests live on the server; reload after each admin change.
+  useEffect(() => {
+    let active = true
+    void listAllSupportRequests()
+      .then((list) => { if (active) { setRequests(list); setRequestsError(null) } })
+      .catch((cause: unknown) => {
+        if (active) setRequestsError(cause instanceof Error ? cause.message : 'Requests could not be loaded.')
+      })
+    return () => { active = false }
+  }, [version])
 
   useEffect(() => {
     let active = true
@@ -133,13 +156,13 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
-        <AdminSearchCard onNavigate={navigate} />
-        {tab === 'dashboard' && <DashboardTab onNavigate={navigate} />}
+        <AdminSearchCard requests={requests} onNavigate={navigate} />
+        {tab === 'dashboard' && <DashboardTab requests={requests} onNavigate={navigate} />}
         {tab === 'vacancies' && <VacanciesTab onMutate={bump} />}
         {tab === 'plans' && <PlansTab onMutate={bump} />}
         {tab === 'payments' && <PaymentsTab onMutate={bump} />}
         {tab === 'applications' && <ApplicationsTab />}
-        {tab === 'tickets' && <TicketsTab onMutate={bump} />}
+        {tab === 'tickets' && <TicketsTab requests={requests} error={requestsError} onMutate={bump} />}
         {tab === 'users' && <UsersTab filter={usersFilter} onFilter={setUsersFilter} />}
         {tab === 'profile' && <ProfileTab />}
       </div>
@@ -769,59 +792,109 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   )
 }
 
-// -------------------- Tickets --------------------
-function TicketsTab({ onMutate }: { onMutate: () => void }) {
-  const tickets = getTickets()
-  const [reply, setReply] = useState<Record<string, string>>({})
+// -------------------- Requests (refunds & support) --------------------
+const STATUS_COLOR: Record<SupportStatus, 'red' | 'amber' | 'green'> = {
+  open: 'red',
+  in_progress: 'amber',
+  resolved: 'green',
+}
+const VERDICT_LABEL: Record<AiVerdict, string> = {
+  eligible: 'AI: eligible',
+  needs_review: 'AI: needs review',
+  not_eligible: 'AI: not eligible',
+}
+const VERDICT_COLOR: Record<AiVerdict, 'green' | 'amber' | 'slate'> = {
+  eligible: 'green',
+  needs_review: 'amber',
+  not_eligible: 'slate',
+}
 
-  function setStatus(t: Ticket, status: Ticket['status']) {
-    updateTicket(t.id, { status })
-    onMutate()
-  }
-  function sendReply(t: Ticket) {
-    const text = reply[t.id]?.trim()
-    if (!text) return
-    updateTicket(t.id, { reply: text, status: 'resolved' })
-    setReply((r) => ({ ...r, [t.id]: '' }))
+function TicketsTab({ requests, error, onMutate }: { requests: SupportRequest[]; error: string | null; onMutate: () => void }) {
+  const [reply, setReply] = useState<Record<string, string>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const openCount = requests.filter((r) => r.status !== 'resolved').length
+
+  async function change(r: SupportRequest, status: SupportStatus, text?: string) {
+    setBusyId(r.id)
+    setActionError(null)
+    const result = await updateSupportRequest(r.id, status, text)
+    setBusyId(null)
+    if (!result.ok) {
+      setActionError(result.error)
+      return
+    }
+    if (text?.trim()) setReply((all) => ({ ...all, [r.id]: '' }))
     onMutate()
   }
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-bold text-slate-900">Support tickets ({tickets.length})</h2>
-      {tickets.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-slate-500">No tickets yet. AI escalations will appear here.</Card>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-lg font-bold text-slate-900">Refund &amp; support requests ({openCount} open · {requests.length} total)</h2>
+      </div>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
+      {actionError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{actionError}</p>}
+      {requests.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-slate-500">No refund or support requests yet. Requests raised from AI Help appear here.</Card>
       ) : (
-        tickets.map((t) => (
-          <Card key={t.id} className="p-3 space-y-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="font-semibold text-slate-900 truncate">{t.subject}</div>
-                {t.kind === 'refund' && <Badge color="red">Refund</Badge>}
-                <Badge color={t.source === 'ai' ? 'purple' : 'slate'}>{t.source}</Badge>
-                <Badge color={t.status === 'open' ? 'red' : t.status === 'in_progress' ? 'amber' : 'green'}>{t.status.replace('_', ' ')}</Badge>
+        requests.map((r) => {
+          const payment = r.paymentId ? getPayments().find((p) => p.id === r.paymentId) : undefined
+          const busy = busyId === r.id
+          return (
+            <Card key={r.id} className="p-3 space-y-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs text-slate-500">#{ticketNumber(r.id)}</span>
+                  <div className="font-semibold text-slate-900 truncate">{r.subject}</div>
+                  {r.kind === 'refund' && <Badge color="red">Refund</Badge>}
+                  {r.aiVerdict && <Badge color={VERDICT_COLOR[r.aiVerdict]}>{VERDICT_LABEL[r.aiVerdict]}</Badge>}
+                  <Badge color={STATUS_COLOR[r.status]}>{r.status.replace('_', ' ')}</Badge>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {requestName(r)} · {requestEmail(r)} · {String(r.details.phone ?? '—')} · {new Date(r.createdAt).toLocaleString('en-IN')}
+                </div>
               </div>
-              <div className="text-xs text-slate-500">
-                {t.name ?? '—'} · {t.email ?? '—'} · {new Date(t.createdAt).toLocaleString()}
+              {r.reasonCode && <div className="text-xs text-slate-700">Reason: {reasonLabel(r.reasonCode)}</div>}
+              {payment ? (
+                <div className="text-xs text-slate-700 bg-slate-50 rounded-lg p-2 ring-1 ring-slate-200">
+                  Payment: ₹{payment.amount} · {payment.planTitle ?? payment.planId} · TXN {payment.txRef ?? '—'} · UTR {payment.utr || '—'} · {payment.status}
+                </div>
+              ) : r.paymentId ? (
+                <div className="text-xs text-slate-500">Payment ID: {r.paymentId}</div>
+              ) : null}
+              <div className="text-sm text-slate-700 bg-slate-50 rounded-lg p-2 ring-1 ring-slate-200 whitespace-pre-wrap">{r.message}</div>
+              <details className="text-xs text-slate-600">
+                <summary className="cursor-pointer font-semibold">Account details</summary>
+                <dl className="mt-1 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
+                  <dt>City / state</dt><dd>{[r.details.city, r.details.state].filter(Boolean).join(', ') || '—'}</dd>
+                  <dt>Subscribed</dt><dd>{r.details.subscribed ? `yes, until ${r.details.subscribedUntil ?? '—'}` : 'no'}</dd>
+                  {typeof r.details.chatExcerpt === 'string' && (
+                    <>
+                      <dt>Chat</dt>
+                      <dd className="whitespace-pre-wrap">{r.details.chatExcerpt}</dd>
+                    </>
+                  )}
+                </dl>
+              </details>
+              {r.adminReply && (
+                <div className="text-sm text-emerald-800 bg-emerald-50 rounded-lg p-2 ring-1 ring-emerald-200">
+                  <span className="font-semibold">Reply:</span> {r.adminReply}
+                </div>
+              )}
+              {/* Action row — always visible on mobile */}
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" className="flex-1" disabled={busy || r.status === 'in_progress'} onClick={() => void change(r, 'in_progress')}>▶ Start</Button>
+                <Button variant="secondary" className="flex-1" disabled={busy || r.status === 'resolved'} onClick={() => void change(r, 'resolved')}>✓ Resolve</Button>
               </div>
-            </div>
-            <div className="text-sm text-slate-700 bg-slate-50 rounded-lg p-2 ring-1 ring-slate-200">{t.message}</div>
-            {t.reply && (
-              <div className="text-sm text-emerald-800 bg-emerald-50 rounded-lg p-2 ring-1 ring-emerald-200">
-                <span className="font-semibold">Reply:</span> {t.reply}
+              <div className="flex gap-2 flex-wrap">
+                <Input placeholder="Type a reply…" value={reply[r.id] ?? ''} onChange={(e) => setReply((all) => ({ ...all, [r.id]: e.target.value }))} />
+                <Button variant="secondary" className="shrink-0" disabled={busy || !reply[r.id]?.trim()} onClick={() => void change(r, r.status === 'open' ? 'in_progress' : r.status, reply[r.id])}>Reply</Button>
+                <Button className="shrink-0" disabled={busy || !reply[r.id]?.trim()} onClick={() => void change(r, 'resolved', reply[r.id])}>Reply &amp; resolve</Button>
               </div>
-            )}
-            {/* Action row — always visible on mobile */}
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setStatus(t, 'in_progress')}>▶ Start</Button>
-              <Button variant="secondary" className="flex-1" onClick={() => setStatus(t, 'resolved')}>✓ Resolve</Button>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <Input placeholder="Type a reply…" value={reply[t.id] ?? ''} onChange={(e) => setReply((r) => ({ ...r, [t.id]: e.target.value }))} />
-              <Button className="shrink-0" onClick={() => sendReply(t)}>Send</Button>
-            </div>
-          </Card>
-        ))
+            </Card>
+          )
+        })
       )}
     </div>
   )
@@ -1059,7 +1132,7 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
  * number, name or email), recent transactions (payments), tickets,
  * applications and payment records.
  */
-function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
+function AdminSearchCard({ requests, onNavigate }: { requests: SupportRequest[]; onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
   const [query, setQuery] = useState('')
   const trimmed = query.trim()
   const digits = trimmed.replace(/\D/g, '')
@@ -1078,8 +1151,8 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
       .some((value) => String(value).toLowerCase().includes(lower) || (digits.length >= 3 && String(value).includes(digits)))
   }).slice(0, 5) : []
 
-  const tickets = active ? getTickets().filter((t) =>
-    [t.subject, t.name, t.email, t.message].filter(Boolean)
+  const tickets = active ? requests.filter((t) =>
+    [t.subject, requestName(t), requestEmail(t), t.message, t.reasonCode ? reasonLabel(t.reasonCode) : '']
       .some((value) => String(value).toLowerCase().includes(lower)),
   ).slice(0, 5) : []
 
@@ -1097,7 +1170,7 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search phone number, users, transactions, tickets, applications, payments…"
+          placeholder="Search phone number, users, transactions, requests, applications, payments…"
           aria-label="Admin search"
         />
       </div>
@@ -1128,10 +1201,10 @@ function AdminSearchCard({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: 
             </SearchGroup>
           )}
           {tickets.length > 0 && (
-            <SearchGroup title="Tickets" count={tickets.length} onOpen={() => onNavigate('tickets')}>
+            <SearchGroup title="Requests" count={tickets.length} onOpen={() => onNavigate('tickets')}>
               {tickets.map((t) => (
                 <div key={t.id} className="text-sm text-slate-800">
-                  <span className="font-semibold">{t.subject}</span> · {t.name ?? '—'} · {t.status.replace('_', ' ')}
+                  <span className="font-semibold">{t.subject}</span> · {requestName(t)} · {t.status.replace('_', ' ')}
                 </div>
               ))}
             </SearchGroup>
@@ -1166,11 +1239,11 @@ function SearchGroup({ title, count, onOpen, children }: { title: string; count:
 }
 
 // -------------------- Dashboard --------------------
-function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
+function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; onNavigate: (tab: AdminTab, filter?: UserFilter) => void }) {
   const users = getUsers()
   const jobs = getJobs()
   const payments = getPayments()
-  const tickets = getTickets()
+  const tickets = requests
   const queue = getCachedApplications()
 
   const now = useCurrentTime()
@@ -1194,7 +1267,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: AdminTab, filter?: Use
         <StatCard label="Free users" value={free.length} color="amber" icon="🆓" hint="Open free users" onClick={() => onNavigate('users', 'free')} />
         <StatCard label="Live jobs" value={jobs.length} color="purple" icon="💼" hint="Open vacancies" onClick={() => onNavigate('vacancies')} />
         <StatCard label="New today" value={newToday} color="brand" icon="✨" hint="Open users" onClick={() => onNavigate('users', 'all')} />
-        <StatCard label="Open tickets" value={openTickets} color="red" icon="🎫" hint="Open tickets" onClick={() => onNavigate('tickets')} />
+        <StatCard label="Open requests" value={openTickets} color="red" icon="🎫" hint="Open requests" onClick={() => onNavigate('tickets')} />
         <StatCard label="Applications" value={queue.length} color="purple" icon="✉️" hint="Open applications" onClick={() => onNavigate('applications')} />
         <StatCard label="Revenue" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Open payments" onClick={() => onNavigate('payments')} />
       </div>

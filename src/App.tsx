@@ -18,6 +18,7 @@ import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { clearMyApplicationCache, openApplication } from './data/apply'
 import { clearResumeCache, getLatestResume, type ResumeRecord } from './data/resume'
 import { refreshNotificationsFromServer, unreadCount } from './data/notifications'
+import { clearSupportCache } from './data/supportRequests'
 import { clearPaymentCache } from './data/payments'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'user' | 'admin'
@@ -101,13 +102,13 @@ export default function App() {
         setView(adminPortal ? 'admin-login' : 'login')
       } else if (event === 'SIGNED_OUT') {
         ++generation
-        clearPaymentCache(); clearResumeCache(); clearMyApplicationCache()
+        clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache()
         clearJobs()
         setRecoveryMode(false)
         setUser(null)
         setView(adminPortal ? 'admin-login' : 'login')
       } else {
-        if (event === 'SIGNED_IN') { clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearJobs() }
+        if (event === 'SIGNED_IN') { clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache(); clearJobs() }
         if (event === 'USER_UPDATED') setRecoveryMode(false)
         restore(event === 'SIGNED_IN')
       }
@@ -195,7 +196,7 @@ export default function App() {
   }
 
   async function onLogout() {
-    clearPaymentCache(); clearResumeCache(); clearMyApplicationCache()
+    clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache()
     clearJobs()
     await doLogout()
     setRecoveryMode(false)
