@@ -198,7 +198,22 @@ try {
   await rejects(db.query(`SELECT public.employee_list_vacancies()`), /vacancy team account/)
   await rejects(db.query(`SELECT public.employee_delete_vacancy($1, $2)`, ['old-live', 'Some reason']), /vacancy team account/)
 
-  console.log('vacancy team SQL: team post and delete with reasons, audit of admin and team actions, team isolation, MFA-gated audit and idempotent backfill passed')
+  // 12. Only one employee login at a time. The database refuses a second one;
+  //     deleting the first makes room for a replacement.
+  await db.exec(`RESET ROLE`)
+  const firstEmployee = '55555555-5555-4555-8555-555555555555'
+  const secondEmployee = '66666666-6666-4666-8666-666666666666'
+  await db.query(`INSERT INTO auth.users (id, email) VALUES ($1, 'first@example.org'), ($2, 'second@example.org')`, [firstEmployee, secondEmployee])
+  await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'first@example.org', 'First Employee')`, [firstEmployee])
+  await rejects(
+    db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'second@example.org', 'Second Employee')`, [secondEmployee]),
+    /vacancy_employees_single_login|duplicate key/,
+  )
+  await db.query(`DELETE FROM public.vacancy_employees WHERE user_id = $1`, [firstEmployee])
+  await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'second@example.org', 'Second Employee')`, [secondEmployee])
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM public.vacancy_employees`)).rows[0].n, 1, 'exactly one employee login')
+
+  console.log('vacancy team SQL: team post and delete with reasons, audit of admin and team actions, team isolation, MFA-gated audit, one employee login at a time and idempotent backfill passed')
 } finally {
   await db.close()
 }

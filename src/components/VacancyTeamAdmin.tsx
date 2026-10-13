@@ -212,9 +212,17 @@ export function VacancyTeamAdmin() {
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-slate-900">Team logins</h3>
-          <Badge color="brand">{logins.length} active</Badge>
+          <Badge color="brand">{logins.length} of 1 employee login</Badge>
         </div>
 
+        {logins.length > 0 && (
+          <p className="rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-900 ring-1 ring-amber-300">
+            One employee login is set up. To give vacancy access to a different person, delete this login first, then create the new one. Your admin login is never shared.
+          </p>
+        )}
+
+        {logins.length === 0 && !loading && (
+        <>
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto] items-end">
           <div>
             <Label htmlFor="team-name">Name</Label>
@@ -234,6 +242,8 @@ export function VacancyTeamAdmin() {
           <Button className="w-full md:w-auto" disabled={creating} onClick={() => { void create() }}>{creating ? 'Creating…' : 'Create login'}</Button>
         </div>
         {createError && <p role="alert" className="text-sm font-semibold text-red-800">{createError}</p>}
+        </>
+        )}
 
         {logins.length === 0 ? (
           <p className="text-sm text-slate-600">{loading ? 'Loading team logins…' : 'No team logins yet.'}</p>

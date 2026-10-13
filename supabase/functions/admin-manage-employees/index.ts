@@ -21,6 +21,9 @@ const corsHeaders = {
 }
 
 const TEAM_ROLE = 'vacancy_editor'
+const MAX_EMPLOYEES = 1
+const EMPLOYEE_LIMIT_MESSAGE =
+  'Only one employee login is allowed. Delete the current employee login first, then add the new employee.'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -100,6 +103,12 @@ Deno.serve(async (request: Request) => {
     const problem = passwordProblem(body.password)
     if (problem) return jsonResponse({ error: problem }, 400)
 
+    const { count, error: countError } = await adminClient
+      .from('vacancy_employees')
+      .select('user_id', { count: 'exact', head: true })
+    if (countError) return jsonResponse({ error: 'Team logins could not be checked.' }, 500)
+    if ((count ?? 0) >= MAX_EMPLOYEES) return jsonResponse({ error: EMPLOYEE_LIMIT_MESSAGE }, 409)
+
     const { data: created, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password: body.password as string,
@@ -123,6 +132,8 @@ Deno.serve(async (request: Request) => {
     if (rowError) {
       // Keep the list and the accounts in step: undo the new login.
       await adminClient.auth.admin.deleteUser(created.user.id)
+      // The database allows one employee login at a time (vacancy_employees_single_login).
+      if (rowError.code === '23505') return jsonResponse({ error: EMPLOYEE_LIMIT_MESSAGE }, 409)
       return jsonResponse({ error: 'The team login could not be saved. Nothing was created.' }, 500)
     }
     return jsonResponse({ ok: true, employee: { user_id: created.user.id, email, name } }, 201)

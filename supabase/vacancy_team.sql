@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS public.vacancy_employees (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Only one employee login at a time. A unique index on a constant allows one
+-- row; a second insert fails in the database, even if two requests race.
+CREATE UNIQUE INDEX IF NOT EXISTS vacancy_employees_single_login
+  ON public.vacancy_employees ((true));
+
 ALTER TABLE public.vacancy_employees ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS admin_read_vacancy_employees ON public.vacancy_employees;
 CREATE POLICY admin_read_vacancy_employees ON public.vacancy_employees
