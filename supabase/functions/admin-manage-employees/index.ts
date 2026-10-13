@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { hasVerifiedAal2 } from '../_shared/supabase.ts'
+import { adminAccessAllowed, adminMfaRequired, hasVerifiedAal2 } from '../_shared/supabase.ts'
 
 /**
  * Administrator-only management of vacancy team logins.
@@ -70,7 +70,12 @@ Deno.serve(async (request: Request) => {
   const { data: { user: actor }, error: authError } = await authClient.auth.getUser(token)
   if (authError || !actor) return jsonResponse({ error: 'The Supabase session is invalid or expired.' }, 401)
   if (!isAdmin(actor.app_metadata)) return jsonResponse({ error: 'An administrator account is required.' }, 403)
-  if (!hasVerifiedAal2(token, actor.id)) {
+  // The sign-in code switch (supabase/admin_mfa.sql) governs admin access
+  // everywhere, including this function.
+  const switchClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  if (!adminAccessAllowed(hasVerifiedAal2(token, actor.id), await adminMfaRequired(switchClient))) {
     return jsonResponse({ error: 'Verify your authenticator code (MFA) before managing team logins.' }, 403)
   }
 

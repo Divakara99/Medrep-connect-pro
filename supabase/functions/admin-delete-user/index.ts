@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { hasVerifiedAal2 } from '../_shared/supabase.ts'
+import { adminAccessAllowed, adminMfaRequired, hasVerifiedAal2 } from '../_shared/supabase.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,7 +47,13 @@ Deno.serve(async (request: Request) => {
   if (!isAdmin(actor.app_metadata)) {
     return jsonResponse({ error: 'An administrator account is required.' }, 403)
   }
-  if (!hasVerifiedAal2(token, actor.id)) {
+  // The owner can switch the sign-in code off from the admin console, and the
+  // database's is_app_admin() honours the same flag — so this must too. The
+  // switch is read with the service role; it fails safe to "code required".
+  const switchClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  if (!adminAccessAllowed(hasVerifiedAal2(token, actor.id), await adminMfaRequired(switchClient))) {
     return jsonResponse({ error: 'Verify your authenticator code (MFA) before using administrator tools.' }, 403)
   }
 

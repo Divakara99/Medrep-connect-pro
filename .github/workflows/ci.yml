@@ -42,9 +42,12 @@ jobs:
           supabase/functions/create-upi-intent/index.ts
           supabase/functions/submit-upi-utr/index.ts
           supabase/functions/review-manual-upi-payment/index.ts
+          supabase/functions/admin-manage-employees/index.ts
+          supabase/functions/send-push/index.ts
       - name: Test Edge Function helpers
         run: >-
           deno test --no-lock --allow-env
           supabase/functions/_shared/razorpay_test.ts
           supabase/functions/_shared/admin_auth_test.ts
           supabase/functions/_shared/plans_test.ts
+          supabase/functions/_shared/webpush_test.ts

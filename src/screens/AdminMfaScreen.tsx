@@ -175,10 +175,18 @@ export function AdminMfaScreen({ onVerified, onExit }: { onVerified: () => void;
             </form>
 
             <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-700 space-y-1">
-              <p>Administrator data requires a verified authenticator. A password-only session cannot read vacancies, users, payments or pricing.</p>
+              <p>Administrator data requires a verified authenticator while the sign-in code is ON. A password-only session cannot read vacancies, users, payments or pricing.</p>
               <p>Codes expire every 30 seconds — if one is rejected, wait for the next. Codes are never stored on this device.</p>
-              <p>Lost the authenticator? An account owner must remove the MFA factor for this admin in Supabase → Authentication, then set it up again here.</p>
+              <p>Lost the authenticator? An administrator who is already signed in can turn the sign-in code OFF in the admin panel → 🔐 Security (it is audited, and it can be switched back on at any time). After that, use the button below to continue without the code.</p>
             </div>
+
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => onVerified()}
+            >
+              The code was switched OFF for me — check again
+            </Button>
 
             <div className="text-xs text-slate-500">
               {hasVerifiedTotpFactorLabel(factors)}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Badge, Button, Card, EmptyState, Modal } from './ui'
+import { PushCard } from './PushCard'
 import { getNotificationsForUser, markAllRead, markOneRead, refreshNotificationsFromServer, unreadCount, type Notification } from '../data/notifications'
 
 function timeAgo(ts: number): string {
@@ -68,6 +69,10 @@ export function NotificationsPanel({
   return (
     <Modal open={open} onClose={onClose} title={`Notifications${count > 0 ? ` (${count} new)` : ''}`}>
       <div className="space-y-3 -mx-1">
+        {/* Top of the list: the switch that decides whether this phone rings. */}
+        <div className="px-1">
+          <PushCard compact />
+        </div>
         <div className="flex items-center justify-between px-1">
           <div className="text-xs text-slate-500">AI-generated updates from Mr. Divakar Reddy & the MedRep team</div>
           {count > 0 && (

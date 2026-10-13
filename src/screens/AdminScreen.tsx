@@ -44,21 +44,32 @@ import {
 } from '../data/supportRequests'
 import { reasonLabel } from '../data/refundCheck'
 import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
-import { broadcast } from '../data/notifications'
+import { announcementSignOff, broadcast, sendAnnouncement } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
 import { getSyncStatus } from '../data/supabase'
+import { publishToEveryone, pushReach, type PushReach } from '../data/push'
+import { announcementProblem, ANNOUNCEMENT_WARN_DEVICES } from '../data/pushRules'
+import {
+  adminSecurityAudit,
+  adminSecurityState,
+  setAdminMfaRequired,
+  type AdminSecurityState,
+  type SecurityChange,
+} from '../data/mfa'
 
-type AdminTab = 'dashboard' | 'vacancies' | 'team' | 'plans' | 'payments' | 'applications' | 'tickets' | 'users' | 'profile'
+type AdminTab = 'dashboard' | 'vacancies' | 'announce' | 'team' | 'plans' | 'payments' | 'applications' | 'tickets' | 'users' | 'security' | 'profile'
 
 const TABS: { id: AdminTab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'vacancies', label: 'Vacancies', icon: '💼' },
+  { id: 'announce', label: 'Announcements', icon: '📣' },
   { id: 'plans', label: 'Plans', icon: '💎' },
   { id: 'payments', label: 'Payments', icon: '💳' },
   { id: 'applications', label: 'Applications', icon: '✉️' },
   { id: 'tickets', label: 'Requests', icon: '🎫' },
   { id: 'team', label: 'Vacancy team', icon: '👥' },
   { id: 'users', label: 'Users', icon: '👥' },
+  { id: 'security', label: 'Security', icon: '🔐' },
   { id: 'profile', label: 'Profile', icon: '👤' },
 ]
 
@@ -165,12 +176,14 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
         <AdminSearchCard requests={requests} onNavigate={navigate} />
         {tab === 'dashboard' && <DashboardTab requests={requests} onNavigate={navigate} />}
         {tab === 'vacancies' && <VacanciesTab onMutate={bump} />}
+        {tab === 'announce' && <AnnouncementsTab />}
         {tab === 'team' && <VacancyTeamAdmin />}
         {tab === 'plans' && <PlansTab onMutate={bump} />}
         {tab === 'payments' && <PaymentsTab onMutate={bump} />}
         {tab === 'applications' && <ApplicationsTab />}
         {tab === 'tickets' && <TicketsTab requests={requests} error={requestsError} onMutate={bump} />}
         {tab === 'users' && <UsersTab filter={usersFilter} onFilter={setUsersFilter} />}
+        {tab === 'security' && <SecurityTab />}
         {tab === 'profile' && <ProfileTab />}
       </div>
     </div>
@@ -1363,6 +1376,302 @@ function StatCard({
 }
 
 // -------------------- Profile (AI update composer) --------------------
+
+// -------------------- Announcements (to every user) --------------------
+function AnnouncementsTab() {
+  const [title, setTitle] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [reach, setReach] = useState<PushReach | null>(null)
+  const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string; detail?: string } | null>(null)
+
+  const loadReach = useCallback(async () => { setReach(await pushReach()) }, [])
+  useEffect(() => {
+    const first = window.setTimeout(() => { void loadReach() }, 0)
+    const interval = window.setInterval(() => { void loadReach() }, 30_000)
+    return () => { window.clearTimeout(first); window.clearInterval(interval) }
+  }, [loadReach])
+
+  const problem = announcementProblem(title, message)
+
+  async function publish() {
+    if (problem) { setResult({ kind: 'error', text: problem }); return }
+    setBusy(true)
+    setResult(null)
+    const outcome = await sendAnnouncement(title, message)
+    setBusy(false)
+    if (!outcome.ok) { setResult({ kind: 'error', text: outcome.error }); return }
+    const delivery = outcome.delivery
+    setResult({
+      kind: 'ok',
+      text: `Announcement sent to every user${delivery ? ` — ${delivery.sent} of ${delivery.devices} device${delivery.devices === 1 ? '' : 's'} notified` : ''}.`,
+      detail: outcome.warning ?? (delivery && delivery.failed > 0
+        ? `${delivery.failed} device${delivery.failed === 1 ? '' : 's'} could not be reached and ${delivery.removed > 0 ? `${delivery.removed} were removed as dead.` : 'will be retried on the next send.'}`
+        : undefined),
+    })
+    setTitle('')
+    setMessage('')
+    void loadReach()
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-bold text-slate-900">📣 Announcements</h2>
+
+      <Card className="p-4 space-y-2">
+        <div className="font-bold text-slate-900 text-sm">Write once, every user gets it</div>
+        <div className="text-xs text-slate-600">
+          The announcement appears in every user's notification list and is pushed to every phone that switched
+          notifications on — with sound, even when the app is closed.
+        </div>
+        {reach && (
+          <div className="text-xs text-slate-700 flex items-center gap-2 flex-wrap">
+            <Badge color={reach.devices > 0 ? 'green' : 'amber'}>
+              {reach.devices} phone{reach.devices === 1 ? '' : 's'} reachable
+            </Badge>
+            <span>across {reach.people} account{reach.people === 1 ? '' : 's'}</span>
+            {reach.lastBatch && (
+              <span className="text-slate-500">
+                · last batch {reach.lastBatch.sent} sent, {reach.lastBatch.failed} failed on{' '}
+                {new Date(reach.lastBatch.at).toLocaleString('en-IN')}
+              </span>
+            )}
+          </div>
+        )}
+        {reach && (reach.devices === 0 || reach.devices >= ANNOUNCEMENT_WARN_DEVICES) && (
+          <div className="text-xs text-slate-500">
+            {reach.devices === 0
+              ? 'No phone has notifications switched on yet — the announcement will still appear in every user’s app.'
+              : `This will ring ${reach.devices} devices at once. Keep the message short and clear.`}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div>
+          <Label htmlFor="announce-title">Title</Label>
+          <Input
+            id="announce-title"
+            value={title}
+            maxLength={100}
+            placeholder="e.g. New MR vacancies posted today"
+            onChange={(e) => { setTitle(e.target.value); setResult(null) }}
+          />
+        </div>
+        <div>
+          <Label htmlFor="announce-message">Message</Label>
+          <Textarea
+            id="announce-message"
+            rows={5}
+            value={message}
+            placeholder="Write the announcement in simple words — it is sent exactly as typed."
+            onChange={(e) => { setMessage(e.target.value); setResult(null) }}
+          />
+          <div className="text-[11px] text-slate-500 mt-1">
+            Signed automatically as “{CREATOR.name}, {CREATOR.role}, MedRep Connect Pro”.
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+            Preview on the phone
+          </div>
+          <div className="text-sm font-semibold text-slate-900">{title.trim() || 'Your title'}</div>
+          <div className="text-xs text-slate-700 whitespace-pre-wrap mt-1">
+            {(message.trim() || 'Your message') + '\n\n' + announcementSignOff()}
+          </div>
+        </div>
+
+        {result && (
+          <div
+            role="status"
+            className={`rounded-xl px-3 py-2 text-sm font-semibold ring-1 ${
+              result.kind === 'ok'
+                ? 'bg-emerald-50 text-emerald-900 ring-emerald-200'
+                : 'bg-red-50 text-red-900 ring-red-200'
+            }`}
+          >
+            {result.kind === 'ok' ? '✅ ' : '⚠️ '}{result.text}
+            {result.detail && <div className="text-xs font-normal mt-1">{result.detail}</div>}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-xs text-slate-500">
+            {problem ?? `Ready to send to all users.`}
+          </div>
+          <Button disabled={busy || Boolean(problem)} onClick={() => { void publish() }}>
+            {busy ? 'Sending…' : '📣 Send to all users'}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="p-4 space-y-2">
+        <div className="font-bold text-slate-900 text-sm">Recent sends</div>
+        {!reach || reach.recent.length === 0 ? (
+          <div className="text-xs text-slate-500">No announcement has been pushed yet.</div>
+        ) : (
+          reach.recent.map((item, index) => (
+            <div key={`${item.at}-${index}`} className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-slate-800 truncate">{item.title || '(untitled)'}</span>
+              <span className="text-slate-500 shrink-0">
+                {item.sent} sent{item.failed > 0 ? ` · ${item.failed} failed` : ''} · {new Date(item.at).toLocaleString('en-IN')}
+              </span>
+            </div>
+          ))
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// -------------------- Security (sign-in code ON/OFF) --------------------
+function SecurityTab() {
+  const [state, setState] = useState<AdminSecurityState | null>(null)
+  const [audit, setAudit] = useState<SecurityChange[]>([])
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [confirmOff, setConfirmOff] = useState(false)
+
+  const load = useCallback(async () => {
+    const [nextState, nextAudit] = await Promise.all([adminSecurityState(), adminSecurityAudit(5)])
+    setState(nextState)
+    setAudit(nextAudit)
+  }, [])
+  useEffect(() => {
+    const first = window.setTimeout(() => { void load() }, 0)
+    return () => window.clearTimeout(first)
+  }, [load])
+
+  async function toggle(required: boolean) {
+    setBusy(true)
+    setNotice(null)
+    const result = await setAdminMfaRequired(required)
+    setBusy(false)
+    setConfirmOff(false)
+    if (!result.ok) { setNotice({ kind: 'error', text: result.error }); return }
+    setState(result.state)
+    setNotice({
+      kind: 'ok',
+      text: required
+        ? 'The sign-in code is ON. Administrators must enter the six-digit code again from their next sign-in.'
+        : 'The sign-in code is OFF. Administrators now open the admin panel with email and password only, until it is switched back on.',
+    })
+    void load()
+  }
+
+  const on = state ? state.mfaRequired : true
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-bold text-slate-900">🔐 Administrator security</h2>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="font-bold text-slate-900 text-sm">Sign-in code (authenticator app)</div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              Extra six-digit code from Google Authenticator / Authy after the password. Recommended: keep it ON.
+            </div>
+          </div>
+          <Badge color={on ? 'green' : 'red'}>{on ? 'ON' : 'OFF'}</Badge>
+        </div>
+
+        {!state ? (
+          <div className="text-xs text-slate-500">Reading the current setting…</div>
+        ) : (
+          <>
+            <div className="grid gap-1.5 text-xs text-slate-700">
+              <div>
+                This session: <span className="font-semibold">{state.mfaVerified ? 'code entered ✅' : 'no code entered'}</span>
+                <span className="text-slate-500"> (aal {state.aal})</span>
+              </div>
+              {state.changedBy && (
+                <div className="text-slate-500">
+                  Last changed by {state.changedBy}
+                  {state.changedAt ? ` on ${new Date(state.changedAt).toLocaleString('en-IN')}` : ''}.
+                </div>
+              )}
+            </div>
+
+            {on ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="secondary" className="px-3 py-2 text-sm" disabled={busy} onClick={() => setConfirmOff(true)}>
+                  Turn the code OFF
+                </Button>
+                <span className="text-xs text-slate-500">
+                  Use only if the authenticator is lost on every admin phone.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="rounded-xl bg-red-50 text-red-900 ring-1 ring-red-200 px-3 py-2 text-xs font-semibold">
+                  Admin data is currently protected by the password alone. Anybody who knows an administrator's
+                  password can open the admin panel. Switch the code back ON as soon as possible.
+                </div>
+                <Button className="px-3 py-2 text-sm" disabled={busy} onClick={() => { void toggle(true) }}>
+                  {busy ? 'Switching on…' : 'Turn the code back ON'}
+                </Button>
+              </div>
+            )}
+
+            {notice && (
+              <div
+                role="status"
+                className={`rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${
+                  notice.kind === 'ok' ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-red-50 text-red-900 ring-red-200'
+                }`}
+              >
+                {notice.text}
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+
+      <Card className="p-4 space-y-2">
+        <div className="font-bold text-slate-900 text-sm">Who changed it, and when</div>
+        {audit.length === 0 ? (
+          <div className="text-xs text-slate-500">No change has been recorded yet.</div>
+        ) : (
+          audit.map((change, index) => (
+            <div key={`${change.changedAt}-${index}`} className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-slate-800">
+                {change.required ? 'Switched ON' : 'Switched OFF'} by {change.changedBy}
+                <span className="text-slate-500"> ({change.changedAal})</span>
+              </span>
+              <span className="text-slate-500 shrink-0">{new Date(change.changedAt).toLocaleString('en-IN')}</span>
+            </div>
+          ))
+        )}
+      </Card>
+
+      <Card className="p-4 text-xs text-slate-600 space-y-1.5">
+        <div className="font-bold text-slate-900 text-sm">How this is enforced</div>
+        <div>
+          The setting is stored on the server and read by the database itself, so it applies to every screen, every
+          report and every upload — not just this console. Only an administrator can change it, and each change is
+          recorded with the email and the session's code state.
+        </div>
+        <div>
+          With the code OFF, an administrator opens the panel with email and password; the Security tab stays
+          available so the code can be switched back on immediately.
+        </div>
+      </Card>
+
+      <ConfirmDialog
+        open={confirmOff}
+        title="Turn the sign-in code off?"
+        message="Administrators will open the admin panel with email and password only, until the code is switched back on. This makes the admin panel much easier to break into — continue only if the authenticator is lost."
+        confirmLabel="Turn the code off"
+        danger
+        onCancel={() => setConfirmOff(false)}
+        onConfirm={() => { void toggle(false) }}
+      />
+    </div>
+  )
+}
+
 function ProfileTab() {
   const [msg, setMsg] = useState('')
   const [review, setReview] = useState<Review | null>(null)
@@ -1378,7 +1687,9 @@ function ProfileTab() {
     // Send only the AI-polished + rechecked copy, never the raw draft
     const text = (review?.polished ?? reviewPlatformMessage(msg).polished).trim()
     if (!text) return
-    broadcast({ kind: 'platform-update', message: text }, { type: 'update' })
+    // Same path as the Announcements tab: store for every user, then push to
+    // every subscribed phone (with sound).
+    void publishToEveryone(broadcast({ kind: 'platform-update', message: text }, { type: 'update' }))
     setMsg('')
     setReview(null)
     setSent(true)

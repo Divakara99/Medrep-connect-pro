@@ -19,7 +19,8 @@ import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jo
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { clearMyApplicationCache, openApplication } from './data/apply'
 import { clearResumeCache, getLatestResume, type ResumeRecord } from './data/resume'
-import { refreshNotificationsFromServer, unreadCount } from './data/notifications'
+import { playNotifSound, refreshNotificationsAndAlert, soundEnabled, unreadCount } from './data/notifications'
+import { showSystemNotification, syncPushSubscription } from './data/push'
 import { clearSupportCache } from './data/supportRequests'
 import { clearPaymentCache } from './data/payments'
 import { installBackGuard } from './data/backstack'
@@ -227,13 +228,40 @@ export default function App() {
     return () => { active = false }
   }, [view, userId])
 
-  // Keep the broadcast feed (new job posts + every job update) in sync so the
-  // notification bell reflects admin activity without a manual refresh.
+  // Keep the broadcast feed (announcements + every job update) in sync so the
+  // bell reflects admin activity without a manual refresh — and ring for what
+  // arrived since the last check, so an announcement reaches every user with
+  // sound even while they are on another screen.
   useEffect(() => {
     if (view !== 'user' || !userId) return
-    void refreshNotificationsFromServer()
-    const interval = window.setInterval(() => { void refreshNotificationsFromServer() }, 60_000)
-    return () => window.clearInterval(interval)
+    let active = true
+    const check = async () => {
+      const fresh = await refreshNotificationsAndAlert()
+      if (!active || fresh.length === 0) return
+      if (soundEnabled()) playNotifSound()
+      const first = fresh[0]
+      await showSystemNotification(
+        fresh.length === 1 ? first.title : `${fresh.length} new updates`,
+        first.body,
+        first.id,
+      )
+    }
+    void check()
+    const interval = window.setInterval(() => { void check() }, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') void check() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [view, userId])
+
+  // A signed-in account keeps this device's notification subscription in its own
+  // name, so a phone that switched accounts stops reaching the previous one.
+  useEffect(() => {
+    if (view !== 'user' || !userId) return
+    void syncPushSubscription()
   }, [view, userId])
 
   function refreshUser() {

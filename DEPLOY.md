@@ -72,12 +72,14 @@ npx supabase functions deploy razorpay-webhook --project-ref <your-project-ref>
 npx supabase functions deploy create-upi-intent --project-ref <your-project-ref>
 npx supabase functions deploy admin-delete-user --project-ref <your-project-ref>
 npx supabase functions deploy admin-manage-employees --project-ref <your-project-ref>
+npx supabase functions deploy send-push --project-ref <your-project-ref>
 ```
 
 - `npx supabase login` opens a browser so you can sign in to Supabase. It does not ask for a password in the terminal.
 - Replace `<your-project-ref>` with the ID in your Supabase URL: `https://<your-project-ref>.supabase.co`.
 - The `create-upi-intent` line deploys the disabled version, so no new manual UPI payment can be created.
 - The `admin-manage-employees` line deploys the function that creates, resets and deletes vacancy team logins. It needs the migration in Step 2 (`vacancy_team.sql`) first.
+- The `send-push` line deploys the phone-notification sender. It needs Step 2 (`push_subscriptions.sql`) and the three VAPID secrets from Step 5a first, otherwise users can switch notifications on but nothing can be delivered.
 
 ### Step 5 — Add the secret keys (Supabase dashboard, never in chat or Git)
 
@@ -90,6 +92,30 @@ In **Supabase → Edge Functions → Secrets**, add these three names and paste 
 | `RAZORPAY_WEBHOOK_SECRET` | The secret you set on the Razorpay webhook (Step 7) |
 
 Use a matching pair from the same mode. Test with `rzp_test_` keys first.
+
+### Step 5a — Add the notification (VAPID) keys
+
+Phone notifications need one key pair that signs every notification this project
+sends. Generate it in this repository — nothing leaves the machine:
+
+```bash
+npm run vapid:keys -- <your-project-ref>
+```
+
+The command prints the three `npx supabase secrets set` lines to paste, with the
+random keys already filled in. It self-checks the pair before printing, so a
+copy-paste mistake in a key shows up as a failure, not as silent notifications.
+
+| Secret name | What it is |
+| --- | --- |
+| `VAPID_PUBLIC_KEY` | The public half. Browsers receive it from the `send-push` function — it is not a secret, but it must match the private key. |
+| `VAPID_PRIVATE_KEY` | **Secret.** Signs every notification. Never paste it into chat, code or Git. |
+| `VAPID_SUBJECT` | Your contact, as `mailto:you@example.com` or an `https://` page. Push services use it to reach you if a delivery is abusive. |
+
+Run the generated `secrets set` command, then deploy `send-push` (Step 4). To
+start over, run `npm run vapid:keys` again and set all three secrets with the new
+pair — every device re-subscribes automatically the next time its owner opens the
+app, so old devices simply stop ringing until then.
 
 ### Step 6 — Publish the website (Netlify)
 
@@ -108,6 +134,9 @@ In the Razorpay dashboard, add the webhook URL `https://<your-project-ref>.supab
 - [ ] Upload a small PDF on **Account → Profile details**, then download it again.
 - [ ] Open the **Terms** link on **Plans** (blue "Click here") and check the full text opens.
 - [ ] Open the admin panel, go to **Vacancy team**, create a test login, sign in at `/?portal=vacancy` with it, post a vacancy and delete it with a reason. The deletion then shows in the activity list.
+- [ ] On a phone, open the app in Chrome → 🔔 **Notifications** → **Turn on notifications**, then **Send a test**. The test must appear within a few seconds, with sound. If it says the platform is not ready, Step 5a or the `send-push` deploy is missing.
+- [ ] In the admin panel, open **📣 Announcements**, send one, and check a second account hears it and sees it under 🔔 (with sound while the app is open, and as a phone notification when it is closed).
+- [ ] In the admin panel, open **🔐 Security** and confirm the sign-in code shows **ON**. Only switch it off if an authenticator is lost — the panel then opens with email and password only until it is switched back on, and every change is listed in the audit trail below the switch.
 - [ ] In **AI Help**, type "refund", pick the reason and payment, describe the problem, and check the verdict. Nothing is sent until you tap the yes button. Then open **Account → My requests** to see the new request.
 
 For the detailed explanations, troubleshooting and the migration table, read the sections below.
@@ -228,12 +257,13 @@ Run each file in the SQL Editor of the SAME project used by
 | 3 | `supabase/secure_jobs.sql` | Job projection: city, HQ, division, salary, experience and the **description** are public to signed-in users and never blurred; company name, manager name, manager email, primary contact and the optional alternate number stay subscriber-only. Adds a trigger that rejects phone numbers and email addresses in the public description. |
 | 4 | `supabase/user_notifications.sql` | Durable broadcast job notifications (unchanged). |
 | 5 | `supabase/admin_access.sql` | `manual_grant` payment method + audited `grant_manual_access`. No longer relaxes `is_app_admin()`. |
-| 6 | `supabase/admin_mfa.sql` | Reinstates the `aal2` requirement and adds `current_admin_session()` for diagnostics. |
+| 6 | `supabase/admin_mfa.sql` | Reinstates the `aal2` requirement and adds `current_admin_session()` for diagnostics. **Re-run the current version:** it adds the sign-in-code switch (`app_settings`, `admin_mfa_required()`, `set_admin_mfa_required()`, `admin_security_state()`) and the `app_settings_audit` trail the admin panel's 🔐 Security tab reads. The code stays ON until an administrator switches it off. |
 | 7 | `supabase/billing_plans.sql` | **New.** Server-side plan catalog (`public.billing_plans`) seeded with the seven existing plans; `save_billing_plan()` is admin+MFA only and refuses to retire the last purchasable plan. |
 | 8 | `supabase/resumes.sql` | **New.** Private `resumes` storage bucket, owner-only `resume_documents`, forced 30-day retention and `delete_expired_resumes()`. |
 | 9 | `supabase/applications.sql` | **New.** `record_application()` / `list_my_applications()` so a user's application history is stored server-side with the verified identity. |
 | 10 | `supabase/support_requests.sql` | **New.** `public.support_requests` for refund and support requests. `create_support_request()` re-checks refund eligibility on the server and stores the account snapshot. Users read only their own requests; `admin_update_support_request()` is admin + MFA only. |
 | 11 | `supabase/vacancy_team.sql` | **New.** Vacancy team logins (`vacancy_editor` role) that can only post, list and delete vacancies, through `employee_post_vacancy()`, `employee_list_vacancies()` and `employee_delete_vacancy()`. Adds `vacancy_audit`, which records every vacancy added or deleted, by admin or team, with the delete reason. Only an administrator with MFA can read it. Earlier vacancies are backfilled once. |
+| 12 | `supabase/push_subscriptions.sql` | **New.** One row per notification device (`push_subscriptions`) with `enabled`, identity stamped from the verified JWT; `save_push_subscription()` / `delete_push_subscription()` let a user manage only their own devices, `push_subscription_stats()` is admin-only, and `push_delivery_log` records what each send reached. |
 
 **Vacancy team logins (new).** The administrator creates one login ID and password for the employee in **Admin → Vacancy team**. Only one employee login exists at a time, and the database enforces this. To change employee, delete the current login first, then create the new one. Team members sign in at `/?portal=vacancy` and see one page: post a vacancy, and delete one with a required reason. The admin sees how many vacancies were added and deleted, who did it, and every deletion reason. The team cannot see users, payments, the audit log or other team logins. The login ID is the employee's email address, because the sign-in system requires one. Passwords must be 12 to 72 characters. New team accounts are created already confirmed, so no confirmation email is sent. Team logins use a password only (no authenticator code), so choose strong passwords and remove a login as soon as someone leaves.
 

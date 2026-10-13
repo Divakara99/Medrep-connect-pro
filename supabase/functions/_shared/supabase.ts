@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2'
-import { corsHeaders, jsonResponse } from './http.ts'
+import { adminAccessAllowed, corsHeaders, isAdmin, jsonResponse } from './http.ts'
 
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 type PaymentMethod = 'razorpay' | 'upi_manual' | 'manual_grant'
@@ -100,6 +100,85 @@ export type Database = {
         Update: { user_id?: string; subscribed_until?: string | null }
         Relationships: []
       }
+      vacancies: {
+        Row: { id: string; data: Json; synced_at: string }
+        Insert: { id: string; data: Json; synced_at?: string }
+        Update: { id?: string; data?: Json; synced_at?: string }
+        Relationships: []
+      }
+      notifications: {
+        Row: { id: string; data: Json; synced_at: string }
+        Insert: { id: string; data: Json; synced_at?: string }
+        Update: { id?: string; data?: Json; synced_at?: string }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          email: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent: string | null
+          enabled: boolean
+          created_at: string
+          updated_at: string
+          last_seen_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          email: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent?: string | null
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+          last_seen_at?: string
+        }
+        Update: {
+          user_id?: string
+          email?: string
+          endpoint?: string
+          p256dh?: string
+          auth?: string
+          user_agent?: string | null
+          enabled?: boolean
+          updated_at?: string
+          last_seen_at?: string
+        }
+        Relationships: []
+      }
+      push_delivery_log: {
+        Row: {
+          id: number
+          notification_id: string | null
+          title: string | null
+          sent: number
+          failed: number
+          removed: number
+          created_at: string
+        }
+        Insert: {
+          notification_id?: string | null
+          title?: string | null
+          sent?: number
+          failed?: number
+          removed?: number
+          created_at?: string
+        }
+        Update: {
+          notification_id?: string | null
+          title?: string | null
+          sent?: number
+          failed?: number
+          removed?: number
+        }
+        Relationships: []
+      }
     }
     Views: { [_ in never]: never }
     Functions: {
@@ -128,6 +207,10 @@ export type Database = {
       review_manual_upi_subscription_payment: {
         Args: { p_payment_id: string; p_reviewer_id: string; p_approve: boolean }
         Returns: Json
+      }
+      admin_mfa_required: {
+        Args: Record<string, never>
+        Returns: boolean
       }
     }
     Enums: { [_ in never]: never }
@@ -193,3 +276,29 @@ export function isResponse(value: AuthenticatedContext | Response): value is Res
 export function optionsResponse(): Response {
   return new Response('ok', { headers: corsHeaders })
 }
+
+/**
+ * Is the owner's sign-in code switch ON? Read from the database with the service
+ * role, because public.app_settings is deliberately unreachable from a browser
+ * session. Fail safe: any problem counts as "code required".
+ */
+export async function adminMfaRequired(client: SupabaseClient<Database, 'public'>): Promise<boolean> {
+  const { data, error } = await client.rpc('admin_mfa_required')
+  if (error || typeof data !== 'boolean') return true
+  return data
+}
+
+/**
+ * The complete administrator gate for Edge Functions: trusted admin role, and
+ * either a verified code session or the owner's explicit OFF switch.
+ */
+export async function isAdminAllowed(
+  client: SupabaseClient<Database, 'public'>,
+  metadata: Record<string, unknown> | null | undefined,
+  aal2: boolean,
+): Promise<boolean> {
+  if (!isAdmin(metadata)) return false
+  return adminAccessAllowed(aal2, await adminMfaRequired(client))
+}
+
+export { adminAccessAllowed }

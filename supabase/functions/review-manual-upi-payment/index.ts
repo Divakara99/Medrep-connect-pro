@@ -1,4 +1,4 @@
-import { authenticate, isResponse, optionsResponse } from '../_shared/supabase.ts'
+import { adminAccessAllowed, adminMfaRequired, authenticate, isResponse, optionsResponse } from '../_shared/supabase.ts'
 import { isAdmin, isUuid, jsonResponse, readJson } from '../_shared/http.ts'
 
 Deno.serve(async (request: Request) => {
@@ -11,7 +11,10 @@ Deno.serve(async (request: Request) => {
   if (!isAdmin(context.user.app_metadata)) {
     return jsonResponse({ error: 'An administrator account is required.' }, 403)
   }
-  if (!context.aal2) {
+  // The owner can switch the sign-in code off from the admin console
+  // (supabase/admin_mfa.sql). The database policy honours that flag, so this
+  // gate must honour it too — otherwise the console would open and then fail.
+  if (!adminAccessAllowed(context.aal2, await adminMfaRequired(context.adminClient))) {
     return jsonResponse({ error: 'Verify your authenticator code (MFA) before reviewing payments.' }, 403)
   }
 

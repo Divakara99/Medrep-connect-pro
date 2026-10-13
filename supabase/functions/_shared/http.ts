@@ -36,3 +36,23 @@ export function isAdmin(metadata: Record<string, unknown> | null | undefined): b
     || metadata?.is_admin === true
     || metadata?.is_admin === 'true'
 }
+
+/** Vacancy team logins: created by an administrator, post and delete only. */
+export function isVacancyEditor(metadata: Record<string, unknown> | null | undefined): boolean {
+  return metadata?.role === 'vacancy_editor'
+}
+
+/**
+ * The administrator gate shared by every admin Edge Function.
+ *
+ * `aal2` is the verified-code session Supabase Auth issues after the six-digit
+ * authenticator challenge. The owner can switch the sign-in code off from the
+ * admin console (public.set_admin_mfa_required), and the database's
+ * `is_app_admin()` honours the same flag — so this must too, or a console that
+ * opens without a code would fail on every button.
+ *
+ * Fail safe: anything other than an explicit `false` counts as "code required".
+ */
+export function adminAccessAllowed(aal2: boolean, mfaRequired: boolean): boolean {
+  return aal2 || mfaRequired === false
+}
