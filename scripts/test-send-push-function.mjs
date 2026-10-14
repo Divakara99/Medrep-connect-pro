@@ -323,7 +323,51 @@ assert.deepEqual(
 )
 
 // ===========================================================================
-// 4. The administrator gate follows the sign-in-code switch
+// 4. A private refund notification reaches only the refunded user's devices
+// ===========================================================================
+database.notifications.push({
+  id: 'n_refund_alice',
+  data: {
+    id: 'n_refund_alice',
+    title: 'Refund approved & processed ✅',
+    body: 'Your refund of ₹1,234 was processed. Reference: REF-ALICE.',
+    type: 'payment',
+    target: ['me@example.org'],
+    createdAt: Date.now(),
+    from: 'MedRep Connect Pro',
+    meta: { event: 'refund-processed', paymentId: 'payment-alice' },
+  },
+  synced_at: new Date().toISOString(),
+})
+calls.length = 0
+result = await call({ action: 'notify', notificationId: 'n_refund_alice' }, admin())
+assert.equal(result.status, 200)
+assert.equal(result.json.devices, 1, 'only Alice’s enabled phone is selected')
+assert.equal(result.json.sent, 1)
+assert.equal(calls.length, 1, 'no other account receives the refund push')
+assert.equal(calls[0].payload.body.includes('REF-ALICE'), true)
+
+database.notifications.push({
+  id: 'n_legacy_refund_broadcast',
+  data: {
+    id: 'n_legacy_refund_broadcast',
+    title: 'Refund approved & processed ✅',
+    body: 'Private refund data must not be broadcast.',
+    type: 'payment',
+    target: 'all',
+    createdAt: Date.now(),
+    from: 'MedRep Connect Pro',
+    meta: { paymentId: 'payment-bob' },
+  },
+  synced_at: new Date().toISOString(),
+})
+calls.length = 0
+result = await call({ action: 'notify', notificationId: 'n_legacy_refund_broadcast' }, admin())
+assert.equal(result.status, 404, 'legacy all-target refund notices are refused by the push function')
+assert.equal(calls.length, 0, 'no phone receives a legacy broadcast refund')
+
+// ===========================================================================
+// 5. The administrator gate follows the sign-in-code switch
 // ===========================================================================
 result = await call({ action: 'notify', notificationId: 'n_announce_1' }, user())
 assert.equal(result.status, 403, 'a normal account can never push')
@@ -342,7 +386,7 @@ result = await call({ action: 'notify', notificationId: 'n_missing' }, admin())
 assert.equal(result.status, 404, 'an unknown notice is refused')
 
 // ===========================================================================
-// 5. The vacancy team may push a vacancy, but not an announcement
+// 6. The vacancy team may push a vacancy, but not an announcement
 // ===========================================================================
 result = await call({ action: 'notify', notificationId: 'n_announce_1' }, teamMember())
 assert.equal(result.status, 403, 'the team cannot send announcements')
@@ -361,7 +405,7 @@ assert.match(calls[0].payload.title, /MR opening/)
 assert.match(calls[0].payload.body, /Field Officer/)
 
 // ===========================================================================
-// 6. Malformed and unsupported requests
+// 7. Malformed and unsupported requests
 // ===========================================================================
 result = await call({ action: 'delete-everything' }, admin())
 assert.equal(result.status, 400)
@@ -372,4 +416,4 @@ const noAuth = await handler(new Request('https://example.supabase.co/functions/
 }))
 assert.equal(noAuth.status, 401, 'a signed-in account is required')
 
-console.log('send-push function: config, own-device test, announcement fan-out with decryption, dead-endpoint pruning, delivery log, switch-aware admin gate and vacancy-team push passed')
+console.log('send-push function: config, own-device test, announcement fan-out, recipient-only refund push, dead-endpoint pruning, delivery log, switch-aware admin gate and vacancy-team push passed')

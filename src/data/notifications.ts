@@ -3,6 +3,13 @@ import { mirror, supabase } from './supabase'
 import { read, write } from './storage'
 import { announcementBody, nextWatermark, notificationsToAlert, shouldChime } from './pushRules'
 import { publishToEveryone } from './push'
+import {
+  isBroadcastNotification,
+  isRefundNotification,
+  notificationAudience,
+  notificationVisibleToEmail,
+  privateNotificationTarget,
+} from './notificationPrivacy'
 
 export type Notification = {
   id: string
@@ -18,6 +25,18 @@ export type Notification = {
 }
 
 const NOTIF_KEY = 'mrc_notifications_v1'
+const PERSONAL_NOTIF_KEY = 'mrc_private_notifications_v1'
+
+function personalNotificationKey(email: string): string {
+  return `${PERSONAL_NOTIF_KEY}:${email.trim().toLowerCase()}`
+}
+
+function mergeNotifications(existing: Notification[], incoming: Notification[]): Notification[] {
+  const known = new Set(existing.map((notification) => notification.id))
+  const merged = [...existing, ...incoming.filter((notification) => !known.has(notification.id))]
+  merged.sort((a, b) => b.createdAt - a.createdAt)
+  return merged.slice(0, 500)
+}
 
 function nid() {
   return 'n_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -148,7 +167,19 @@ function generateCopy(ev: EventKind): { title: string; body: string } {
   }
 }
 
-export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' | string[]; type?: Notification['type']; meta?: Record<string, unknown> }): Notification {
+type BroadcastOptions = {
+  from?: string
+  target?: 'all' | string[]
+  type?: Notification['type']
+  meta?: Record<string, unknown>
+}
+
+type RefundProcessedEvent = Extract<EventKind, { kind: 'refund-processed' }>
+type NonRefundEvent = Exclude<EventKind, RefundProcessedEvent>
+
+export function broadcast(ev: RefundProcessedEvent, opts: BroadcastOptions & { target: string[] }): Notification
+export function broadcast(ev: NonRefundEvent, opts?: BroadcastOptions): Notification
+export function broadcast(ev: EventKind, opts?: BroadcastOptions): Notification {
   const copy = generateCopy(ev)
   const typeMap: Record<EventKind['kind'], Notification['type']> = {
     'job-posted': 'job',
@@ -161,6 +192,10 @@ export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' 
     announcement: 'update',
     welcome: 'system',
   }
+
+  const target = notificationAudience(ev.kind === 'refund-processed', opts?.target)
+  if (!target) throw new Error('A refund notification must target exactly one valid recipient.')
+
   const notif: Notification = {
     id: nid(),
     title: copy.title,
@@ -168,22 +203,28 @@ export function broadcast(ev: EventKind, opts?: { from?: string; target?: 'all' 
     type: opts?.type ?? typeMap[ev.kind],
     createdAt: Date.now(),
     from: opts?.from ?? `Mr. ${CREATOR.name} · MedRep Connect Pro`,
-    target: opts?.target ?? 'all',
+    target,
     meta: opts?.meta,
   }
-  const existing = read<Notification[]>(NOTIF_KEY, [])
-  existing.unshift(notif)
-  write(NOTIF_KEY, existing.slice(0, 500))
+
+  // The shared local cache is for public broadcasts only. Private events live
+  // on the server and are fetched into a recipient-specific cache after auth.
+  if (target === 'all') {
+    const existing = read<Notification[]>(NOTIF_KEY, []).filter(isBroadcastNotification)
+    existing.unshift(notif)
+    write(NOTIF_KEY, existing.slice(0, 500))
+    playNotifSound()
+  }
   mirror('notifications', notif)
-  // Targeting is implicit since all users read the global feed; per-user read state
-  // is stored separately.
-  // Audible alert for every new notification
-  playNotifSound()
   return notif
 }
 
 export function getNotifications(): Notification[] {
-  const existing = read<Notification[]>(NOTIF_KEY, [])
+  const stored = read<Notification[]>(NOTIF_KEY, [])
+  const existing = stored.filter((notification) =>
+    Boolean(notification && typeof notification === 'object' && isBroadcastNotification(notification)),
+  )
+  if (existing.length !== stored.length) write(NOTIF_KEY, existing)
   if (existing.length === 0) {
     // Seed a welcome-to-the-platform broadcast on first launch
     const seed: Notification = {
@@ -202,7 +243,7 @@ export function getNotifications(): Notification[] {
   return existing
 }
 
-function parseRemoteNotification(value: unknown): Notification | null {
+function parseRemoteNotification(value: unknown, email: string): Notification | null {
   if (!value || typeof value !== 'object') return null
   const row = value as Record<string, unknown>
   if (typeof row.id !== 'string' || typeof row.title !== 'string' || typeof row.body !== 'string') return null
@@ -210,6 +251,24 @@ function parseRemoteNotification(value: unknown): Notification | null {
     || row.type === 'update' || row.type === 'system'
     ? row.type
     : 'update'
+  const isRefund = isRefundNotification({ type, title: row.title, meta: row.meta })
+  let target: Notification['target']
+  if (row.target === 'all') {
+    // Never trust a broadcast audience on sensitive refund content.
+    if (isRefund) return null
+    target = 'all'
+  } else if (Array.isArray(row.target)) {
+    target = [...new Set(row.target
+      .filter((recipient): recipient is string => typeof recipient === 'string')
+      .map((recipient) => recipient.trim().toLowerCase())
+      .filter(Boolean))]
+    if (!notificationVisibleToEmail({ type, title: row.title, target }, email)) return null
+  } else {
+    // A missing audience is ambiguous for a refund and must fail closed. The
+    // updated RPC returns an explicit target for every row.
+    if (isRefund) return null
+    target = 'all'
+  }
   return {
     id: row.id,
     title: row.title,
@@ -217,29 +276,42 @@ function parseRemoteNotification(value: unknown): Notification | null {
     type,
     createdAt: typeof row.createdAt === 'number' ? row.createdAt : 0,
     from: typeof row.from === 'string' ? row.from : 'MedRep Connect Pro',
-    target: 'all',
+    target,
   }
 }
 
 /**
- * Merge broadcast notifications mirrored in Supabase into the local feed so
- * every user device receives new job posts and job updates (plus plan/payment
- * news) posted from the admin console. Failures are silent — the local feed
- * keeps working offline.
+ * Merge the server's visible notifications into shared broadcast and
+ * recipient-specific caches. The RPC itself filters by the signed-in email;
+ * targeted notices are never written into the device-wide broadcast cache.
  */
-export async function refreshNotificationsFromServer(): Promise<void> {
+export async function refreshNotificationsFromServer(email: string): Promise<void> {
+  const privateTarget = privateNotificationTarget(email)
+  if (!privateTarget) return
+  const normalizedEmail = privateTarget[0]
+
   try {
     const { data, error } = await supabase.rpc('list_visible_notifications')
     if (error || !Array.isArray(data)) return
-    const remote = (data as unknown[]).map(parseRemoteNotification).filter((n): n is Notification => n !== null)
-    if (remote.length === 0) return
-    const local = read<Notification[]>(NOTIF_KEY, [])
-    const known = new Set(local.map((n) => n.id))
-    const merged = [...local, ...remote.filter((n) => !known.has(n.id))]
-    merged.sort((a, b) => b.createdAt - a.createdAt)
-    write(NOTIF_KEY, merged.slice(0, 500))
+
+    const remote = (data as unknown[])
+      .map((value) => parseRemoteNotification(value, normalizedEmail))
+      .filter((notification): notification is Notification => notification !== null)
+    const publicRemote = remote.filter((notification) => notification.target === 'all' && isBroadcastNotification(notification))
+    const personalRemote = remote.filter((notification) =>
+      Array.isArray(notification.target) && notificationVisibleToEmail(notification, normalizedEmail),
+    )
+
+    const storedPublic = read<Notification[]>(NOTIF_KEY, [])
+    const localPublic = storedPublic.filter(isBroadcastNotification)
+    write(NOTIF_KEY, mergeNotifications(localPublic, publicRemote))
+
+    const key = personalNotificationKey(normalizedEmail)
+    const storedPersonal = read<Notification[]>(key, [])
+    const localPersonal = storedPersonal.filter((notification) => notificationVisibleToEmail(notification, normalizedEmail))
+    write(key, mergeNotifications(localPersonal, personalRemote))
   } catch {
-    // Offline or RPC not installed yet — keep the local feed as-is.
+    // Offline or RPC not installed yet — keep the local feeds as-is.
   }
 }
 
@@ -248,31 +320,35 @@ function getReadMap(): Record<string, number> {
   return read<Record<string, number>>(READ_KEY, {})
 }
 
-export function getNotificationsForUser(_email: string): Notification[] {
-  // In this demo all notifications are broadcasts; per-user read state is
-  // tracked separately via the mrc_notif_read_v1 map.
-  return getNotifications()
+export function getNotificationsForUser(email: string): Notification[] {
+  const normalizedEmail = email.trim().toLowerCase()
+  const publicNotices = getNotifications()
+  const personalNotices = normalizedEmail
+    ? read<Notification[]>(personalNotificationKey(normalizedEmail), [])
+      .filter((notification) => notificationVisibleToEmail(notification, normalizedEmail))
+    : []
+  return mergeNotifications(publicNotices, personalNotices)
 }
 
 export function unreadCount(email: string): number {
   const read = getReadMap()
-  const since = read[email.toLowerCase()] ?? 0
-  return getNotifications().filter((n) => n.createdAt > since).length
+  const since = read[email.trim().toLowerCase()] ?? 0
+  return getNotificationsForUser(email).filter((notification) => notification.createdAt > since).length
 }
 
 export function markAllRead(email: string) {
   const read = getReadMap()
-  read[email.toLowerCase()] = Date.now()
+  read[email.trim().toLowerCase()] = Date.now()
   write(READ_KEY, read)
 }
 
 export function markOneRead(email: string, id: string) {
-  const list = getNotifications()
-  const n = list.find((x) => x.id === id)
-  if (!n) return
+  const notification = getNotificationsForUser(email).find((item) => item.id === id)
+  if (!notification) return
   const read = getReadMap()
-  const prev = read[email.toLowerCase()] ?? 0
-  read[email.toLowerCase()] = Math.max(prev, n.createdAt)
+  const key = email.trim().toLowerCase()
+  const prev = read[key] ?? 0
+  read[key] = Math.max(prev, notification.createdAt)
   write(READ_KEY, read)
 }
 
@@ -309,13 +385,17 @@ export async function sendAnnouncement(title: string, message: string): Promise<
  * for announcements and for vacancy posts/updates.
  */
 export async function publish(notification: Notification): Promise<AnnouncementResult> {
-  const { delivery, error } = await publishToEveryone(notification)
+  const isBroadcast = notification.target === 'all'
+  const audience = isBroadcast ? 'every user' : 'the intended user'
+  const { delivery, error, stored } = await publishToEveryone(notification)
   if (error && !delivery) {
     return {
       ok: true,
       notification,
       delivery: null,
-      warning: `Saved for every user. Phone notifications were not sent: ${error}`,
+      warning: stored
+        ? `Saved for ${audience}. Phone notifications were not sent: ${error}`
+        : `The notification could not be saved for ${audience}: ${error}`,
     }
   }
   return {
@@ -323,7 +403,9 @@ export async function publish(notification: Notification): Promise<AnnouncementR
     notification,
     delivery,
     warning: delivery && delivery.sent === 0 && delivery.devices === 0
-      ? 'Saved for every user. No phone has notifications switched on yet — ask users to turn them on in the app.'
+      ? isBroadcast
+        ? 'Saved for every user. No phone has notifications switched on yet — ask users to turn them on in the app.'
+        : 'Saved for the intended user in the app. Their phone notifications are not switched on yet.'
       : undefined,
   }
 }
@@ -337,23 +419,25 @@ const SEEN_KEY = 'mrc_notif_seen_v1'
 const MAX_ALERTS_PER_CHECK = 3
 
 /**
- * Pull new broadcasts from the server and report the ones this device has not
- * seen yet, so the app can chime (and raise a system notification) even when the
- * user is sitting on another screen. The first check on a device only records a
- * watermark — a fresh install must not ring for the whole backlog.
+ * Pull the signed-in user's visible notifications and report newly arrived
+ * items, so the app can chime and raise a system notification while they are on
+ * another screen. The first check records a watermark without ringing backlog.
  */
-export async function refreshNotificationsAndAlert(): Promise<Notification[]> {
-  const watermark = read<number>(SEEN_KEY, 0)
-  const known = read<Notification[]>(NOTIF_KEY, []).map((item) => item.id)
-  await refreshNotificationsFromServer()
-  const merged = read<Notification[]>(NOTIF_KEY, [])
+export async function refreshNotificationsAndAlert(email: string): Promise<Notification[]> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return []
+  const seenKey = `${SEEN_KEY}:${normalizedEmail}`
+  const watermark = read<number>(seenKey, 0)
+  const known = getNotificationsForUser(normalizedEmail).map((item) => item.id)
+  await refreshNotificationsFromServer(normalizedEmail)
+  const merged = getNotificationsForUser(normalizedEmail)
   const fresh = notificationsToAlert(merged, known, watermark, MAX_ALERTS_PER_CHECK)
   const next = nextWatermark(watermark, merged, fresh)
-  if (next !== watermark) write(SEEN_KEY, next)
+  if (next !== watermark) write(seenKey, next)
   return fresh
 }
 
-/** True when a new broadcast deserves a sound on this device. */
+/** True when a new visible notification deserves a sound on this device. */
 export function shouldChimeForAlert(alerted: Notification[]): boolean {
   return shouldChime(soundEnabled(), alerted.length)
 }

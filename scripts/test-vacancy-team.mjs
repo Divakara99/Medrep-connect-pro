@@ -41,6 +41,11 @@ const fields = (overrides = {}) => ({
   location: 'Bengaluru',
   category: 'MR',
   description: 'Field sales in the assigned territory',
+  salary: '2 LPA',
+  experience: '0-2 years',
+  qualification: 'B.Pharm',
+  ageLimit: 'Below 30 years',
+  vacancyCount: '1 position',
   ...overrides,
 })
 
@@ -106,6 +111,9 @@ try {
   const migration = await readFile(new URL('../supabase/vacancy_team.sql', import.meta.url), 'utf8')
   await db.exec(migration)
   await db.exec(migration) // Re-running must not duplicate the backfill or change rules.
+  const duplicateMigration = await readFile(new URL('../supabase/vacancy_duplicate_check.sql', import.meta.url), 'utf8')
+  await db.exec(duplicateMigration)
+  await db.exec(duplicateMigration) // The new RPC and field projections are repeatable.
 
   // 1. Backfill: earlier vacancies are counted once, labelled 'earlier'.
   await asAdmin()
@@ -126,10 +134,59 @@ try {
   const stored = (await db.query(`SELECT data FROM public.vacancies WHERE id = $1`, [posted.id])).rows[0].data
   assert.equal(stored.postedBy, 'team@example.org')
   assert.equal(stored.pinned, false, 'the team cannot pin vacancies')
+  assert.equal(stored.qualification, 'B.Pharm')
+  assert.equal(stored.ageLimit, 'Below 30 years')
+  assert.equal(stored.vacancyCount, '1 position')
   const notice = (await db.query(`SELECT data FROM public.notifications WHERE data->'meta'->>'jobId' = $1`, [posted.id])).rows
   assert.equal(notice.length, 1, 'a team post notifies users once')
   assert.equal(notice[0].data.target, 'all')
   assert.equal(notice[0].data.type, 'job')
+  await asTeam()
+
+  // The team can compare only through the role-checked RPC. The exact result
+  // contains a public summary, never contacts or the public description text.
+  const exactDuplicate = (await db.query(
+    `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
+    [JSON.stringify(fields())],
+  )).rows[0].result
+  assert.equal(exactDuplicate.status, 'exact')
+  assert.equal(exactDuplicate.matches[0].id, posted.id)
+  for (const privateField of ['contact', 'manager', 'managerEmail', 'description']) {
+    assert.equal(Object.hasOwn(exactDuplicate.matches[0], privateField), false, `${privateField} must not leak in duplicate results`)
+  }
+  const possibleDuplicate = (await db.query(
+    `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
+    [JSON.stringify(fields({ qualification: '' }))],
+  )).rows[0].result
+  assert.equal(possibleDuplicate.status, 'possible', 'missing optional details are labelled possible, not exact')
+  assert.equal(possibleDuplicate.matches[0].matchType, 'possible')
+  const differentVacancy = (await db.query(
+    `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
+    [JSON.stringify(fields({ salary: '5 LPA' }))],
+  )).rows[0].result
+  assert.equal(differentVacancy.status, 'none', 'a conflicting salary does not count as a duplicate')
+  const excluded = (await db.query(
+    `SELECT public.check_vacancy_duplicates($1::jsonb, $2::text) AS result`,
+    [JSON.stringify(fields()), posted.id],
+  )).rows[0].result
+  assert.equal(excluded.status, 'none', 'editing excludes its own row from duplicate checks')
+
+  // Legacy active records may not have the newly optional qualification yet;
+  // keep them as possible matches instead of claiming there are none.
+  await asAdmin()
+  await db.query(`UPDATE public.vacancies SET data = data || '{"qualification":""}' WHERE id = $1`, [posted.id])
+  await asTeam()
+  const legacyPossible = (await db.query(
+    `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
+    [JSON.stringify(fields())],
+  )).rows[0].result
+  assert.equal(legacyPossible.status, 'possible')
+  assert.equal(legacyPossible.matches[0].id, posted.id)
+
+  await asAdminNoMfa()
+  await rejects(db.query(`SELECT public.check_vacancy_duplicates($1::jsonb, NULL)`, [JSON.stringify(fields())]), /Only an administrator or vacancy employee/)
+  await asUser()
+  await rejects(db.query(`SELECT public.check_vacancy_duplicates($1::jsonb, NULL)`, [JSON.stringify(fields())]), /Only an administrator or vacancy employee/)
   await asTeam()
 
   // 3. Validation and the shared description guard still apply.
@@ -149,7 +206,7 @@ try {
   const listed = (await db.query(`SELECT public.employee_list_vacancies() AS job`)).rows.map((r) => r.job)
   assert.ok(listed.some((job) => job.id === posted.id))
   for (const job of listed) {
-    assert.deepEqual(Object.keys(job).sort(), ['category', 'company', 'id', 'location', 'postedAt', 'postedBy', 'title'])
+    assert.deepEqual(Object.keys(job).sort(), ['ageLimit', 'category', 'company', 'id', 'location', 'postedAt', 'postedBy', 'qualification', 'title', 'vacancyCount'])
   }
 
   // 6. Delete needs a real reason. A deleted vacancy cannot be deleted again.
@@ -213,7 +270,7 @@ try {
   await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'second@example.org', 'Second Employee')`, [secondEmployee])
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM public.vacancy_employees`)).rows[0].n, 1, 'exactly one employee login')
 
-  console.log('vacancy team SQL: team post and delete with reasons, audit of admin and team actions, team isolation, MFA-gated audit, one employee login at a time and idempotent backfill passed')
+  console.log('vacancy SQL: role-scoped exact/possible duplicate checks with safe summaries, optional public fields, team post/delete, audit and isolation, MFA gating, single employee login and idempotent migrations passed')
 } finally {
   await db.close()
 }

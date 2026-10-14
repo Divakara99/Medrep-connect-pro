@@ -51,7 +51,7 @@ export function ApplicationsScreen({ onClose, onBrowseJobs }: { onClose: () => v
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-4 pb-28 space-y-3">
+      <main className="max-w-3xl mx-auto px-4 py-4 pb-6 space-y-3">
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800 ring-1 ring-red-200">{error}</p>}
 
         {!loaded && !error ? (

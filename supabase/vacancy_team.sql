@@ -236,6 +236,9 @@ BEGIN
     'division', left(btrim(coalesce(p_fields ->> 'division', '')), 120),
     'salary', left(btrim(coalesce(p_fields ->> 'salary', '')), 120),
     'experience', left(btrim(coalesce(p_fields ->> 'experience', '')), 120),
+    'qualification', left(btrim(coalesce(p_fields ->> 'qualification', '')), 200),
+    'ageLimit', left(btrim(coalesce(p_fields ->> 'ageLimit', '')), 120),
+    'vacancyCount', left(btrim(coalesce(p_fields ->> 'vacancyCount', '')), 80),
     'description', left(coalesce(p_fields ->> 'description', ''), 4000),
     'pinned', false,
     'postedAt', now_ms,
@@ -289,6 +292,9 @@ BEGIN
       'company', v.data ->> 'company',
       'location', v.data ->> 'location',
       'category', v.data ->> 'category',
+      'qualification', v.data ->> 'qualification',
+      'ageLimit', v.data ->> 'ageLimit',
+      'vacancyCount', v.data ->> 'vacancyCount',
       'postedAt', CASE WHEN v.data ->> 'postedAt' ~ '^[0-9]{1,13}$' THEN (v.data ->> 'postedAt')::bigint ELSE 0 END,
       'postedBy', coalesce(v.data ->> 'postedBy', '')
     )

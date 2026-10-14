@@ -7,18 +7,21 @@ import { ApplicationsScreen } from './ApplicationsScreen'
 import { isSubscribed, type User } from '../data/auth'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
+import type { Profile } from '../data/profile'
 import { APP_VERSION_LABEL } from '../data/version'
 
 export function AccountScreen({
   user,
   onLogout,
   onSubscribed,
+  onProfileSaved,
   onResumeChange,
   onBrowseJobs,
 }: {
   user: User
   onLogout: () => void
   onSubscribed: (u: User) => void
+  onProfileSaved: (profile: Profile) => void
   onResumeChange: (resume: ResumeRecord | null) => void
   onBrowseJobs: () => void
 }) {
@@ -38,7 +41,7 @@ export function AccountScreen({
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pt-4 pb-32 space-y-4">
+    <div className="max-w-3xl mx-auto px-4 pt-4 pb-24 space-y-4">
       <Card className="p-4 flex items-center gap-3">
         <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white grid place-items-center text-xl font-bold">
           {user.name.slice(0, 1).toUpperCase()}
@@ -78,7 +81,10 @@ export function AccountScreen({
         ref={editorRef}
         email={user.email}
         phone={user.phone}
-        onSaved={(profile) => onSubscribed({ ...user, phone: profile.phone })}
+        onSaved={(profile) => {
+          onSubscribed({ ...user, phone: profile.phone })
+          onProfileSaved(profile)
+        }}
         onResumeChange={onResumeChange}
       />
 
@@ -116,7 +122,10 @@ export function AccountScreen({
       {/* Unified frozen (sticky) action bar: Save primary, Logout secondary.
           Both buttons are anchored together so users don't accidentally hit Logout
           when trying to save, and they can't miss either action. */}
-      <div className="fixed bottom-[60px] inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 py-2.5">
+      <div
+        className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 pt-2.5"
+        style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}
+      >
         <div className="max-w-3xl mx-auto flex items-center gap-2">
           <Button
             variant="primary"

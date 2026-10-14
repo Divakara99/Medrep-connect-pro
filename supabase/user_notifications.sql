@@ -1,7 +1,8 @@
--- User notification delivery for broadcast alerts (new job posts, job updates,
--- plan/payment news). Run AFTER schema.sql in the SAME Supabase project.
--- The notifications mirror table stays admin-only; this explicitly shaped RPC
--- is the ONLY way an ordinary signed-in user can read broadcast notices.
+-- User notification delivery for broadcasts and account-targeted private notices.
+-- Run AFTER schema.sql in the SAME Supabase project. The notifications mirror
+-- table stays admin-only; this explicitly shaped RPC is the ONLY way an
+-- ordinary signed-in user can read notices. Refund rows must have exactly one
+-- recipient, and legacy all-user refund rows are suppressed.
 
 BEGIN;
 
@@ -18,7 +19,10 @@ BEGIN
     RAISE EXCEPTION 'Sign in to see notifications.' USING ERRCODE = '28000';
   END IF;
 
-  viewer_email := coalesce(auth.jwt() ->> 'email', '');
+  viewer_email := lower(btrim(coalesce(auth.jwt() ->> 'email', '')));
+  IF viewer_email = '' THEN
+    RAISE EXCEPTION 'Your account email is unavailable.' USING ERRCODE = '28000';
+  END IF;
 
   RETURN QUERY
   SELECT jsonb_build_object(
@@ -27,14 +31,47 @@ BEGIN
     'body', n.data ->> 'body',
     'type', coalesce(n.data ->> 'type', 'update'),
     'createdAt', coalesce((n.data ->> 'createdAt')::bigint, 0),
-    'from', coalesce(n.data ->> 'from', 'MedRep Connect Pro')
+    'from', coalesce(n.data ->> 'from', 'MedRep Connect Pro'),
+    -- Never disclose the full recipient list; a private row is marked as
+    -- addressed only to the authenticated viewer.
+    'target', CASE
+      WHEN coalesce(n.data ->> 'target', 'all') = 'all' THEN to_jsonb('all'::text)
+      ELSE jsonb_build_array(viewer_email)
+    END
   )
   FROM public.notifications AS n
-  WHERE coalesce(n.data ->> 'target', 'all') = 'all'
-     OR (
-       jsonb_typeof(n.data -> 'target') = 'array'
-       AND (n.data -> 'target') ? viewer_email
-     )
+  WHERE (
+    coalesce(n.data ->> 'target', 'all') = 'all'
+    OR (
+      jsonb_typeof(n.data -> 'target') = 'array'
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(n.data -> 'target') AS recipient(email)
+        WHERE lower(btrim(recipient.email)) = viewer_email
+      )
+    )
+  )
+  -- Do not keep exposing refund records from older clients which accidentally
+  -- marked them as broadcasts. Correctly targeted refund rows remain visible to
+  -- their recipient through the array-target branch above.
+  AND NOT (
+    coalesce(n.data ->> 'target', 'all') = 'all'
+    AND (
+      coalesce((n.data -> 'meta') ? 'paymentId', false)
+      OR lower(coalesce(n.data ->> 'title', '')) LIKE 'refund %'
+    )
+  )
+  -- Defense in depth: even an accidental multi-email refund audience is denied.
+  AND (
+    NOT (
+      coalesce((n.data -> 'meta') ? 'paymentId', false)
+      OR lower(coalesce(n.data ->> 'title', '')) LIKE 'refund %'
+    )
+    OR jsonb_array_length(CASE
+      WHEN jsonb_typeof(n.data -> 'target') = 'array' THEN n.data -> 'target'
+      ELSE '[]'::jsonb
+    END) = 1
+  )
   ORDER BY coalesce((n.data ->> 'createdAt')::bigint, 0) DESC
   LIMIT 200;
 END;

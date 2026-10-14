@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Badge, Modal } from './ui'
 import { descriptionPoints, type Job } from '../data/jobs'
+import { normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
@@ -48,7 +49,7 @@ function SensitiveValue({ label, value, plus = false }: { label: string; value: 
         title={revealed ? 'Tap to blur again' : 'Tap to reveal'}
         className={`mt-0.5 w-full text-left text-sm font-semibold text-slate-900 transition ${revealed ? '' : 'blur-[5px] select-none'}`}
       >
-        {plus ? <span className="text-brand-700 font-extrabold">(+)</span> : null}{value}
+        {plus ? <span className="text-brand-700 font-extrabold">+91&nbsp;</span> : null}{value}
       </button>
       <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400 mt-0.5">
         {revealed ? 'Tap to blur' : 'Blurred · tap to reveal'}
@@ -91,6 +92,7 @@ export function JobDetail({
 }) {
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
+  const hqItems = job ? parseHeadquarters(job.hq) : []
 
   return (
     <Modal open={!!job} onClose={onClose} title={job?.title}>
@@ -119,9 +121,12 @@ export function JobDetail({
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Role" value={job.title} />
             <Field label="City" value={job.location} />
-            <Field label="HQ" value={job.hq || '—'} />
+            <Field label={hqItems.length > 1 ? 'HQs' : 'HQ'} value={hqItems.length > 0 ? hqItems.join('\n') : '—'} multiline={hqItems.length > 1} />
             <Field label="Division" value={job.division || '—'} />
             <Field label="Experience" value={job.experience || '—'} />
+            <Field label="Qualification" value={job.qualification || '—'} />
+            <Field label="Age limit" value={job.ageLimit || '—'} />
+            <Field label="Vacancies" value={job.vacancyCount || '—'} />
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
@@ -168,7 +173,7 @@ export function JobDetail({
                 <SensitiveValue label="Manager name" value={job.manager || ''} />
                 <Field label="Manager email" value={job.managerEmail || CREATOR.adminEmail} />
                 <SensitiveValue label="ABM/ASM number" value={job.contact || ''} />
-                <SensitiveValue label="Manager alternate number" value={job.managerAltPhone || ''} plus />
+                <SensitiveValue label="Manager alternate number" value={normalizeIndianMobile(job.managerAltPhone || '')} plus />
                 <Field label="Posted on" value={postedOn(job.postedAt)} />
               </div>
             )}
@@ -192,11 +197,11 @@ export function JobDetail({
   )
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) {
   return (
     <div className="rounded-xl ring-1 ring-slate-200 p-3">
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="text-sm font-semibold text-slate-900 truncate">{value}</div>
+      <div className={`text-sm font-semibold text-slate-900 ${multiline ? 'whitespace-pre-line break-words' : 'truncate'}`}>{value}</div>
     </div>
   )
 }

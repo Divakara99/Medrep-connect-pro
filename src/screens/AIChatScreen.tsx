@@ -381,7 +381,7 @@ export function AIChatScreen({ user }: { user: User }) {
   const lastIndex = messages.length - 1
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-28 pt-4 flex flex-col h-[calc(100svh-64px)]">
+    <div className="max-w-3xl mx-auto px-4 pb-4 pt-4 flex flex-col h-[calc(100svh-64px)]">
       <Card className="flex-1 flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white grid place-items-center text-lg">🤖</div>

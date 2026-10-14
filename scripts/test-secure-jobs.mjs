@@ -34,7 +34,7 @@ try {
     INSERT INTO public.user_accounts VALUES
       ('${freeId}', NULL), ('${paidId}', now() + interval '1 day');
     INSERT INTO public.vacancies (id, data) VALUES
-      ('job_1', '{"title":"Medical Representative","location":"Chennai","category":"MR","salary":"2 LPA","experience":"0-2 years","company":"Hidden Pharma","manager":"Private Manager","contact":"9999999999","managerEmail":"private@example.org","description":"Private description","hq":"Hyderabad HO","division":"Cardiology","postedAt":123,"pinned":true}'),
+      ('job_1', '{"title":"Medical Representative","location":"Chennai","category":"MR","salary":"2 LPA","experience":"0-2 years","qualification":"Any degree","ageLimit":"Below 25 years","vacancyCount":"1 position","company":"Hidden Pharma","manager":"Private Manager","contact":"9999999999","managerEmail":"private@example.org","description":"Private description","hq":"Hyderabad HO","division":"Cardiology","postedAt":123,"pinned":true}'),
       ('removed', '{"deleted":true,"title":"Removed","location":"Chennai","category":"MR"}');
   `)
   const migration = await readFile(new URL('../supabase/secure_jobs.sql', import.meta.url), 'utf8')
@@ -70,6 +70,9 @@ try {
   assert.equal(freeJob.description, 'Private description', 'description is public and must be readable')
   assert.equal(freeJob.hq, 'Hyderabad HO', 'HQ is public and must not be locked')
   assert.equal(freeJob.division, 'Cardiology', 'division is public and must not be locked')
+  assert.equal(freeJob.qualification, 'Any degree', 'qualification is public')
+  assert.equal(freeJob.ageLimit, 'Below 25 years', 'age limit is public')
+  assert.equal(freeJob.vacancyCount, '1 position', 'vacancy count is public')
   // The five confidential fields must not exist in the free-user response at all.
   for (const field of ['company', 'manager', 'contact', 'managerEmail', 'managerAltPhone']) {
     assert.equal(Object.hasOwn(freeJob, field), false, `${field} leaked to free user`)

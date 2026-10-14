@@ -62,7 +62,8 @@ BEGIN
   WHERE user_id = auth.uid();
 
   -- PUBLIC to every signed-in user: title, city, category, salary, experience,
-  -- posted date, HQ, division and the point-wise description. None of these are
+  -- posted date, HQ, division, qualification, age limit, vacancy count and the
+  -- point-wise description. None of these are
   -- blurred in the UI.
   -- PRIVATE until an active subscription — exactly five fields: company name,
   -- manager name, manager email, primary contact number and the optional
@@ -77,6 +78,9 @@ BEGIN
       'category', v.data ->> 'category',
       'salary', v.data ->> 'salary',
       'experience', v.data ->> 'experience',
+      'qualification', v.data ->> 'qualification',
+      'ageLimit', v.data ->> 'ageLimit',
+      'vacancyCount', v.data ->> 'vacancyCount',
       'description', v.data ->> 'description',
       'hq', v.data ->> 'hq',
       'division', v.data ->> 'division',

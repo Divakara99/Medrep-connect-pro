@@ -1,7 +1,7 @@
 import type { Job } from './jobs'
 import type { User } from './auth'
 import type { ResumeRecord } from './resume'
-import { getProfile, type Profile } from './profile'
+import { getProfile, profileCompletionIssues, type Profile } from './profile'
 import { CREATOR } from './creator'
 import { mirror, supabase } from './supabase'
 
@@ -146,7 +146,7 @@ function openComposer(href: string): void {
 
 export type OpenApplicationResult =
   | { ok: true; channel: 'email' | 'whatsapp'; to: string; record: ApplicationRecord; historyError?: string }
-  | { ok: false; channel: 'email' | 'whatsapp'; to: string; error: string }
+  | { ok: false; error: string }
 
 export async function openApplication(
   user: User,
@@ -154,6 +154,14 @@ export async function openApplication(
   resume?: ResumeRecord | null,
 ): Promise<OpenApplicationResult> {
   const profile = getProfile(user.email)
+  const missingProfileDetails = profileCompletionIssues(profile, user.phone)
+  if (missingProfileDetails.length > 0) {
+    return {
+      ok: false,
+      error: `Complete your profile before applying. Still needed: ${missingProfileDetails.join(', ')}.`,
+    }
+  }
+
   const emailTo = (job.managerEmail || '').trim()
   const phoneTo = normalizePhone(job.contact)
 
@@ -172,7 +180,7 @@ export async function openApplication(
     const whatsapp = buildTextContent(user, job, profile, 'whatsapp')
     href = `https://wa.me/${to}?text=${encodeURIComponent(whatsapp.body)}`
   } else {
-    return { ok: false, channel: 'email', to: '', error: 'No manager email or contact number on this job — please notify admin.' }
+    return { ok: false, error: 'No manager email or contact number on this job — please notify admin.' }
   }
 
   const record: ApplicationRecord = {
