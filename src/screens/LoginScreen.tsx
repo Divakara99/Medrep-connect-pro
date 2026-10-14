@@ -3,6 +3,7 @@ import { Button, Card, Input, Label } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
 import { loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
+import { MIN_USER_PASSWORD_LENGTH } from '../data/passwordRules'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 
@@ -69,7 +70,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
         if (!result.ok) setError(result.error)
         else setSuccess('If an account uses that email, password reset instructions have been sent.')
       } else {
-        const result = await updatePassword(newPassword)
+        const result = await updatePassword(newPassword, MIN_USER_PASSWORD_LENGTH)
         if (!result.ok) setError(result.error)
         else {
           setSuccess('Password updated. Signing you in…')
@@ -162,9 +163,9 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder={activeMode === 'signup' ? 'At least 12 characters' : 'Enter your password'}
+                    placeholder={activeMode === 'signup' ? `At least ${MIN_USER_PASSWORD_LENGTH} characters` : 'Enter your password'}
                     autoComplete={activeMode === 'signup' ? 'new-password' : 'current-password'}
-                    minLength={activeMode === 'signup' ? 12 : undefined}
+                    minLength={activeMode === 'signup' ? MIN_USER_PASSWORD_LENGTH : undefined}
                     required
                   />
                 </div>
@@ -173,7 +174,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
               {activeMode === 'update-password' && (
                 <div>
                   <Label htmlFor="new-password">New password</Label>
-                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="At least 12 characters" minLength={12} required />
+                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={`At least ${MIN_USER_PASSWORD_LENGTH} characters`} minLength={MIN_USER_PASSWORD_LENGTH} required />
                 </div>
               )}
 

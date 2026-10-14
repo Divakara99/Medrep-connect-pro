@@ -1,6 +1,7 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
 import { hasAdminRole, hasVacancyRole, supabase } from './supabase'
 import { adminMfaRequired, isMfaVerifiedSession } from './mfa'
+import { MIN_STAFF_PASSWORD_LENGTH, MIN_USER_PASSWORD_LENGTH, passwordLengthError } from './passwordRules'
 import { read, remove, write } from './storage'
 
 export type User = {
@@ -236,8 +237,11 @@ export async function registerUser(input: {
   if (!name || !email || !input.password) {
     return { ok: false, error: 'Name, email and password are required.' }
   }
-  if (input.password.length < 12) {
-    return { ok: false, error: 'Password must be at least 12 characters.' }
+  // Regular job-seeker accounts: 6 characters are enough (6–10 work, longer is
+  // fine). Administrator and vacancy-team passwords keep the 12-character rule.
+  const passwordError = passwordLengthError(input.password, MIN_USER_PASSWORD_LENGTH)
+  if (passwordError) {
+    return { ok: false, error: passwordError }
   }
   if (hasPhone && !phone) {
     return { ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }
@@ -325,8 +329,19 @@ export async function resetPassword(email: string): Promise<{ ok: true } | { ok:
   return { ok: true }
 }
 
-export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (password.length < 12) return { ok: false, error: 'Password must be at least 12 characters.' }
+/**
+ * Set the password of the signed-in recovery session.
+ *
+ * The minimum belongs to the caller: the job-seeker screens pass
+ * MIN_USER_PASSWORD_LENGTH, while the admin (and vacancy-team) screens keep the
+ * 12-character staff rule — which is also the safe default here.
+ */
+export async function updatePassword(
+  password: string,
+  minimumLength: number = MIN_STAFF_PASSWORD_LENGTH,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const passwordError = passwordLengthError(password, minimumLength)
+  if (passwordError) return { ok: false, error: passwordError }
   const { data, error } = await supabase.auth.updateUser({ password })
   if (error) return { ok: false, error: error.message }
   if (data.user) activeUser = toUser(data.user)
