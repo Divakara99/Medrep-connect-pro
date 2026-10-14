@@ -25,7 +25,7 @@ export type Job = {
   company: string
   manager?: string
   contact?: string
-  managerAltPhone?: string // optional manager alternative number, shown with a (+) sign
+  managerAltPhone?: string // optional local 10-digit Indian mobile, shown with a +91 prefix
   managerEmail?: string
   location: string
   hq?: string
@@ -33,6 +33,9 @@ export type Job = {
   category: Exclude<JobCategory, 'All'>
   salary?: string
   experience?: string
+  qualification?: string
+  ageLimit?: string
+  vacancyCount?: string
   description?: string
   pinned?: boolean
   postedAt: number
@@ -89,6 +92,9 @@ function parseJob(value: unknown): Job | null {
     category: row.category as Job['category'],
     salary: typeof row.salary === 'string' ? row.salary : undefined,
     experience: typeof row.experience === 'string' ? row.experience : undefined,
+    qualification: typeof row.qualification === 'string' ? row.qualification : undefined,
+    ageLimit: typeof row.ageLimit === 'string' ? row.ageLimit : undefined,
+    vacancyCount: typeof row.vacancyCount === 'string' ? row.vacancyCount : undefined,
     pinned: row.pinned === true,
     postedAt: typeof row.postedAt === 'number' ? row.postedAt : 0,
   }
@@ -150,7 +156,7 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
 
 const CONTENT_FIELDS: (keyof Job)[] = [
   'title', 'company', 'manager', 'contact', 'managerAltPhone', 'managerEmail',
-  'location', 'hq', 'division', 'category', 'salary', 'experience', 'description',
+  'location', 'hq', 'division', 'category', 'salary', 'experience', 'qualification', 'ageLimit', 'vacancyCount', 'description',
 ]
 
 export async function updateJob(id: string, patch: Partial<Job>, options?: { silent?: boolean }): Promise<Job> {

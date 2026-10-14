@@ -1,6 +1,8 @@
 import { mirror } from './supabase'
 import { read, write } from './storage'
 
+export { profileCompletionIssues, PROFILE_BIO_MIN_LENGTH } from './profileRules'
+
 export type Education = {
   id: string
   degree: string

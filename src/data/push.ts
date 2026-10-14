@@ -343,16 +343,16 @@ export async function myPushDevices(): Promise<{ label: string; createdAt: strin
 }
 
 /**
- * Publish a broadcast (announcement, new vacancy, vacancy update) and push it to
- * every subscribed device.
+ * Publish a notification and push it to the audience stored on its server row.
  *
  * The row is written to the server FIRST, so the words the phone shows are
- * exactly the words already stored in every user's notification list — and so a
- * failure to reach the phones can never lose the announcement itself.
+ * exactly the words already stored in the recipient's notification feed. A
+ * targeted notice therefore uses the same persistence and push path as a
+ * broadcast without widening its audience.
  */
 export async function publishToEveryone(
   notification: { id: string; title: string; body: string; type: string; target: 'all' | string[]; createdAt: number; from: string; meta?: Record<string, unknown> },
-): Promise<{ delivery: PushDeliverySummary | null; error: string | null }> {
+): Promise<{ delivery: PushDeliverySummary | null; error: string | null; stored: boolean }> {
   const stored = await syncToSupabase('notifications', {
     id: notification.id,
     data: notification,
@@ -362,10 +362,10 @@ export async function publishToEveryone(
     // The app is usable without a connection; the announcement still reaches
     // every device through the user's own feed once this device syncs. Say so
     // instead of pretending the phones were notified.
-    return { delivery: null, error: 'not published for other users yet — this device is offline.' }
+    return { delivery: null, error: 'not published — this device is offline or does not have administrator access.', stored: false }
   }
   const jobId = typeof notification.meta?.jobId === 'string' ? notification.meta.jobId : null
   const outcome = await notifyDevices(jobId ? { jobId } : { notificationId: notification.id })
-  if ('error' in outcome) return { delivery: null, error: outcome.error }
-  return { delivery: outcome, error: null }
+  if ('error' in outcome) return { delivery: null, error: outcome.error, stored: true }
+  return { delivery: outcome, error: null, stored: true }
 }

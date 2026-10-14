@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import {
   actorLabel,
   deleteReasonProblem,
+  headquartersProblem,
+  normalizeIndianMobile,
+  parseHeadquarters,
+  serializeHeadquarters,
   paymentStatusLabel,
   paymentStatusTone,
   paymentTotals,
@@ -20,6 +24,15 @@ assert.match(deleteReasonProblem('') ?? '', /at least 5/)
 assert.match(deleteReasonProblem('    ab  ') ?? '', /at least 5/)
 assert.equal(deleteReasonProblem('Position filled'), null)
 assert.match(deleteReasonProblem('x'.repeat(301)) ?? '', /under 300/)
+
+assert.deepEqual(parseHeadquarters('Hyderabad HO'), ['Hyderabad HO'], 'existing single-string HQs remain supported')
+assert.deepEqual(parseHeadquarters('Hyderabad HO\r\nBengaluru HQ'), ['Hyderabad HO', 'Bengaluru HQ'])
+assert.equal(serializeHeadquarters([' Hyderabad HO ', '', ' Bengaluru HQ ']), 'Hyderabad HO\nBengaluru HQ')
+assert.equal(headquartersProblem(['x'.repeat(119)]), null)
+assert.match(headquartersProblem(['x'.repeat(120), 'y']) ?? '', /within 120 characters/)
+assert.equal(normalizeIndianMobile('+91 90352 80940'), '9035280940')
+assert.equal(normalizeIndianMobile('09066411078'), '9066411078')
+assert.equal(normalizeIndianMobile('9066411078'), '9066411078')
 
 const row = (overrides) => ({
   id: 1,
@@ -88,4 +101,4 @@ const totals = paymentTotals([
 ])
 assert.deepEqual(totals, { paidCount: 2, paidAmount: 448, pendingCount: 1, waitingBankCheck: 1, failedCount: 2 })
 
-console.log('vacancy rules: delete reasons, activity totals, payment labels and totals passed')
+console.log('vacancy rules: HQ entries, delete reasons, activity totals, payment labels and totals passed')

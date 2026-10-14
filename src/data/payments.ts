@@ -1,5 +1,6 @@
 import { remove } from './storage'
-import { broadcast } from './notifications'
+import { broadcast, publish } from './notifications'
+import { privateNotificationTarget } from './notificationPrivacy'
 import { supabase } from './supabase'
 
 export type PaymentRecord = {
@@ -112,10 +113,10 @@ export function getPaymentsByUser(userId: string): PaymentRecord[] {
   return getPayments().filter((payment) => payment.userId === userId)
 }
 
-export function resolveRefund(
+export async function resolveRefund(
   paymentId: string,
   options: { approve: boolean; refundRef?: string; refundMethod?: PaymentRecord['refundMethod'] },
-): PaymentRecord | null {
+): Promise<PaymentRecord | null> {
   const payments = getPayments()
   const index = payments.findIndex((payment) => payment.id === paymentId)
   if (index < 0) return null
@@ -129,12 +130,29 @@ export function resolveRefund(
   payments[index] = updated
   paymentCache = payments
   if (options.approve) {
-    broadcast({
-      kind: 'refund-processed',
-      amount: updated.amount,
-      refundRef: updated.refundRef ?? '',
-      method: updated.refundMethod ?? 'Razorpay',
-    }, { type: 'payment', meta: { paymentId: updated.id, txRef: updated.txRef } })
+    // Resolve the payment owner from the server-backed account table, never
+    // infer the recipient from the administrator's current session or a form.
+    const { data: account, error } = await supabase
+      .from('user_accounts')
+      .select('email')
+      .eq('user_id', updated.userId)
+      .maybeSingle()
+    const target = !error && account?.email ? privateNotificationTarget(account.email) : null
+    if (target) {
+      const notification = broadcast({
+        kind: 'refund-processed',
+        amount: updated.amount,
+        refundRef: updated.refundRef ?? '',
+        method: updated.refundMethod ?? 'Razorpay',
+      }, {
+        type: 'payment',
+        target,
+        meta: { event: 'refund-processed', paymentId: updated.id, txRef: updated.txRef },
+      })
+      // publish() persists the audience first, then the edge function filters
+      // phone devices by that single recipient email.
+      await publish(notification)
+    }
   }
   return updated
 }

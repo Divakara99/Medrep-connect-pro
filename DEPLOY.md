@@ -41,7 +41,7 @@ If any step fails, stop and fix that step before continuing.
 Run the migrations **in this order**, in the Supabase project that matches `VITE_SUPABASE_URL`. Each file is safe to run again.
 
 ```bash
-npm run db:list          # shows the 11 files in the correct order
+npm run db:list          # shows the 14 files in the correct order
 npm run db:copy -- 1     # copies supabase/schema.sql to your clipboard
 ```
 
@@ -50,7 +50,7 @@ Then in the Supabase dashboard:
 1. Open **SQL Editor → New query**.
 2. Click in the editor and press **Ctrl+V** (Windows/Linux) or **⌘V** (Mac) to paste.
 3. Press **Run**. Wait for "Success", then go back to the terminal.
-4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 11`.
+4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 14`.
 
 **Prefer one paste?** Run `npm run db:copy -- all`, paste once, and press **Run**. If an error appears, fix it and run the same paste again: the files are safe to re-run.
 
@@ -256,7 +256,7 @@ Run each file in the SQL Editor of the SAME project used by
 | 1 | `supabase/schema.sql` | Auth-backed accounts, admin-only mirror RLS (unchanged). |
 | 2 | `supabase/payments.sql` | `subscription_payments` ledger and the verified activation functions (unchanged). |
 | 3 | `supabase/secure_jobs.sql` | Job projection: city, HQ, division, salary, experience and the **description** are public to signed-in users and never blurred; company name, manager name, manager email, primary contact and the optional alternate number stay subscriber-only. Adds a trigger that rejects phone numbers and email addresses in the public description. |
-| 4 | `supabase/user_notifications.sql` | Durable broadcast job notifications (unchanged). |
+| 4 | `supabase/user_notifications.sql` | Durable broadcasts plus recipient-targeted notifications; hides legacy all-user refunds and exposes only the viewer's own private audience. |
 | 5 | `supabase/admin_access.sql` | `manual_grant` payment method + audited `grant_manual_access`. No longer relaxes `is_app_admin()`. |
 | 6 | `supabase/admin_mfa.sql` | Reinstates the `aal2` requirement and adds `current_admin_session()` for diagnostics. **Re-run the current version:** it adds the sign-in-code switch (`app_settings`, `admin_mfa_required()`, `set_admin_mfa_required()`, `admin_security_state()`) and the `app_settings_audit` trail the admin panel's 🔐 Security tab reads. The code stays ON until an administrator switches it off. |
 | 7 | `supabase/billing_plans.sql` | **New.** Server-side plan catalog (`public.billing_plans`) seeded with the seven existing plans; `save_billing_plan()` is admin+MFA only and refuses to retire the last purchasable plan. |
@@ -265,6 +265,10 @@ Run each file in the SQL Editor of the SAME project used by
 | 10 | `supabase/support_requests.sql` | **New.** `public.support_requests` for refund and support requests. `create_support_request()` re-checks refund eligibility on the server and stores the account snapshot. Users read only their own requests; `admin_update_support_request()` is admin + MFA only. |
 | 11 | `supabase/vacancy_team.sql` | **New.** Vacancy team logins (`vacancy_editor` role) that can only post, list and delete vacancies, through `employee_post_vacancy()`, `employee_list_vacancies()` and `employee_delete_vacancy()`. Adds `vacancy_audit`, which records every vacancy added or deleted, by admin or team, with the delete reason. Only an administrator with MFA can read it. Earlier vacancies are backfilled once. |
 | 12 | `supabase/push_subscriptions.sql` | **New.** One row per notification device (`push_subscriptions`) with `enabled`, identity stamped from the verified JWT; `save_push_subscription()` / `delete_push_subscription()` let a user manage only their own devices, `push_subscription_stats()` is admin-only, and `push_delivery_log` records what each send reached. |
+| 13 | `supabase/private_refund_notifications.sql` | **New.** Reapplies the private notification RPC for projects that already ran migrations 1–12: legacy refunds sent with an all-user target are hidden, and targeted notices return only the signed-in viewer as recipient. |
+| 14 | `supabase/vacancy_duplicate_check.sql` | **New.** Adds optional qualification, age-limit and opening-count projections, persists those fields for vacancy employees, and exposes a role-checked duplicate-review RPC to admins and vacancy employees only. The RPC returns only safe public vacancy summaries. |
+
+For a project that has already run migrations 1–12, run the privacy patch once (`npm run db:copy -- 13`) if it has not already been applied, then run the new vacancy patch (`npm run db:copy -- 14`). Paste each into that project's Supabase SQL Editor and press **Run**, in that order. No earlier migration needs to be repeated.
 
 **Vacancy team logins (new).** The administrator creates one login ID and password for the employee in **Admin → Vacancy team**. Only one employee login exists at a time, and the database enforces this. To change employee, delete the current login first, then create the new one. Team members sign in at `/?portal=vacancy` and see one page: post a vacancy, and delete one with a required reason. The admin sees how many vacancies were added and deleted, who did it, and every deletion reason. The team cannot see users, payments, the audit log or other team logins. The login ID is the employee's email address, because the sign-in system requires one. Passwords must be 12 to 72 characters. New team accounts are created already confirmed, so no confirmation email is sent. Team logins use a password only (no authenticator code), so choose strong passwords and remove a login as soon as someone leaves.
 
@@ -431,7 +435,7 @@ function must be deployed with the Supabase CLI.
 - **Supabase Auth/RLS:** configure email/password Auth and allowed callback URLs, then run `supabase/schema.sql` before deployment. The app uses Supabase Auth tokens; RLS permits mirror access only to authenticated admins with trusted `app_metadata.role = 'admin'` (or `app_metadata.is_admin = true`). The schema removes legacy mirror policies and adds a database unique index for normalized Indian phone numbers.
 - **Public frontend configuration:** the Supabase URL and publishable/anon key are public and may be set as Netlify build variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The app contains no service-role key. Existing localStorage accounts/passwords are not migrated; old account, demo subscription, simulated payment, and saved payment-method keys are cleared on startup.
 - **Admin setup and deletion:** create the owner account `akhildivakara@gmail.com` in **Authentication → Users** and run `supabase/schema.sql`; the script promotes that account via the trusted `raw_app_meta_data.role` claim and sets its display name (no password is stored in SQL or the repo — set it privately in Supabase Auth), then sign out/in. The script also drops and recreates the dashboard views so an older view shape cannot block a re-run with SQLSTATE `42P16`. Deploy `supabase/functions/admin-delete-user` with `supabase functions deploy admin-delete-user`. The Edge Function checks the caller's Auth JWT/role and reads `SUPABASE_SERVICE_ROLE_KEY` only server-side before deleting an Auth account; never put that secret in Netlify's `VITE_*` variables or the repository.
-- **Mirror behavior:** normal user sessions do not write admin-only mirror tables. Admin writes require the trusted `app_metadata` admin role claim and are rechecked by RLS. Subscription payment records and paid plan expiry are stored server-side in Supabase; the browser cannot write payment status or activate access. Broadcast notifications (new job posts and job updates) are read by users through the shaped `list_visible_notifications()` RPC from `supabase/user_notifications.sql`.
+- **Mirror behavior:** normal user sessions do not write admin-only mirror tables. Admin writes require the trusted `app_metadata` admin role claim and are rechecked by RLS. Subscription payment records and paid plan expiry are stored server-side in Supabase; the browser cannot write payment status or activate access. Broadcast notifications (new job posts and job updates) plus account-targeted refund notices are read through the shaped `list_visible_notifications()` RPC. Apply `supabase/private_refund_notifications.sql` after the original notification migration to hide legacy broadcast refund rows and preserve private audiences in the client cache.
 - **Netlify:** `netlify.toml` specifies `npm run build` and `dist`. Connect the GitHub repo in Netlify for automatic deploys from `main`; a successful local build alone does not confirm a live Netlify deployment.
 - **Payments:** follow the secure Razorpay/UPI setup below before accepting live payments. Never store Razorpay secrets in the frontend, Netlify `VITE_*` variables, or the repository.
 - **PWA install:** after deploy, open the site in Chrome on Android → menu ⋮ → **Install app**. The app icon (`icon-512.png`) will appear on the home screen.

@@ -1,5 +1,6 @@
 import { Badge, Card } from './ui'
 import { descriptionPoints, type Job } from '../data/jobs'
+import { normalizeIndianMobile } from '../data/vacancyRules'
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -112,7 +113,7 @@ export function JobCard({
                 Company: <span className="font-semibold text-slate-800">{job.company}</span>
                 {job.manager ? <> · Manager: <span className="font-semibold text-slate-800">{job.manager}</span></> : null}
                 {job.contact ? <> · Contact: <span className="font-semibold text-slate-800">{job.contact}</span></> : null}
-                {job.managerAltPhone ? <> · <span className="text-brand-700 font-extrabold">(+)</span> <span className="font-semibold text-slate-800">{job.managerAltPhone}</span></> : null}
+                {job.managerAltPhone ? <> · <span className="text-brand-700 font-extrabold">+91</span> <span className="font-semibold text-slate-800">{normalizeIndianMobile(job.managerAltPhone)}</span></> : null}
               </div>
             )}
           </div>

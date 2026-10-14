@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
-import { getProfile, newEducation, newExperience, saveProfile, type Education, type Experience, type Profile } from '../data/profile'
+import { getProfile, newEducation, newExperience, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
@@ -72,6 +72,7 @@ export const ProfileEditor = forwardRef<
 
   const split = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
   const join = (arr: string[] = []) => arr.join(', ')
+  const completionIssues = profileCompletionIssues(p)
 
   return (
     <div className="space-y-4 pb-4">
@@ -84,6 +85,25 @@ export const ProfileEditor = forwardRef<
           </div>
           <Badge color="brand">Job Seeker</Badge>
         </div>
+      </Card>
+
+      <Card className={`p-4 space-y-2 ${completionIssues.length === 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold text-slate-900">Application profile</div>
+          <Badge color={completionIssues.length === 0 ? 'green' : 'amber'}>
+            {completionIssues.length === 0 ? 'Ready to apply' : `${completionIssues.length} required item${completionIssues.length === 1 ? '' : 's'} left`}
+          </Badge>
+        </div>
+        {completionIssues.length > 0 ? (
+          <>
+            <p className="text-xs text-slate-700">Complete these details before applying:</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs font-medium text-slate-700" aria-live="polite">
+              {completionIssues.map((issue) => <li key={issue}>{issue}</li>)}
+            </ul>
+          </>
+        ) : (
+          <p className="text-xs text-emerald-800">Your required details are complete. Work experience is optional for freshers; DOB, gender, CTC, notice period, and resume are optional.</p>
+        )}
       </Card>
 
       <ResumeCard onResumeChange={onResumeChange} />

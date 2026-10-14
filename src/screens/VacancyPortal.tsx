@@ -114,6 +114,11 @@ export function VacancyPortal({ onExit }: { onExit: () => void }) {
                       <Badge color="brand">{vacancy.category}</Badge>
                     </div>
                     <div className="text-xs text-slate-600 truncate">{vacancy.company} · {vacancy.location}</div>
+                    {(vacancy.qualification || vacancy.ageLimit || vacancy.vacancyCount) && (
+                      <div className="text-xs text-slate-600 mt-1">
+                        {[vacancy.qualification, vacancy.ageLimit, vacancy.vacancyCount].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
                     <div className="text-[11px] text-slate-400">
                       Posted {vacancy.postedAt ? new Date(vacancy.postedAt).toLocaleString('en-IN') : '—'}
                       {vacancy.postedBy ? ` · by ${vacancy.postedBy}` : ''}

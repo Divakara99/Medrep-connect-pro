@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Badge, Button, Card, EmptyState, Modal } from './ui'
-import { PushCard } from './PushCard'
 import { getNotificationsForUser, markAllRead, markOneRead, refreshNotificationsFromServer, unreadCount, type Notification } from '../data/notifications'
 
 function timeAgo(ts: number): string {
@@ -46,22 +45,22 @@ export function NotificationsPanel({
   const [count, setCount] = useState(0)
   const [readSince, setReadSince] = useState(0)
 
-  const refresh = () => {
-    // Pull the broadcast feed (job updates, new job posts) from the server.
-    void refreshNotificationsFromServer()
+  const refresh = async () => {
+    // The server RPC filters by the current account before personal notices are cached.
+    await refreshNotificationsFromServer(email)
     setList(getNotificationsForUser(email))
     setCount(unreadCount(email))
     setReadSince(getReadSince(email))
   }
 
   useEffect(() => {
-    if (open) refresh()
+    if (open) void refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, email])
 
   useEffect(() => {
     if (!open) return
-    const id = setInterval(refresh, 2000)
+    const id = setInterval(() => { void refresh() }, 2000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, email])
@@ -69,14 +68,10 @@ export function NotificationsPanel({
   return (
     <Modal open={open} onClose={onClose} title={`Notifications${count > 0 ? ` (${count} new)` : ''}`}>
       <div className="space-y-3 -mx-1">
-        {/* Top of the list: the switch that decides whether this phone rings. */}
-        <div className="px-1">
-          <PushCard compact />
-        </div>
         <div className="flex items-center justify-between px-1">
           <div className="text-xs text-slate-500">AI-generated updates from Mr. Divakar Reddy & the MedRep team</div>
           {count > 0 && (
-            <Button variant="secondary" onClick={() => { markAllRead(email); refresh() }}>
+            <Button variant="secondary" onClick={() => { markAllRead(email); void refresh() }}>
               Mark all read
             </Button>
           )}
@@ -108,7 +103,7 @@ export function NotificationsPanel({
                     {isNew && (
                       <button
                         className="text-xs font-semibold text-brand-600 mt-2 hover:underline"
-                        onClick={() => { markOneRead(email, n.id); refresh() }}
+                        onClick={() => { markOneRead(email, n.id); void refresh() }}
                       >
                         Mark as read
                       </button>

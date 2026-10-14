@@ -71,7 +71,7 @@ export function HomeScreen({
     (location.trim() ? 1 : 0)
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-28 pt-4 space-y-4">
+    <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-4">
       {/* Hero — compact blue card (kept at half height; name highlighted) */}
       <Card className="p-3 bg-gradient-to-br from-brand-600 to-brand-800 text-white border-0 relative overflow-hidden">
         <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-white/5 blur-2xl" />

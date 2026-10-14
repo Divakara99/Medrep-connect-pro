@@ -19,6 +19,9 @@ export type TeamVacancy = {
   company: string
   location: string
   category: string
+  qualification?: string
+  ageLimit?: string
+  vacancyCount?: string
   postedAt: number
   postedBy: string
 }
@@ -168,6 +171,9 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
     category: fields.category,
     salary: fields.salary ?? '',
     experience: fields.experience ?? '',
+    qualification: fields.qualification ?? '',
+    ageLimit: fields.ageLimit ?? '',
+    vacancyCount: fields.vacancyCount ?? '',
     description: fields.description ?? '',
   }
   const { data, error } = await supabase.rpc('employee_post_vacancy', { p_fields: payload })
@@ -182,13 +188,16 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
 export async function teamListVacancies(): Promise<TeamVacancy[]> {
   const { data, error } = await supabase.rpc('employee_list_vacancies')
   if (error) throw new Error(error.message || 'Vacancies could not be loaded.')
-  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; postedAt: number; postedBy: string }[])
+  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string }[])
     .map((row) => ({
       id: row.id,
       title: row.title,
       company: row.company,
       location: row.location,
       category: row.category,
+      qualification: row.qualification,
+      ageLimit: row.ageLimit,
+      vacancyCount: row.vacancyCount,
       postedAt: Number(row.postedAt) || 0,
       postedBy: row.postedBy ?? '',
     }))

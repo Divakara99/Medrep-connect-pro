@@ -30,6 +30,15 @@ export function digitsOnly(raw: string): string {
   return (raw || '').replace(/\D/g, '')
 }
 
+/** Store Indian mobile numbers as local 10-digit values when a country/STD prefix was supplied. */
+export function normalizeIndianMobile(raw: string): string {
+  const digits = digitsOnly(raw)
+  if (digits.length === 14 && digits.startsWith('0091')) return digits.slice(4)
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2)
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1)
+  return digits
+}
+
 /** True when the typed text contains something no phone number contains. */
 export function hasNonPhoneCharacters(raw: string): boolean {
   // Formatting characters (space + - ( ) . /) are allowed and simply dropped;
@@ -45,6 +54,27 @@ export function mobileNumberProblem(raw: string, options: { optional?: boolean }
   if (digits.length === MOBILE_DIGITS + 1 && digits.startsWith('0')) return null
   if (digits.length === MOBILE_MAX_DIGITS && digits.startsWith('91')) return null
   return `Enter a ${MOBILE_DIGITS}-digit mobile number — digits only.`
+}
+
+// The team-posting RPC caps this public HQ field at 120 characters. Keep the
+// admin and team forms on the same contract while representing multiple HQs
+// as newline-separated values in the existing `hq` text field.
+export const MAX_HQ_TEXT_LENGTH = 120
+
+export function parseHeadquarters(raw?: string): string[] {
+  return typeof raw === 'string'
+    ? raw.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean)
+    : []
+}
+
+export function serializeHeadquarters(entries: readonly string[]): string {
+  return entries.map((entry) => entry.trim()).filter(Boolean).join('\n')
+}
+
+export function headquartersProblem(entries: readonly string[]): string | null {
+  return serializeHeadquarters(entries).length > MAX_HQ_TEXT_LENGTH
+    ? `Keep the combined HQ entries within ${MAX_HQ_TEXT_LENGTH} characters.`
+    : null
 }
 
 export type ActorRole = 'admin' | 'vacancy_editor' | 'system' | 'earlier'

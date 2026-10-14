@@ -240,7 +240,7 @@ export function PlansScreen({
   const paymentRows = payments.length > 0 ? payments : getPaymentsByUser(user.id)
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-28 pt-4 space-y-5">
+    <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
       <Card className="p-3 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
         <div className="text-[10px] font-bold uppercase tracking-widest text-brand-800">Subscription</div>
         <h1 className="text-base font-extrabold text-slate-900 leading-tight">Unlock company details and apply</h1>
@@ -445,6 +445,9 @@ export function PlansScreen({
 
             {!verificationPending && (
               <>
+                <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-950 ring-1 ring-blue-200">
+                  For clarity: your bank statement may list <span className="font-bold">Bharathi Enterprises</span> as the Razorpay merchant for this <span className="font-bold">MedRep Connect Pro</span> subscription.
+                </p>
                 <Button className="w-full" onClick={() => { void startRazorpayCheckout() }} disabled={processing}>
                   {processing ? 'Opening secure checkout…' : `Pay ₹${selected.price} with Razorpay`}
                 </Button>

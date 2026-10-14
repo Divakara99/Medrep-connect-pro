@@ -18,8 +18,8 @@ import { buildPushPayload, isGoneStatus, sendWebPush, type PushSubscriptionRecor
  *   test    — any signed-in user. Sends one test notification to that user's own
  *             devices, so they can confirm the phone really rings.
  *   notify  — administrator (verified code session, or the code switch is OFF) or
- *             vacancy team member: delivers an existing broadcast notification
- *             (announcement, job post, job edit) to every subscribed device.
+ *             vacancy team member: delivers an existing notification to its
+ *             stored audience (a broadcast or a single account's devices).
  *   job     — administrator or vacancy team: delivers the notification created for
  *             one vacancy (used right after posting/editing, including posts made
  *             by the vacancy team, whose rows are written by the database).
@@ -66,17 +66,33 @@ function vapidKeys(): VapidKeys | null {
 function toNotificationRow(id: string, data: unknown): NotificationRow | null {
   if (!data || typeof data !== 'object') return null
   const row = data as Record<string, unknown>
-  const target = row.target === 'all' || row.target === undefined
-    ? 'all' as const
-    : Array.isArray(row.target)
-      ? row.target.filter((value): value is string => typeof value === 'string')
-      : 'all' as const
+  const title = typeof row.title === 'string' ? row.title : 'MedRep Connect Pro'
+  const type = typeof row.type === 'string' ? row.type : 'update'
   const meta = (row.meta && typeof row.meta === 'object' ? row.meta : {}) as Record<string, unknown>
+  const isRefund = /^refund\b/i.test(title.trim())
+    || (type === 'payment' && typeof meta.paymentId === 'string')
+
+  let target: 'all' | string[]
+  if (row.target === 'all' || row.target === undefined) {
+    // Older refund rows were accidentally saved as broadcasts. Never push those.
+    if (isRefund) return null
+    target = 'all'
+  } else if (Array.isArray(row.target)) {
+    target = [...new Set(row.target
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean))]
+    if (isRefund && target.length !== 1) return null
+  } else {
+    // An unknown audience must not widen a private notice to every device.
+    return null
+  }
+
   return {
     id,
-    title: typeof row.title === 'string' ? row.title : 'MedRep Connect Pro',
+    title,
     body: typeof row.body === 'string' ? row.body : '',
-    type: typeof row.type === 'string' ? row.type : 'update',
+    type,
     target,
     jobId: typeof meta.jobId === 'string' ? meta.jobId : undefined,
   }

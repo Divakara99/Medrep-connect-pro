@@ -20,7 +20,7 @@ export function PriorityScreen({ user, jobs, onOpenJob }: { user: User; jobs: Jo
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-28 pt-4 space-y-4">
+    <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-4">
       <Card className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200">
         <div className="flex items-start gap-3">
           <div className="text-2xl sm:text-3xl">⭐</div>
