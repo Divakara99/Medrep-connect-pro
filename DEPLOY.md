@@ -130,6 +130,7 @@ In the Razorpay dashboard, add the webhook URL `https://<your-project-ref>.supab
 
 ### Step 8 — Check it works
 
+- [ ] Create a throwaway account with a **6-character** password (e.g. `abc123`) and confirm it signs in, then use **Forgot password** to set another 6-character password. Both must succeed — if Supabase answers “Password should be at least …”, lower **Authentication → Settings → Password strength → Minimum password length** to 6. Administrator and vacancy-team passwords must still be at least 12 characters.
 - [ ] Sign in, open **Plans**, pick a plan, and check the amount shown matches the catalogue price.
 - [ ] Open **Account**: your profile, your resume card and **My applications** load.
 - [ ] Upload a small PDF on **Account → Profile details**, then download it again.
@@ -352,10 +353,16 @@ sign in again. The app purges its own legacy keys on start-up
 `mrc_verified_payment_cache_v1`), so previously delivered browser data is
 removed rather than trusted.
 
-Client-side 12-character password checks are a convenience, not a substitute
-for your Supabase Auth policy. Account recovery must be performed by a trusted
-Supabase project owner using the Auth Dashboard/admin tools. A hidden entry
-route is not authentication.
+Client-side password-length checks are a convenience, not a substitute for your
+Supabase Auth policy. Job-seeker sign-up and password reset accept **6**
+characters or more (6–10 character passwords work, and longer passwords are
+still allowed), while administrator and vacancy-team passwords keep the
+stricter **12**-character minimum. The Auth service checks the password first:
+in **Supabase → Authentication → Settings (Providers → Email) → Password
+strength**, keep **Minimum password length = 6** (or lower). A higher value
+makes Supabase reject a 6-character password even though the app accepts it.
+Account recovery must be performed by a trusted Supabase project owner using
+the Auth Dashboard/admin tools. A hidden entry route is not authentication.
 
 ---
 

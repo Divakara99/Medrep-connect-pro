@@ -2,7 +2,9 @@
 // and show the phone notifications sent by the send-push Edge Function.
 // Navigation is network-first so a deployed checkout/security fix is not hidden
 // behind an older cached index.html after a page refresh.
-const CACHE = 'mrc-v7'
+// Bump the cache name whenever the shell changes, so installed clients drop the
+// previous bundle instead of keeping a stale login screen.
+const CACHE = 'mrc-v8'
 const CORE = [
   './',
   './index.html',
