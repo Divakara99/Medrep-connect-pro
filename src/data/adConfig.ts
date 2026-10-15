@@ -1,22 +1,21 @@
 /**
- * AdMob configuration.
+ * AdMob configuration — the owner's REAL MedRep Pro units.
  *
- * The AdMob APP ID is the owner's real MedRep Pro ID (`ADMOB_APP_ID` below,
- * also in android/app/src/main/AndroidManifest.xml — keep both in sync).
- * The two AD UNIT IDs are still Google's public sample IDs
- * (https://developers.google.com/admob/android/test-ads#sample_ad_units):
- * they only ever serve test ads, on any device, and can never earn revenue
- * or trigger an invalid-traffic ban. When the owner creates the real banner
- * and rewarded units in the AdMob console, swap those two values here and
- * the ADMOB_REWARDED_AD_UNIT_ID Supabase secret at the same time (the Edge
- * Function refuses callbacks for any other unit) — see ANDROID.md.
+ * `ADMOB_APP_ID` also lives in android/app/src/main/AndroidManifest.xml
+ * (keep both in sync). The banner and rewarded unit IDs below must match
+ * the units in the AdMob console, and the Supabase secret
+ * ADMOB_REWARDED_AD_UNIT_ID must equal ADMOB_REWARDED_AD_UNIT_ID here —
+ * the admob-reward-verification Edge Function refuses SSV callbacks for
+ * any other unit. `usingTestAdUnits()` still recognises Google's sample
+ * IDs (publisher 3940256099942544) so tests/dev builds can drop those
+ * back in safely; never ship a release with them.
  *
  * Pure data + pure helpers only: this module is unit-tested on the web
  * (scripts/test-android-ads.mjs) and imported by the native ads wrapper.
  */
 export const ADMOB_APP_ID = 'ca-app-pub-3694622521401615~5426441207'
-export const ADMOB_BANNER_AD_UNIT_ID = 'ca-app-pub-3940256099942544/6300978111'
-export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917'
+export const ADMOB_BANNER_AD_UNIT_ID = 'ca-app-pub-3694622521401615/2527533866'
+export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3694622521401615/4112078274'
 
 /** True while any configured unit is still one of Google's test IDs. */
 export function usingTestAdUnits(

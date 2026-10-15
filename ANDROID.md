@@ -11,7 +11,7 @@ and web-push UI.
 | App name | **MedRep Pro** |
 | Package ID | `in.medrepconnect.app` |
 | Framework | Capacitor 8 (compiles to / targets **API 36**), bundled web build (`webDir: dist`, no remote server URL) |
-| Ads | `@capacitor-community/admob` 8.x, Android only. **App ID: real** (`ca-app-pub-3694622521401615~5426441207`); banner/rewarded **ad units still Google test units** until §3 |
+| Ads | `@capacitor-community/admob` 8.x, Android only. **All IDs real**: App ID `ca-app-pub-3694622521401615~5426441207`, Banner `…/2527533866`, Rewarded `…/4112078274` (Interstitial `…/1045177214` exists in the console but is intentionally unused) |
 | SDK levels (build file) | `android/variables.gradle`: **minSdk 24**, **compileSdk 36**, targetSdk 36 (requirements: min ≥ 24, compile ≥ 35 ✅) |
 | Billing | `@capgo/native-purchases` 8.x → **Play Billing Library 9.1**, one-time products |
 | Min SDK | 24 |
@@ -86,7 +86,7 @@ supabase functions deploy admin-manage-employees      # redeploy: team-password 
 
 | Secret | Value |
 |---|---|
-| `ADMOB_REWARDED_AD_UNIT_ID` | Test ID for now: `ca-app-pub-3940256099942544/5224354917`. Must exactly match the rewarded unit in `src/data/adConfig.ts` — swap both together (§3). |
+| `ADMOB_REWARDED_AD_UNIT_ID` | Real rewarded unit: `ca-app-pub-3694622521401615/4112078274`. Must exactly match `ADMOB_REWARDED_AD_UNIT_ID` in `src/data/adConfig.ts` — the SSV function rejects callbacks for any other unit. |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | The **entire JSON** of the Google Cloud service-account key (§4). Paste as-is. |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Already present for the existing functions. |
 
@@ -99,8 +99,8 @@ verification**, set the callback URL to:
 https://<your-project-ref>.supabase.co/functions/v1/admob-reward-verification
 ```
 
-(With test ads no real callback fires; set it anyway — it is checked at
-review/launch. The function verifies Google's ECDSA signature against
+(Real units are live, so this callback is what turns a watched video into
+an unlock — it must be set before testers use the unlock. The function verifies Google's ECDSA signature against
 `https://www.gstatic.com/admob/reward/verifier-keys.json`, checks the ad
 unit, `user_id` = Supabase user id, `custom_data` = job id, de-duplicates
 `transaction_id`, and only then inserts the unlock. The app polls
@@ -123,14 +123,16 @@ password-reset emails land there.
    `ADMOB_APP_ID` in `src/data/adConfig.ts`. `public/app-ads.txt` already
    serves the matching real publisher ID (`pub-3694622521401615`) — check
    `https://medrepjob.netlify.app/app-ads.txt` after the next site deploy.
-2. **Still to do (owner):** in that AdMob app, create two ad units —
-   **Banner** (adaptive) and **Rewarded**. Audience is India; set age
-   targeting to adults (the app is 18+).
-3. Send the two new **ad unit IDs** (`ca-app-pub-…/…`) and they get swapped
-   in **three** places in one commit (currently Google test units):
-   - `src/data/adConfig.ts` → `ADMOB_BANNER_AD_UNIT_ID`,
-     `ADMOB_REWARDED_AD_UNIT_ID`
-   - Supabase secret `ADMOB_REWARDED_AD_UNIT_ID` (§2c) + the SSV callback (§2d).
+2. ✅ **Done:** units created in the console and wired into
+   `src/data/adConfig.ts` — **Banner home screen**
+   `ca-app-pub-3694622521401615/2527533866`, **Rewarded_unlockfeature**
+   `ca-app-pub-3694622521401615/4112078274`. (An **Interstitial**
+   `…/1045177214` also exists; the app design doesn't use interstitials, so
+   it stays unused.) Audience is India; keep age targeting at adults (18+).
+3. **Still to do (owner):** set the Supabase secret
+   `ADMOB_REWARDED_AD_UNIT_ID` = `ca-app-pub-3694622521401615/4112078274`
+   (§2c) and the SSV callback URL on the rewarded unit (§2d) — rewarded
+   unlocks only fire once both are in place.
 5. UMP consent: the app requests UMP consent (`requestConsentInfo` →
    `showConsentForm` when required) before initialising ads. In the AdMob
    console, create a **GDPR message** (and keep "Do not consent" available) —
@@ -291,7 +293,8 @@ every Play upload — bump `versionCode` by 1 each release.
 - [ ] §2 SQL run (both files) and functions deployed; `verify_jwt` OFF only for `admob-reward-verification`
 - [ ] Secrets `ADMOB_REWARDED_AD_UNIT_ID` (real value at launch) and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` set
 - [x] Real AdMob **App ID** in Manifest + `adConfig.ts`; real `pub-` ID in `public/app-ads.txt`
-- [ ] Real Banner + Rewarded **ad unit IDs** in `adConfig.ts` + Supabase secret (still Google test units — owner creates them in the AdMob console, §3)
+- [x] Real Banner + Rewarded **ad unit IDs** in `adConfig.ts` (Banner `…/2527533866`, Rewarded `…/4112078274`)
+- [ ] Supabase secret `ADMOB_REWARDED_AD_UNIT_ID` set to the real rewarded unit + SSV callback URL set on that unit (§2c/§2d)
 - [ ] 7 Play products Active and priced; licence tester added
 - [ ] `subscribed_until` visually checked after a test purchase; refund path tested
 - [ ] Privacy policy URL opens over HTTPS

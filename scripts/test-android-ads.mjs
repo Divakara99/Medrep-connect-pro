@@ -11,7 +11,8 @@ import { defaultPlayProductId, playPurchasablePlans } from '../src/data/playProd
 
 /**
  * Android ads + Play product mapping (src/data/adConfig.ts, playProducts.ts):
- *   - Google TEST ad units until the owner supplies real ones;
+ *   - the owner's REAL AdMob app/banner/rewarded IDs (unit tests pin them so
+ *     a stray edit can't silently swap production units);
  *   - banner on content screens only — never login/sign-up/password/payment
  *     (the Plans tab is the payment screen);
  *   - rewarded unlock offered only in the Android app, only to free users,
@@ -19,9 +20,10 @@ import { defaultPlayProductId, playPurchasablePlans } from '../src/data/playProd
  *   - every catalog plan maps to its one-time Play "N-day pass".
  */
 assert.equal(ADMOB_APP_ID, 'ca-app-pub-3694622521401615~5426441207', 'real MedRep Pro AdMob app ID (matches AndroidManifest.xml)')
-assert.match(ADMOB_BANNER_AD_UNIT_ID, /^ca-app-pub-3940256099942544\//, 'banner still a Google test unit')
-assert.match(ADMOB_REWARDED_AD_UNIT_ID, /^ca-app-pub-3940256099942544\//, 'rewarded still a Google test unit')
-assert.equal(usingTestAdUnits(), true, 'test units detected')
+assert.equal(ADMOB_BANNER_AD_UNIT_ID, 'ca-app-pub-3694622521401615/2527533866', 'real Banner home screen unit')
+assert.equal(ADMOB_REWARDED_AD_UNIT_ID, 'ca-app-pub-3694622521401615/4112078274', 'real Rewarded_unlockfeature unit')
+assert.equal(usingTestAdUnits(), false, 'real units configured — production ads')
+assert.equal(usingTestAdUnits('ca-app-pub-3940256099942544/6300978111', 'ca-app-pub-3940256099942544/5224354917'), true, 'Google sample units still detected')
 assert.equal(usingTestAdUnits('ca-app-pub-1234567890123456/1', 'ca-app-pub-1234567890123456/2'), false, 'real units detected')
 
 for (const tab of ['home', 'priority', 'ai', 'account']) {
@@ -45,4 +47,4 @@ const plans = [
 ]
 assert.deepEqual(playPurchasablePlans(plans).map((p) => p.id), ['p5'], 'only mapped plans are Play-purchasable')
 
-console.log('android ads: test units, content-only banner, free-only rewarded unlock, Play pass mapping — passed')
+console.log('android ads: real units, content-only banner, free-only rewarded unlock, Play pass mapping — passed')

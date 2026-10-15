@@ -24,11 +24,10 @@
 
         </activity>
 
-        <!-- AdMob application ID for MedRep Pro (owner-supplied). The banner
-             and rewarded AD UNIT IDs ("/" IDs in src/data/adConfig.ts, plus
-             the Supabase ADMOB_REWARDED_AD_UNIT_ID secret) are still Google
-             test units until the owner creates them in the AdMob console —
-             see ANDROID.md. -->
+        <!-- AdMob application ID for MedRep Pro (owner-supplied, real). The
+             banner and rewarded AD UNIT IDs ("/" IDs) live in
+             src/data/adConfig.ts; the rewarded one is mirrored in the
+             Supabase ADMOB_REWARDED_AD_UNIT_ID secret — see ANDROID.md. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3694622521401615~5426441207" />
