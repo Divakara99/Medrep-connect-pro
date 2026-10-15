@@ -11,7 +11,8 @@ and web-push UI.
 | App name | **MedRep Pro** |
 | Package ID | `in.medrepconnect.app` |
 | Framework | Capacitor 8 (compiles to / targets **API 36**), bundled web build (`webDir: dist`, no remote server URL) |
-| Ads | `@capacitor-community/admob` 8.x, Android only, Google **test IDs** until §3 |
+| Ads | `@capacitor-community/admob` 8.x, Android only. **App ID: real** (`ca-app-pub-3694622521401615~5426441207`); banner/rewarded **ad units still Google test units** until §3 |
+| SDK levels (build file) | `android/variables.gradle`: **minSdk 24**, **compileSdk 36**, targetSdk 36 (requirements: min ≥ 24, compile ≥ 35 ✅) |
 | Billing | `@capgo/native-purchases` 8.x → **Play Billing Library 9.1**, one-time products |
 | Min SDK | 24 |
 
@@ -32,7 +33,8 @@ and web-push UI.
 - `public/privacy-policy.html` — covers AdMob/advertising ID + Play purchases.
   Live at `https://medrepjob.netlify.app/privacy-policy.html` after the next
   Netlify deploy.
-- `public/app-ads.txt` — replace the test publisher ID with the real one (§3).
+- `public/app-ads.txt` — already carries the real publisher ID
+  (`pub-3694622521401615`, from the App ID); live after the next Netlify deploy.
 
 ### Password rule (also fixed in this branch)
 
@@ -114,19 +116,21 @@ password-reset emails land there.
 
 ## 3. AdMob setup
 
-1. Create the app in AdMob (Android, package `in.medrepconnect.app`) → copy
-   the **AdMob App ID** (`ca-app-pub-XXXX~YYYY`).
-2. Create two ad units: **Banner** (adaptive) and **Rewarded**. Audience is
-   India; set age targeting to adults (the app is 18+).
-3. Replace the test IDs in **three** places (one commit):
-   - `android/app/src/main/AndroidManifest.xml` →
-     `com.google.android.gms.ads.APPLICATION_ID`
+1. ✅ **Done:** the app exists in AdMob and its real **App ID**
+   `ca-app-pub-3694622521401615~5426441207` is set in
+   `android/app/src/main/AndroidManifest.xml`
+   (`com.google.android.gms.ads.APPLICATION_ID`) and mirrored as
+   `ADMOB_APP_ID` in `src/data/adConfig.ts`. `public/app-ads.txt` already
+   serves the matching real publisher ID (`pub-3694622521401615`) — check
+   `https://medrepjob.netlify.app/app-ads.txt` after the next site deploy.
+2. **Still to do (owner):** in that AdMob app, create two ad units —
+   **Banner** (adaptive) and **Rewarded**. Audience is India; set age
+   targeting to adults (the app is 18+).
+3. Send the two new **ad unit IDs** (`ca-app-pub-…/…`) and they get swapped
+   in **three** places in one commit (currently Google test units):
    - `src/data/adConfig.ts` → `ADMOB_BANNER_AD_UNIT_ID`,
      `ADMOB_REWARDED_AD_UNIT_ID`
    - Supabase secret `ADMOB_REWARDED_AD_UNIT_ID` (§2c) + the SSV callback (§2d).
-4. Replace the publisher ID in `public/app-ads.txt` with your real
-   `pub-…` ID and redeploy the website so
-   `https://medrepjob.netlify.app/app-ads.txt` serves it.
 5. UMP consent: the app requests UMP consent (`requestConsentInfo` →
    `showConsentForm` when required) before initialising ads. In the AdMob
    console, create a **GDPR message** (and keep "Do not consent" available) —
@@ -286,7 +290,8 @@ every Play upload — bump `versionCode` by 1 each release.
 
 - [ ] §2 SQL run (both files) and functions deployed; `verify_jwt` OFF only for `admob-reward-verification`
 - [ ] Secrets `ADMOB_REWARDED_AD_UNIT_ID` (real value at launch) and `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` set
-- [ ] Real AdMob IDs in Manifest + `adConfig.ts`; real `pub-` ID in `public/app-ads.txt` (live URL checked)
+- [x] Real AdMob **App ID** in Manifest + `adConfig.ts`; real `pub-` ID in `public/app-ads.txt`
+- [ ] Real Banner + Rewarded **ad unit IDs** in `adConfig.ts` + Supabase secret (still Google test units — owner creates them in the AdMob console, §3)
 - [ ] 7 Play products Active and priced; licence tester added
 - [ ] `subscribed_until` visually checked after a test purchase; refund path tested
 - [ ] Privacy policy URL opens over HTTPS

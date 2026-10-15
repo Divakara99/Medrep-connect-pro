@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {
+  ADMOB_APP_ID,
   ADMOB_BANNER_AD_UNIT_ID,
   ADMOB_REWARDED_AD_UNIT_ID,
   bannerAllowedOnTab,
@@ -17,6 +18,7 @@ import { defaultPlayProductId, playPurchasablePlans } from '../src/data/playProd
  *     only until that job's company is unlocked; subscribers never see it;
  *   - every catalog plan maps to its one-time Play "N-day pass".
  */
+assert.equal(ADMOB_APP_ID, 'ca-app-pub-3694622521401615~5426441207', 'real MedRep Pro AdMob app ID (matches AndroidManifest.xml)')
 assert.match(ADMOB_BANNER_AD_UNIT_ID, /^ca-app-pub-3940256099942544\//, 'banner still a Google test unit')
 assert.match(ADMOB_REWARDED_AD_UNIT_ID, /^ca-app-pub-3940256099942544\//, 'rewarded still a Google test unit')
 assert.equal(usingTestAdUnits(), true, 'test units detected')
