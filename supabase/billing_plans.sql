@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS public.billing_plans (
   updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
+-- Google Play product mapping for the Android app (additive; the website's
+-- Razorpay flow never reads it). Existing installs add it via
+-- supabase/google_play_billing.sql, which also seeds the product ids.
+ALTER TABLE public.billing_plans ADD COLUMN IF NOT EXISTS play_product_id text;
+
 ALTER TABLE public.billing_plans ENABLE ROW LEVEL SECURITY;
 DO $$
 DECLARE policy_row record;

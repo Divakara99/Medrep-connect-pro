@@ -52,6 +52,20 @@ export function installBackGuard(): void {
 }
 
 /**
+ * One back step, for the Android hardware/gesture back button: Capacitor
+ * delivers `backButton` events instead of history pops, so the app shell
+ * forwards them here. Returns false when nothing handled the step (the app
+ * is on its first page — the caller must NOT exit; the gesture is swallowed
+ * there too, so back never closes the app unexpectedly).
+ */
+export function triggerNativeBack(): boolean {
+  const handler = handlers[handlers.length - 1]
+  if (!handler) return false
+  handler()
+  return true
+}
+
+/**
  * Registers the screen that owns the back gesture while it is open, and returns
  * the cleanup that releases it. Handlers run newest-first.
  */

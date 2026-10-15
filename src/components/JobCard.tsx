@@ -20,11 +20,25 @@ export function JobCard({
   job,
   unlocked,
   onClick,
+  onWatchUnlock,
+  unlockBusy = false,
 }: {
   job: Job
+  /** Subscription flag ONLY — never set this from a company unlock. */
   unlocked: boolean
   onClick?: () => void
+  /**
+   * Android app, free users: watch a rewarded video to unlock this job's
+   * company name. Omitted on the website, for subscribers, and once the
+   * company is unlocked — the button never renders there.
+   */
+  onWatchUnlock?: (job: Job) => void
+  unlockBusy?: boolean
 }) {
+  // Per-job company unlock, kept separate from `unlocked`: it reveals the
+  // company name only, never the four contact fields or Apply.
+  const companyUnlocked = unlocked || job.companyUnlocked === true
+  const showUnlockButton = !unlocked && job.companyUnlocked !== true && Boolean(onWatchUnlock)
   const categoryColor: Record<string, 'brand' | 'amber' | 'green' | 'purple' | 'red' | 'slate'> = {
     MR: 'brand',
     ABM: 'purple',
@@ -39,7 +53,7 @@ export function JobCard({
     Field: 'slate',
   }
 
-  const initials = unlocked ? job.company.slice(0, 2).toUpperCase() : '🔒'
+  const initials = companyUnlocked && job.company ? job.company.slice(0, 2).toUpperCase() : '🔒'
   const preview = descriptionPoints(job.description).slice(0, 2)
 
   return (
@@ -61,7 +75,7 @@ export function JobCard({
               <span className="font-semibold text-slate-800">{job.location}</span>
             </div>
 
-            {unlocked ? (
+            {companyUnlocked && job.company ? (
               <div className="text-sm text-slate-600 truncate mt-0.5">{job.company}</div>
             ) : (
               /* Locked placeholder: the real company name is never sent to a
@@ -97,13 +111,17 @@ export function JobCard({
                 {timeAgo(job.postedAt)}
                 {postedOn(job.postedAt) ? ` · ${postedOn(job.postedAt)}` : ''}
               </div>
-              {!unlocked ? (
-                <div className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-full ring-1 ring-amber-200">
-                  🔒 Subscribe to unlock
-                </div>
-              ) : (
+              {unlocked ? (
                 <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full ring-1 ring-emerald-200">
                   ✓ Unlocked
+                </div>
+              ) : companyUnlocked ? (
+                <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full ring-1 ring-emerald-200">
+                  ✓ Company unlocked · subscribe for contacts
+                </div>
+              ) : (
+                <div className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-full ring-1 ring-amber-200">
+                  🔒 Subscribe to unlock
                 </div>
               )}
             </div>
@@ -119,6 +137,16 @@ export function JobCard({
           </div>
         </div>
       </button>
+      {showUnlockButton && (
+        <button
+          type="button"
+          disabled={unlockBusy}
+          onClick={() => onWatchUnlock?.(job)}
+          className="mt-3 w-full rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700 active:scale-[0.99] disabled:opacity-60"
+        >
+          {unlockBusy ? '⏳ Checking your unlock…' : '▶ Watch video to unlock company name'}
+        </button>
+      )}
     </Card>
   )
 }

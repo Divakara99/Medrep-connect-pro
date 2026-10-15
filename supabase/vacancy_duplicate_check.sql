@@ -265,6 +265,11 @@ $$;
 
 -- Public job details remain safe: these new eligibility fields are public,
 -- while the five existing manager/company contact fields stay subscriber-only.
+-- Android rewarded unlocks: `company` + `companyUnlocked` also return for a
+-- job in the caller's public.company_unlocks rows (written only by the
+-- AdMob SSV Edge Function). This copy must stay in sync with
+-- supabase/company_unlocks.sql — run company_unlocks.sql AFTER this file so
+-- the table exists before the function is first executed.
 CREATE OR REPLACE FUNCTION public.list_visible_jobs()
 RETURNS SETOF jsonb
 LANGUAGE plpgsql
@@ -299,15 +304,27 @@ BEGIN
       'hq', v.data ->> 'hq',
       'division', v.data ->> 'division',
       'pinned', coalesce((v.data ->> 'pinned')::boolean, false),
-      'postedAt', coalesce((v.data ->> 'postedAt')::bigint, 0)
-    ) || CASE WHEN can_view_private THEN
-      jsonb_build_object(
-        'company', v.data ->> 'company',
-        'manager', v.data ->> 'manager',
-        'contact', v.data ->> 'contact',
-        'managerAltPhone', v.data ->> 'managerAltPhone',
-        'managerEmail', v.data ->> 'managerEmail'
-      ) ELSE '{}'::jsonb END
+      'postedAt', coalesce((v.data ->> 'postedAt')::bigint, 0),
+      'companyUnlocked', EXISTS (
+        SELECT 1 FROM public.company_unlocks AS cu
+        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id
+      )
+    ) || CASE
+      WHEN can_view_private THEN
+        jsonb_build_object(
+          'company', v.data ->> 'company',
+          'manager', v.data ->> 'manager',
+          'contact', v.data ->> 'contact',
+          'managerAltPhone', v.data ->> 'managerAltPhone',
+          'managerEmail', v.data ->> 'managerEmail'
+        )
+      WHEN EXISTS (
+        SELECT 1 FROM public.company_unlocks AS cu
+        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id
+      ) THEN
+        jsonb_build_object('company', v.data ->> 'company')
+      ELSE '{}'::jsonb
+    END
   FROM public.vacancies AS v
   WHERE coalesce(v.data ->> 'deleted', 'false') <> 'true'
   ORDER BY coalesce((v.data ->> 'pinned')::boolean, false) DESC,

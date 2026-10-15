@@ -1,0 +1,10 @@
+# app-ads.txt for MedRep Pro (Android, in.medrepconnect.app)
+# Served from the website root: https://medrepjob.netlify.app/app-ads.txt
+#
+# BEFORE submitting to Google Play, replace the publisher ID below with the
+# REAL AdMob publisher ID (AdMob console → Account → Publisher ID, it looks
+# like pub-XXXXXXXXXXXXXXXX) and keep the rest of the line unchanged. The ID
+# below is Google's public TEST publisher ID that matches the test ad units
+# currently in the app — with test ads this file is not yet load-bearing, but
+# Play/AdMob will check it once real units are live. See ANDROID.md.
+google.com, pub-3940256099942544, DIRECT, f08c47fec0942fa0

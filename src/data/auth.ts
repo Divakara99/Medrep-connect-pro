@@ -2,6 +2,7 @@ import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-j
 import { hasAdminRole, hasVacancyRole, supabase } from './supabase'
 import { adminMfaRequired, isMfaVerifiedSession } from './mfa'
 import { MIN_STAFF_PASSWORD_LENGTH, MIN_USER_PASSWORD_LENGTH, passwordLengthError } from './passwordRules'
+import { passwordResetRedirectTo } from './platform'
 import { read, remove, write } from './storage'
 
 export type User = {
@@ -237,8 +238,7 @@ export async function registerUser(input: {
   if (!name || !email || !input.password) {
     return { ok: false, error: 'Name, email and password are required.' }
   }
-  // Regular job-seeker accounts: 6 characters are enough (6–10 work, longer is
-  // fine). Administrator and vacancy-team passwords keep the 12-character rule.
+  // Every account: 6 characters are enough (6–10 work, longer is fine).
   const passwordError = passwordLengthError(input.password, MIN_USER_PASSWORD_LENGTH)
   if (passwordError) {
     return { ok: false, error: passwordError }
@@ -323,18 +323,28 @@ export async function loginVacancyTeam(
 }
 
 export async function resetPassword(email: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const redirectTo = `${window.location.origin}${window.location.pathname}${window.location.search}`
+  // Inside the Android app window.location.origin is https://localhost, which
+  // is not a usable email redirect. Reset emails from the app land on the
+  // website instead (its origin must be allow-listed in Supabase Auth).
+  const redirectTo = passwordResetRedirectTo()
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo })
   if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
 
+/** True for administrator and vacancy-team accounts (trusted role claims). */
+export function isStaffUser(user: Pick<SupabaseUser, 'app_metadata'> | null | undefined): boolean {
+  return hasAdminRole(user) || hasVacancyRole(user)
+}
+
 /**
  * Set the password of the signed-in recovery session.
  *
- * The minimum belongs to the caller: the job-seeker screens pass
- * MIN_USER_PASSWORD_LENGTH, while the admin (and vacancy-team) screens keep the
- * 12-character staff rule — which is also the safe default here.
+ * Every account now uses the same 6-character minimum (see passwordRules.ts),
+ * on every screen. Callers pass the minimum for the account's actual role —
+ * the job-seeker reset page resolves it from the recovery session itself, so
+ * an admin resetting there is held to the staff rule, not assumed to be a
+ * job seeker. The default stays the staff rule.
  */
 export async function updatePassword(
   password: string,

@@ -10,6 +10,7 @@ import {
   type TeamLogin,
 } from '../data/vacancyTeam'
 import { actorLabel, summarizeActivity, type AuditRow } from '../data/vacancyRules'
+import { staffPasswordError } from '../data/passwordRules'
 
 const dateTime = (value: number) => new Date(value).toLocaleString('en-IN', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -65,7 +66,8 @@ export function VacancyTeamAdmin() {
     setNotice(null)
     if (name.trim().length < 2) return setCreateError('Enter the employee name.')
     if (!email.trim()) return setCreateError('Enter the login ID (the employee email).')
-    if (password.length < 12) return setCreateError('The password must be at least 12 characters.')
+    const createPasswordError = staffPasswordError(password)
+    if (createPasswordError) return setCreateError(createPasswordError)
     setCreating(true)
     const result = await createTeamLogin({ name: name.trim(), email: email.trim(), password })
     setCreating(false)
@@ -83,7 +85,8 @@ export function VacancyTeamAdmin() {
   async function saveReset() {
     if (!resetTarget) return
     setResetError(null)
-    if (resetPassword.length < 12) return setResetError('The password must be at least 12 characters.')
+    const resetPasswordError = staffPasswordError(resetPassword)
+    if (resetPasswordError) return setResetError(resetPasswordError)
     setResetting(true)
     const result = await resetTeamPassword(resetTarget.userId, resetPassword)
     setResetting(false)

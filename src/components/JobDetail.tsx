@@ -83,13 +83,21 @@ export function JobDetail({
   onClose,
   onSubscribe,
   onApply,
+  onWatchUnlock,
+  unlockBusy = false,
 }: {
   job: Job | null
+  /** Subscription flag ONLY — a company unlock must never set this. */
   unlocked: boolean
   onClose: () => void
   onSubscribe: () => void
   onApply: (j: Job) => void
+  /** Android app, free users only: rewarded video for the company name. */
+  onWatchUnlock?: (job: Job) => void
+  unlockBusy?: boolean
 }) {
+  // Per-job company unlock (rewarded video), separate from subscription.
+  const companyUnlocked = Boolean(job && (unlocked || job.companyUnlocked))
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
   const hqItems = job ? parseHeadquarters(job.hq) : []
@@ -100,7 +108,7 @@ export function JobDetail({
         <div className="space-y-4">
           <div className="flex items-start gap-3">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white grid place-items-center font-bold shrink-0">
-              {unlocked ? job.company.slice(0, 2).toUpperCase() : '🔒'}
+              {companyUnlocked && job.company ? job.company.slice(0, 2).toUpperCase() : '🔒'}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -108,7 +116,7 @@ export function JobDetail({
                 {job.pinned && <Badge color="amber">★ Pinned priority</Badge>}
               </div>
               <div className="text-sm text-slate-600 mt-1">
-                {unlocked ? job.company : 'Company confidential'} · {timeAgo(job.postedAt)}
+                {companyUnlocked && job.company ? job.company : 'Company confidential'} · {timeAgo(job.postedAt)}
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
                 📅 Posted on <span className="font-semibold text-slate-700">{postedOn(job.postedAt)}</span>
@@ -153,7 +161,22 @@ export function JobDetail({
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               Hiring company & contact
             </div>
-            {!unlocked ? (
+            {!unlocked && companyUnlocked ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <SensitiveValue label="Company name" value={job.company} />
+                  <LockedValue label="Manager name" placeholder="Hiring Manager" />
+                  <LockedValue label="Manager email" placeholder="manager@company.com" />
+                  <LockedValue label="Contact number" placeholder="+91 90000 00000" />
+                  <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  Company name unlocked by video ✓ — it stays unlocked for this job. Manager name, email and
+                  phone numbers still wait for an active subscription. City, HQ, division, salary, experience,
+                  posted date and the description above stay visible to everyone.
+                </p>
+              </>
+            ) : !unlocked ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <LockedValue label="Company name" placeholder="Hidden Pharma Pvt Ltd" />
@@ -180,9 +203,16 @@ export function JobDetail({
           </div>
 
           {!unlocked ? (
-            <Button className="w-full" variant="accent" onClick={onSubscribe}>
-              💎 Subscribe to unlock & apply
-            </Button>
+            <>
+              {!companyUnlocked && onWatchUnlock && (
+                <Button className="w-full" variant="secondary" disabled={unlockBusy} onClick={() => onWatchUnlock(job)}>
+                  {unlockBusy ? '⏳ Checking your unlock…' : '▶ Watch video to unlock company name'}
+                </Button>
+              )}
+              <Button className="w-full" variant="accent" onClick={onSubscribe}>
+                💎 Subscribe to unlock & apply
+              </Button>
+            </>
           ) : (
             <Button className="w-full" onClick={() => onApply(job)}>
               {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}

@@ -22,6 +22,8 @@ export type Plan = {
   popular?: boolean
   active: boolean
   updatedAt?: number
+  /** Google Play one-time product id ("N-day pass"); Android app only. */
+  playProductId?: string
 }
 
 /**
@@ -30,13 +32,13 @@ export type Plan = {
  * can never start a checkout: create-razorpay-order reads the server table.
  */
 export const FALLBACK_PLANS: Plan[] = [
-  { id: 'p5', title: '5 Days Trial', days: 5, price: 49, tagline: 'Quick access — test the network', active: true },
-  { id: 'p10', title: '10 Days Basic', days: 10, price: 99, tagline: 'Short hunt for a field role', active: true },
-  { id: 'p15', title: '15 Days Pro', days: 15, price: 149, tagline: 'Most chosen for MR switchers', popular: true, active: true },
-  { id: 'p30', title: '30 Days Standard', days: 30, price: 249, tagline: 'Full month of unlocked jobs', active: true },
-  { id: 'p90', title: '3 Months Premium', days: 90, price: 599, tagline: 'Serious job seekers', active: true },
-  { id: 'p180', title: '6 Months Elite', days: 180, price: 999, tagline: 'Long-haul career move', active: true },
-  { id: 'p365', title: '1 Year Ultimate', days: 365, price: 1799, tagline: 'Best value — year-long access', active: true },
+  { id: 'p5', title: '5 Days Trial', days: 5, price: 49, tagline: 'Quick access — test the network', active: true, playProductId: 'medrep_pass_5d' },
+  { id: 'p10', title: '10 Days Basic', days: 10, price: 99, tagline: 'Short hunt for a field role', active: true, playProductId: 'medrep_pass_10d' },
+  { id: 'p15', title: '15 Days Pro', days: 15, price: 149, tagline: 'Most chosen for MR switchers', popular: true, active: true, playProductId: 'medrep_pass_15d' },
+  { id: 'p30', title: '30 Days Standard', days: 30, price: 249, tagline: 'Full month of unlocked jobs', active: true, playProductId: 'medrep_pass_30d' },
+  { id: 'p90', title: '3 Months Premium', days: 90, price: 599, tagline: 'Serious job seekers', active: true, playProductId: 'medrep_pass_90d' },
+  { id: 'p180', title: '6 Months Elite', days: 180, price: 999, tagline: 'Long-haul career move', active: true, playProductId: 'medrep_pass_180d' },
+  { id: 'p365', title: '1 Year Ultimate', days: 365, price: 1799, tagline: 'Best value — year-long access', active: true, playProductId: 'medrep_pass_365d' },
 ]
 
 // The previous build kept editable display overrides (and once prices) in
@@ -52,6 +54,7 @@ type BillingPlanRow = {
   popular: boolean | null
   active: boolean | null
   updated_at: string | null
+  play_product_id?: string | null
 }
 
 function toPlan(row: BillingPlanRow): Plan {
@@ -64,6 +67,9 @@ function toPlan(row: BillingPlanRow): Plan {
     popular: row.popular === true,
     active: row.active !== false,
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : undefined,
+    playProductId: typeof row.play_product_id === 'string' && row.play_product_id.trim()
+      ? row.play_product_id.trim()
+      : undefined,
   }
 }
 
@@ -79,11 +85,23 @@ export function getAllPlansIncludingRetired(): Plan[] {
 }
 
 export async function refreshPlans(): Promise<Plan[]> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('billing_plans')
-    .select('id,title,days,amount_paise,tagline,popular,active,updated_at')
+    .select('id,title,days,amount_paise,tagline,popular,active,updated_at,play_product_id')
     .order('days', { ascending: true })
     .limit(100)
+  if (error) {
+    // Before supabase/google_play_billing.sql runs there is no play_product_id
+    // column. Fall back to the pre-Android select so the website catalog (and
+    // Razorpay pricing display) keeps working exactly as before.
+    const retry = await supabase
+      .from('billing_plans')
+      .select('id,title,days,amount_paise,tagline,popular,active,updated_at')
+      .order('days', { ascending: true })
+      .limit(100)
+    data = retry.data as typeof data
+    error = retry.error
+  }
   if (error) throw new Error(error.message || 'The subscription catalog could not be loaded.')
   const loaded = ((data ?? []) as unknown as BillingPlanRow[]).map(toPlan)
   if (loaded.length > 0) plans = loaded

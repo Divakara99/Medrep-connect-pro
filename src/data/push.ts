@@ -1,5 +1,6 @@
 import { supabase, syncToSupabase } from './supabase'
 import { base64UrlToBytes, isValidPushKey } from './pushRules'
+import { isNativeApp } from './platform'
 
 /**
  * Phone notifications (Web Push) for the installed PWA and for Chrome tabs.
@@ -44,7 +45,11 @@ let configCache: PushConfig | null = null
 let subscribeInFlight: Promise<PushOutcome> | null = null
 
 function pushSupported(): boolean {
+  // Web Push is website-only: the Android app has no service worker (native
+  // push via Firebase arrives in a later release), so every push entry point
+  // quietly no-ops there and its UI stays hidden.
   return typeof window !== 'undefined'
+    && !isNativeApp()
     && 'serviceWorker' in navigator
     && 'PushManager' in window
     && 'Notification' in window

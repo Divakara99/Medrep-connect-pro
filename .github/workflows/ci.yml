@@ -44,10 +44,14 @@ jobs:
           supabase/functions/review-manual-upi-payment/index.ts
           supabase/functions/admin-manage-employees/index.ts
           supabase/functions/send-push/index.ts
+          supabase/functions/admob-reward-verification/index.ts
+          supabase/functions/verify-google-play-purchase/index.ts
       - name: Test Edge Function helpers
         run: >-
-          deno test --no-lock --allow-env
+          deno test --no-lock --allow-env --allow-net=www.gstatic.com
           supabase/functions/_shared/razorpay_test.ts
           supabase/functions/_shared/admin_auth_test.ts
           supabase/functions/_shared/plans_test.ts
           supabase/functions/_shared/webpush_test.ts
+          supabase/functions/_shared/admob_test.ts
+          supabase/functions/_shared/googleplay_test.ts
