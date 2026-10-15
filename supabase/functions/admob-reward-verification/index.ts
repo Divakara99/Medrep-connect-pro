@@ -53,6 +53,11 @@ Deno.serve(async (request: Request) => {
   }
   if (!verified) return text('Invalid signature.', 403)
 
+  // AdMob console "Verify URL" probe: Google signs a synthetic callback with
+  // the dummy ad unit 1234567890. Only Google can produce that signature, so
+  // acknowledge the probe — but grant nothing for it.
+  if (params.adUnit === '1234567890') return text('Verification OK.', 200)
+
   // Google sends ad_unit either as the full "ca-app-pub-…/…" id or as the
   // bare numeric unit id; accept exactly our unit in either form.
   const expectedNumericUnit = expectedAdUnit.split('/').pop() ?? ''
