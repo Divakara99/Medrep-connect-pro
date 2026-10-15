@@ -1,4 +1,5 @@
 import {
+  derSignatureToRaw,
   parseSsvParams,
   parseVerifierKeys,
   signedContent,
@@ -47,6 +48,39 @@ function pemFromDer(der: ArrayBuffer): string {
 function base64Url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
+
+function rawToDer(raw: Uint8Array): Uint8Array {
+  const encodeInteger = (bytes: Uint8Array): number[] => {
+    let start = 0
+    while (start < bytes.length - 1 && bytes[start] === 0) start += 1
+    let value = bytes.slice(start)
+    if (value[0] & 0x80) {
+      const padded = new Uint8Array(value.length + 1)
+      padded.set(value, 1)
+      value = padded
+    }
+    return [0x02, value.length, ...value]
+  }
+  const body = [...encodeInteger(raw.slice(0, 32)), ...encodeInteger(raw.slice(32, 64))]
+  return new Uint8Array([0x30, body.length, ...body])
+}
+
+Deno.test('Google DER-encoded signatures convert to raw and verify', async () => {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+  const der = await crypto.subtle.exportKey('spki', pair.publicKey)
+  const pem = pemFromDer(der)
+  const content = 'ad_unit=unit&custom_data=job-1&transaction_id=tx&user_id=u1'
+  const raw = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, pair.privateKey, new TextEncoder().encode(content)),
+  )
+  const derSignature = rawToDer(raw)
+  const roundTripped = derSignatureToRaw(derSignature)
+  assert(roundTripped !== null && roundTripped.length === 64, 'DER converts to 64-byte raw')
+  assert(roundTripped.every((byte, i) => byte === raw[i]), 'DER round-trip preserves r and s')
+  assert(await verifySsvSignature(pem, content, base64Url(derSignature)), 'a DER signature from Google verifies')
+  assert(!(await verifySsvSignature(pem, `${content}x`, base64Url(derSignature))), 'DER signature fails for other content')
+  assert(derSignatureToRaw(new Uint8Array([1, 2, 3])) === null, 'garbage is not a DER signature')
+})
 
 Deno.test('ECDSA SSV signature verifies and tampering fails', async () => {
   const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])

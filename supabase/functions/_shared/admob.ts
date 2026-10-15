@@ -92,6 +92,57 @@ function pemToDer(pem: string): Uint8Array {
   return bytes
 }
 
+/**
+ * Google encodes ECDSA signatures in DER form (SEQUENCE of two INTEGERs);
+ * WebCrypto expects the raw P1363 form (r ‖ s, 32 bytes each). Convert DER
+ * to raw, passing already-raw 64-byte signatures through untouched. Returns
+ * null for malformed input.
+ */
+export function derSignatureToRaw(der: Uint8Array): Uint8Array | null {
+  try {
+    let offset = 0
+    if (der[offset] !== 0x30) return null
+    offset += 1
+    let length = der[offset]
+    offset += 1
+    if (length & 0x80) {
+      const lengthBytes = length & 0x7f
+      if (lengthBytes === 0 || lengthBytes > 2) return null
+      length = 0
+      for (let i = 0; i < lengthBytes; i += 1) length = (length << 8) | der[offset + i]
+      offset += lengthBytes
+    }
+    if (offset + length !== der.length) return null
+    const readInteger = (): Uint8Array | null => {
+      if (der[offset] !== 0x02) return null
+      offset += 1
+      const intLength = der[offset]
+      offset += 1
+      let bytes = der.slice(offset, offset + intLength)
+      offset += intLength
+      while (bytes.length > 0 && bytes[0] === 0) bytes = bytes.slice(1)
+      if (bytes.length > 32) return null
+      const padded = new Uint8Array(32)
+      padded.set(bytes, 32 - bytes.length)
+      return padded
+    }
+    const r = readInteger()
+    const s = readInteger()
+    if (!r || !s) return null
+    const raw = new Uint8Array(64)
+    raw.set(r, 0)
+    raw.set(s, 32)
+    return raw
+  } catch {
+    return null
+  }
+}
+
+function toRawSignature(signature: Uint8Array): Uint8Array {
+  if (signature.length === 64) return signature
+  return derSignatureToRaw(signature) ?? signature
+}
+
 /** Verify `signature` over `content` with the PEM public key in `pem`. */
 export async function verifySsvSignature(
   pem: string,
@@ -110,7 +161,7 @@ export async function verifySsvSignature(
     return await subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },
       key,
-      base64UrlToBytes(signatureBase64Url) as BufferSource,
+      toRawSignature(base64UrlToBytes(signatureBase64Url)) as BufferSource,
       new TextEncoder().encode(content) as BufferSource,
     )
   } catch {
