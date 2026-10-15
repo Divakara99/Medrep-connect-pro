@@ -53,12 +53,16 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Android SDK packages (API 36)
-        # GitHub's Ubuntu images ship the Android SDK; install the API 36
-        # platform/build-tools with its sdkmanager (no setup action needed).
+        # GitHub's Ubuntu images ship the Android SDK (platform 36 included on
+        # current images). Best-effort install of anything missing: Gradle can
+        # fetch missing components itself once licences are accepted, so a
+        # sdkmanager hiccup must not fail the build before Gradle even runs.
         run: |
-          SDKMANAGER="$(command -v sdkmanager || echo \"${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager\")"
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms" || true
+          SDKMANAGER="$(command -v sdkmanager || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager")"
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" || echo "::warning::sdkmanager install skipped/failed — Gradle will fetch what it needs"
       - name: Install dependencies
         run: npm ci
       - name: Lint
@@ -96,12 +100,16 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Android SDK packages (API 36)
-        # GitHub's Ubuntu images ship the Android SDK; install the API 36
-        # platform/build-tools with its sdkmanager (no setup action needed).
+        # GitHub's Ubuntu images ship the Android SDK (platform 36 included on
+        # current images). Best-effort install of anything missing: Gradle can
+        # fetch missing components itself once licences are accepted, so a
+        # sdkmanager hiccup must not fail the build before Gradle even runs.
         run: |
-          SDKMANAGER="$(command -v sdkmanager || echo \"${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager\")"
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms" || true
+          SDKMANAGER="$(command -v sdkmanager || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager")"
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" || echo "::warning::sdkmanager install skipped/failed — Gradle will fetch what it needs"
       - name: Install dependencies
         run: npm ci
       - name: Build web bundle
