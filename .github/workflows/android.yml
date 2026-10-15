@@ -134,10 +134,13 @@ jobs:
         run: |
           AAB=app/build/outputs/bundle/release/app-release.aab
           test -f "$AAB"
-          jarsigner -verify "$AAB" >/dev/null 2>&1 || {
-            echo "::error::Release AAB is not signed — check the ANDROID_* secrets."
+          # jarsigner alone can exit 0 for unsigned jars; require an actual
+          # signature block in META-INF and a clean jarsigner verification.
+          unzip -l "$AAB" | grep -Eq 'META-INF/[^ ]+\.(RSA|DSA|EC)' || {
+            echo "::error::Release AAB has no signature — check the ANDROID_* secrets."
             exit 1
           }
+          jarsigner -verify "$AAB"
           echo "Signed release AAB verified: $AAB"
       - name: Upload release AAB
         uses: actions/upload-artifact@v4
