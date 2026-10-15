@@ -24,3 +24,12 @@ verify_jwt = false
 
 [functions.send-push]
 verify_jwt = true
+
+# Google (not a signed-in user) calls this with an ECDSA-signed SSV payload;
+# the function verifies Google's signature itself, so the platform JWT check
+# must be off.
+[functions.admob-reward-verification]
+verify_jwt = false
+
+[functions.verify-google-play-purchase]
+verify_jwt = true

@@ -14,10 +14,14 @@ export function HomeScreen({
   user,
   jobs,
   onOpenJob,
+  onWatchUnlock,
+  unlockingJobId,
 }: {
   user: User
   jobs: Job[]
   onOpenJob: (j: Job) => void
+  onWatchUnlock?: (j: Job) => void
+  unlockingJobId?: string | null
 }) {
   const [query, setQuery] = useState('')
   const [location, setLocation] = useState('')
@@ -177,7 +181,7 @@ export function HomeScreen({
             </div>
           </Card>
         ) : (
-          list.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} />)
+          list.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockBusy={unlockingJobId === j.id} />)
         )}
       </div>
 

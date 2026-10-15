@@ -13,6 +13,8 @@ import {
   verifyRazorpayPayment,
   type RazorpayCheckoutResponse,
 } from '../data/razorpay'
+import { isAndroidApp } from '../data/platform'
+import { buyPlanWithGooglePlay, loadPlayPrices, restorePlayPurchases } from '../data/playBilling'
 
 export function PlansScreen({
   user,
@@ -23,6 +25,11 @@ export function PlansScreen({
 }) {
   // Every plan in the server catalog stays purchasable; prices come from the
   // server, never from the browser.
+  // Inside the Android app, payment is Google Play Billing ONLY: Razorpay,
+  // UPI and every mention of paying on the website are hidden. On the website
+  // this is always false and the Razorpay flow renders exactly as before.
+  const inApp = isAndroidApp()
+  const [playPrices, setPlayPrices] = useState<Map<string, string>>(new Map())
   const [plans, setPlans] = useState<Plan[]>(() => getPlans())
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -105,9 +112,21 @@ export function PlansScreen({
   useEffect(() => {
     void loadPaymentHistory()
     void refreshPlans()
-      .then((loaded) => {
-        setPlans(loaded.filter((plan) => plan.active))
+      .then(async (loaded) => {
+        const active = loaded.filter((plan) => plan.active)
+        setPlans(active)
         setCatalogError(null)
+        if (inApp) {
+          // Localised Play prices, and finish any purchase Play still holds
+          // (e.g. the app was closed while payment completed).
+          setPlayPrices(await loadPlayPrices(active))
+          const restored = await restorePlayPurchases(active)
+          if (restored.restored > 0) {
+            const refreshed = await refreshCurrentSubscription()
+            if (refreshed) onSubscribed(refreshed)
+            await loadPaymentHistory()
+          }
+        }
       })
       .catch((cause: unknown) => {
         setCatalogError(cause instanceof Error ? cause.message : 'The plan catalog could not be loaded.')
@@ -205,6 +224,33 @@ export function PlansScreen({
     }
   }
 
+  /** Google Play purchase (Android app only), verified server-side. */
+  async function startPlayCheckout() {
+    setProcessing(true)
+    setError(null)
+    setVerificationPending(false)
+    try {
+      const outcome = await buyPlanWithGooglePlay(selected, user.id)
+      if (!outcome.ok) {
+        if (outcome.pending) setVerificationPending(true)
+        setError(outcome.error)
+        return
+      }
+      if (outcome.expiresAt) {
+        await activateFromServer(outcome.expiresAt)
+      } else {
+        const refreshed = await refreshCurrentSubscription()
+        if (refreshed) onSubscribed(refreshed)
+        await loadPaymentHistory()
+        setSuccess(true)
+      }
+    } catch (playError) {
+      setError(playError instanceof Error ? playError.message : 'Google Play purchase failed.')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   // Capture/webhooks may take a few seconds. Retry verification with the same
   // Razorpay response; never create a second order or ask for another payment.
   useEffect(() => {
@@ -244,7 +290,7 @@ export function PlansScreen({
       <Card className="p-3 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
         <div className="text-[10px] font-bold uppercase tracking-widest text-brand-800">Subscription</div>
         <h1 className="text-base font-extrabold text-slate-900 leading-tight">Unlock company details and apply</h1>
-        <p className="text-xs text-slate-700 mt-0.5">Pay inside secure Razorpay Checkout. Access starts once the server verifies payment.</p>
+        <p className="text-xs text-slate-700 mt-0.5">{inApp ? 'Pay with Google Play. Access starts once the server verifies your purchase.' : 'Pay inside secure Razorpay Checkout. Access starts once the server verifies payment.'}</p>
         {unlocked && activeUntil && (
           <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-950 bg-emerald-100 px-2.5 py-1 rounded-full ring-1 ring-emerald-300">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
@@ -279,7 +325,7 @@ export function PlansScreen({
               {!isActive && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
               <div className="flex items-center justify-between gap-2">
                 <div className="font-bold text-slate-900">{plan.title}</div>
-                <div className="text-2xl font-extrabold text-brand-800">₹{plan.price}</div>
+                <div className="text-2xl font-extrabold text-brand-800">{inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}</div>
               </div>
               <div className="text-sm font-semibold text-slate-700 mt-0.5">
                 {plan.days >= 365
@@ -321,24 +367,47 @@ export function PlansScreen({
         </ul>
       </Card>
 
-      <Card className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-          <div className="text-sm font-bold text-slate-900">How payment works</div>
-          <Badge color="slate">Razorpay Checkout only</Badge>
-        </div>
-        <p className="text-xs text-slate-700">
-          Every plan is paid inside secure Razorpay Checkout, using whichever methods the merchant account has enabled —
-          credit/debit cards, netbanking, and UPI apps such as PhonePe, Google Pay or Paytm, plus a Razorpay QR where
-          offered. We never ask you to transfer money to a personal UPI ID or bank account, and merchant banking details
-          are never shown in the app.
-        </p>
-      </Card>
+      {inApp ? (
+        <Card className="p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+            <div className="text-sm font-bold text-slate-900">How payment works</div>
+            <Badge color="slate">Google Play Billing</Badge>
+          </div>
+          <p className="text-xs text-slate-700">
+            Every plan is a one-time Google Play pass for the number of days shown. Google Play handles the payment
+            with the method on your Play account, and your access starts once our server verifies the purchase with
+            Google. Renewing buys the pass again and adds its days to your current expiry.
+          </p>
+        </Card>
+      ) : (
+        <Card className="p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+            <div className="text-sm font-bold text-slate-900">How payment works</div>
+            <Badge color="slate">Razorpay Checkout only</Badge>
+          </div>
+          <p className="text-xs text-slate-700">
+            Every plan is paid inside secure Razorpay Checkout, using whichever methods the merchant account has enabled —
+            credit/debit cards, netbanking, and UPI apps such as PhonePe, Google Pay or Paytm, plus a Razorpay QR where
+            offered. We never ask you to transfer money to a personal UPI ID or bank account, and merchant banking details
+            are never shown in the app.
+          </p>
+        </Card>
+      )}
 
       <Card className="p-4">
         <div className="text-sm font-bold text-slate-900 mb-1.5">Instructions & standard terms</div>
         <div className="text-[11px] leading-relaxed text-slate-600 space-y-1">
-          <p>• Pay only inside Razorpay Checkout. No other payment channel is offered.</p>
-          <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
+          {inApp ? (
+            <>
+              <p>• Pay only through Google Play Billing inside this app. No other payment channel is offered.</p>
+              <p>• Access starts after Google Play confirms the purchase and our server verifies it.</p>
+            </>
+          ) : (
+            <>
+              <p>• Pay only inside Razorpay Checkout. No other payment channel is offered.</p>
+              <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
+            </>
+          )}
           <p>• One plan per payment. Renewals add days to your existing expiry.</p>
           <p>• Do not share your bank PIN, OTP or passwords with anyone, including support.</p>
           <p>
@@ -400,7 +469,7 @@ export function PlansScreen({
         )}
       </Card>
 
-      {paymentRows.some((payment) => payment.paymentMethod === 'UPI' && payment.status === 'pending' && !payment.manualReview) && (
+      {!inApp && paymentRows.some((payment) => payment.paymentMethod === 'UPI' && payment.status === 'pending' && !payment.manualReview) && (
         <Card className="p-4 space-y-2">
           <h2 className="font-bold text-slate-900">Earlier direct UPI transfer?</h2>
           <p className="text-sm text-slate-700">Only if you already paid for an existing manual UPI request, select its reference and enter the bank-generated UTR. Do not make a new direct transfer. An admin must verify the bank credit before access activates.</p>
@@ -440,10 +509,19 @@ export function PlansScreen({
                 <div className="text-sm font-bold text-slate-900">{selected.title}</div>
                 <div className="text-sm font-semibold text-slate-700">{selected.days} days of access</div>
               </div>
-              <div className="text-2xl font-extrabold text-indigo-900">₹{selected.price}</div>
+              <div className="text-2xl font-extrabold text-indigo-900">{inApp ? playPrices.get(selected.id) ?? `₹${selected.price}` : `₹${selected.price}`}</div>
             </div>
 
-            {!verificationPending && (
+            {inApp && !verificationPending && (
+              <>
+                <Button className="w-full" onClick={() => { void startPlayCheckout() }} disabled={processing}>
+                  {processing ? 'Opening Google Play…' : `Buy ${selected.days}-day pass with Google Play`}
+                </Button>
+                <p className="text-xs text-slate-700 text-center">Google Play charges the payment method on your Play account. This is a one-time pass — it does not renew by itself.</p>
+              </>
+            )}
+
+            {!inApp && !verificationPending && (
               <>
                 <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-950 ring-1 ring-blue-200">
                   For clarity: your bank statement may list <span className="font-bold">Bharathi Enterprises</span> as the Razorpay merchant for this <span className="font-bold">MedRep Connect Pro</span> subscription.
@@ -458,23 +536,34 @@ export function PlansScreen({
             {verificationPending && (
               <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
                 <p className="text-sm font-bold text-amber-950">Payment confirmation is pending</p>
-                <p className="text-sm text-amber-900 mt-1">Do not make another payment. We will check again automatically; the plan stays locked until Razorpay confirms capture.</p>
+                <p className="text-sm text-amber-900 mt-1">{inApp ? 'Do not buy again. Google Play will confirm the payment and your plan activates automatically — reopen Plans to check.' : 'Do not make another payment. We will check again automatically; the plan stays locked until Razorpay confirms capture.'}</p>
                 {pendingCheckout && (
                   <p className="mt-2 text-xs font-mono text-amber-900 break-all">Payment ID: {pendingCheckout.razorpay_payment_id}</p>
                 )}
-                <Button variant="secondary" className="w-full mt-3" onClick={() => { void checkPaymentStatus() }} disabled={processing}>
-                  {processing ? 'Checking…' : 'Check payment status'}
-                </Button>
+                {!inApp && (
+                  <Button variant="secondary" className="w-full mt-3" onClick={() => { void checkPaymentStatus() }} disabled={processing}>
+                    {processing ? 'Checking…' : 'Check payment status'}
+                  </Button>
+                )}
               </div>
             )}
 
             {error && <div role="alert" className="rounded-lg bg-red-50 text-red-900 text-sm font-medium px-3 py-2 ring-1 ring-red-300">{error}</div>}
-            <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
-              <p>1. Check the plan and amount, then open Razorpay Checkout.</p>
-              <p>2. In Razorpay choose a card, or UPI → PhonePe, Google Pay, another available app, or QR if offered. Approve payment only inside your bank/UPI app; never share your PIN or OTP here.</p>
-              <p>3. Return here and wait for server confirmation. If charged but not activated, do not pay again; use Check payment status or contact support with the payment ID.</p>
-              <p>Access begins after verified capture. Renewals add {selected.days} days to your existing expiry (or start now if expired).</p>
-            </div>
+            {inApp ? (
+              <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
+                <p>1. Check the plan and price, then tap Buy — Google Play shows its own secure payment sheet.</p>
+                <p>2. Approve the payment in Google Play. Never share your passwords or OTP with anyone, including support.</p>
+                <p>3. Return here and wait for confirmation. If charged but not activated, do not buy again; reopen the app and visit Plans, or contact support with your Google Play order ID (GPA…).</p>
+                <p>Access begins after Google confirms and our server verifies the purchase. Renewals add {selected.days} days to your existing expiry (or start now if expired).</p>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
+                <p>1. Check the plan and amount, then open Razorpay Checkout.</p>
+                <p>2. In Razorpay choose a card, or UPI → PhonePe, Google Pay, another available app, or QR if offered. Approve payment only inside your bank/UPI app; never share your PIN or OTP here.</p>
+                <p>3. Return here and wait for server confirmation. If charged but not activated, do not pay again; use Check payment status or contact support with the payment ID.</p>
+                <p>Access begins after verified capture. Renewals add {selected.days} days to your existing expiry (or start now if expired).</p>
+              </div>
+            )}
           </div>
         )}
       </Modal>

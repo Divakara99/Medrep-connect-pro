@@ -125,9 +125,9 @@ export function AdminLoginScreen({
                     type="password"
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
-                    placeholder="At least 12 characters"
+                    placeholder="At least 6 characters"
                     autoComplete="new-password"
-                    minLength={12}
+                    minLength={6}
                     required
                   />
                 </div>

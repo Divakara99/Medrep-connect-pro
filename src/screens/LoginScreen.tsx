@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Input, Label } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
-import { loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
-import { MIN_USER_PASSWORD_LENGTH } from '../data/passwordRules'
+import { isStaffUser, loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
+import { MIN_USER_PASSWORD_LENGTH, minimumForAccount } from '../data/passwordRules'
+import { supabase } from '../data/supabase'
 import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 
@@ -20,7 +21,23 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // An admin / vacancy-team member can land on THIS page from a reset email
+  // (the email link does not know which portal they use). The minimum is
+  // resolved from the recovery session's real role, never assumed from the
+  // page — both rules are 6 today, and this keeps it correct if staff ever
+  // diverge again.
+  const [recoveryIsStaff, setRecoveryIsStaff] = useState(false)
+  const recoveryMinimum = minimumForAccount(recoveryIsStaff)
   const brandTaps = useRef({ count: 0, lastAt: 0 })
+
+  useEffect(() => {
+    if (!recoveryMode) return
+    let active = true
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active) setRecoveryIsStaff(isStaffUser(data.session?.user))
+    })
+    return () => { active = false }
+  }, [recoveryMode])
 
   function openRestrictedPortal() {
     const now = Date.now()
@@ -70,7 +87,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
         if (!result.ok) setError(result.error)
         else setSuccess('If an account uses that email, password reset instructions have been sent.')
       } else {
-        const result = await updatePassword(newPassword, MIN_USER_PASSWORD_LENGTH)
+        const result = await updatePassword(newPassword, recoveryMinimum)
         if (!result.ok) setError(result.error)
         else {
           setSuccess('Password updated. Signing you in…')
@@ -174,7 +191,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
               {activeMode === 'update-password' && (
                 <div>
                   <Label htmlFor="new-password">New password</Label>
-                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={`At least ${MIN_USER_PASSWORD_LENGTH} characters`} minLength={MIN_USER_PASSWORD_LENGTH} required />
+                  <Input id="new-password" name="new_password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={`At least ${recoveryMinimum} characters`} minLength={recoveryMinimum} required />
                 </div>
               )}
 

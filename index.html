@@ -16,12 +16,7 @@
   <body>
     <div id="root"><div role="status" style="min-height:100vh;display:grid;place-items:center;background:#eef5ff;color:#1a328f;font:700 18px/1.5 system-ui,sans-serif;text-align:center;padding:24px">Loading your account…</div></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(() => {});
-        });
-      }
-    </script>
+    <!-- Service-worker registration lives in src/main.tsx: it runs on the
+         website only, never inside the Android app. -->
   </body>
 </html>

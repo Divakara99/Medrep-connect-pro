@@ -5,6 +5,7 @@ import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEd
 import { MyRequests } from '../components/MyRequests'
 import { ApplicationsScreen } from './ApplicationsScreen'
 import { isSubscribed, type User } from '../data/auth'
+import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
@@ -73,7 +74,7 @@ export function AccountScreen({
             </p>
           </>
         ) : (
-          <p className="text-xs text-slate-700 mt-1">No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.</p>
+          <p className="text-xs text-slate-700 mt-1">{isAndroidApp() ? 'No active plan. Choose a plan to see pricing and pay with Google Play.' : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
         )}
       </Card>
 

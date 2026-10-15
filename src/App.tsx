@@ -26,6 +26,11 @@ import { clearSupportCache } from './data/supportRequests'
 import { clearPaymentCache } from './data/payments'
 import { installBackGuard } from './data/backstack'
 import { useBackHandler } from './components/useBackHandler'
+import { AdBanner } from './components/AdBanner'
+import { bannerAllowedOnTab, rewardedUnlockOffered } from './data/adConfig'
+import { isAndroidApp } from './data/platform'
+import { showRewardedUnlock } from './data/ads'
+import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
 
@@ -67,6 +72,8 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifTick, setNotifTick] = useState(0)
   const [recoveryMode, setRecoveryMode] = useState(false)
+  // Job whose company name a rewarded video is unlocking (Android app only).
+  const [unlockingJobId, setUnlockingJobId] = useState<string | null>(null)
   void notifTick
 
   const applyAuthSnapshot = useCallback((snapshot: AuthSnapshot, resetTab = false) => {
@@ -311,6 +318,40 @@ export default function App() {
     setSelectedJob(j)
   }
 
+  /**
+   * Rewarded video → company name for ONE job (Android app, free users).
+   * The video completion alone unlocks nothing: AdMob's server-side
+   * verification writes the unlock, and we poll the server projection until
+   * it arrives. Subscribers never reach this (no rewarded videos for them).
+   */
+  const watchToUnlockCompany = useCallback(async (job: Job) => {
+    if (!user || unlockingJobId) return
+    if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: job.companyUnlocked === true })) return
+    setUnlockingJobId(job.id)
+    try {
+      const outcome = await showRewardedUnlock(user.id, job.id)
+      if (!outcome.ok) {
+        showToast(outcome.error)
+        return
+      }
+      const updated = await pollForCompanyUnlock(job.id, {
+        onJobs: (fresh) => {
+          setJobs(fresh)
+          setSelectedJob((current) => current?.id === job.id
+            ? fresh.find((candidate) => candidate.id === job.id) ?? current
+            : current)
+        },
+      })
+      showToast(updated?.company
+        ? `Company unlocked: ${updated.company} ✓`
+        : 'Video complete — your unlock is being confirmed and will appear shortly.')
+    } finally {
+      setUnlockingJobId(null)
+    }
+    // showToast is intentionally not a dependency; it only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, unlocked, unlockingJobId])
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 2200)
@@ -436,10 +477,12 @@ export default function App() {
           user={user}
           jobs={jobs}
           onOpenJob={openJob}
+          onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
+          unlockingJobId={unlockingJobId}
         />
       )}
       {tab === 'priority' && user && (
-        <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} />
+        <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined} unlockingJobId={unlockingJobId} />
       )}
       {tab === 'plans' && user && (
         <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
@@ -455,6 +498,12 @@ export default function App() {
           onBrowseJobs={() => navigate('home')}
         />
       )}
+
+      {/* AdMob adaptive banner: content screens only, Android app only.
+          Plans is the payment screen and login/sign-up never reach this
+          shell, so no ads ever appear there. On Account the banner floats
+          above the fixed Save/Logout bar. */}
+      <AdBanner enabled={bannerAllowedOnTab(tab)} bottomMargin={tab === 'account' ? 76 : 0} />
 
       {menuOpen && (
         <div
@@ -544,6 +593,8 @@ export default function App() {
         onClose={() => setSelectedJob(null)}
         onSubscribe={() => { setSelectedJob(null); navigate('plans') }}
         onApply={requestApplication}
+        onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
+        unlockBusy={Boolean(selectedJob && unlockingJobId === selectedJob.id)}
       />
       <Modal
         open={profileGateOpen}

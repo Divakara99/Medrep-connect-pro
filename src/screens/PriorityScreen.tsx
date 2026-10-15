@@ -4,7 +4,7 @@ import { JobCard } from '../components/JobCard'
 import { CATEGORIES, filterJobs, sortedJobs, type Job, type JobCategory } from '../data/jobs'
 import { isSubscribed, type User } from '../data/auth'
 
-export function PriorityScreen({ user, jobs, onOpenJob }: { user: User; jobs: Job[]; onOpenJob: (j: Job) => void }) {
+export function PriorityScreen({ user, jobs, onOpenJob, onWatchUnlock, unlockingJobId }: { user: User; jobs: Job[]; onOpenJob: (j: Job) => void; onWatchUnlock?: (j: Job) => void; unlockingJobId?: string | null }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<JobCategory>('All')
   const unlocked = isSubscribed(user)
@@ -45,7 +45,7 @@ export function PriorityScreen({ user, jobs, onOpenJob }: { user: User; jobs: Jo
           {pinned.length === 0 ? (
             <EmptyState icon="📭" title="No pinned jobs yet" subtitle="Admin will pin urgent roles here." />
           ) : (
-            pinned.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} />)
+            pinned.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockBusy={unlockingJobId === j.id} />)
           )}
         </div>
       </div>
@@ -80,7 +80,7 @@ export function PriorityScreen({ user, jobs, onOpenJob }: { user: User; jobs: Jo
             <div className="mt-2"><Button variant="secondary" onClick={clearFilters}>Clear</Button></div>
           </Card>
         ) : (
-          rest.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} />)
+          rest.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockBusy={unlockingJobId === j.id} />)
         )}
       </div>
     </div>

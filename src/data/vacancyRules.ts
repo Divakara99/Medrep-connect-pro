@@ -156,7 +156,7 @@ export function summarizeActivity(rows: AuditRow[]): ActivitySummary {
 // explanation.
 // ---------------------------------------------------------------------------
 
-export type PaymentMethod = 'Razorpay' | 'UPI' | 'Manual grant'
+export type PaymentMethod = 'Razorpay' | 'UPI' | 'Manual grant' | 'Google Play'
 
 export type PaymentLike = {
   paymentMethod?: PaymentMethod
@@ -169,6 +169,7 @@ export function paymentTypeLabel(method: PaymentMethod | undefined): string {
     case 'Razorpay': return 'Online (Razorpay)'
     case 'UPI': return 'UPI transfer (bank check)'
     case 'Manual grant': return 'Free grant by admin'
+    case 'Google Play': return 'Google Play Billing'
     default: return 'Unknown type'
   }
 }

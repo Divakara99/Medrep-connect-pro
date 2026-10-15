@@ -1,6 +1,7 @@
 import { getPlans } from './plans'
 import { isSecretProbe, sanitizeSecrets } from './secrets'
 import { CREATOR } from './creator'
+import { isAndroidApp } from './platform'
 
 /**
  * MedRep AI Help — answers APP-RELATED questions only.
@@ -98,7 +99,7 @@ export function answer(q: string, subscribed: boolean): Answer {
       text:
         `Plans & pricing 💎\n${planLine()}\n\n` +
         `Every plan fully unlocks: company names, manager contacts, and one-tap Apply.\n` +
-        `${subscribed ? 'Your subscription is active ✅' : 'Open the Plans tab to subscribe. Razorpay activates after server verification; choose cards or UPI apps in checkout.'}`,
+        `${subscribed ? 'Your subscription is active ✅' : isAndroidApp() ? 'Open the Plans tab to subscribe. Pay with Google Play — access activates after our server verifies the purchase with Google.' : 'Open the Plans tab to subscribe. Razorpay activates after server verification; choose cards or UPI apps in checkout.'}`,
     }
   }
   if (/subscri|activat|expir|renew|validity|valid/.test(Q)) {
@@ -106,7 +107,9 @@ export function answer(q: string, subscribed: boolean): Answer {
       intent,
       text:
         `Subscription 🔓\n` +
-        `• Razorpay access activates only after the server verifies a captured payment.\n` +
+        (isAndroidApp()
+          ? `• Access activates only after Google Play confirms your purchase and our server verifies it.\n`
+          : `• Razorpay access activates only after the server verifies a captured payment.\n`) +
         `• The expiry date uses the exact duration of the selected plan; you can see it on Plans and Account.\n` +
         `${subscribed ? '• Your plan is active right now ✅' : '• You are currently on the free plan — subscribe to unlock everything.'}\n` +
         `• If charged but not activated, do not pay again; contact support with the payment ID.`,
@@ -156,6 +159,17 @@ export function answer(q: string, subscribed: boolean): Answer {
     }
   }
   if (/pay|upi|razorpay|transaction|utr|receipt|refund|money/.test(Q)) {
+    if (isAndroidApp()) {
+      return {
+        intent,
+        text:
+          `Payments 💳\n` +
+          `• Plans in this app are paid with Google Play Billing — Google Play shows its secure payment sheet with the method on your Play account.\n` +
+          `• Never share your passwords or OTP with anyone. Plans activate only after Google confirms and our server verifies the purchase.\n` +
+          `• If charged but not activated, do not buy again; reopen the app, check Plans, or contact support with your Google Play order ID (GPA…).\n` +
+          `• Issues with a payment? Say "refund" and I'll help you raise a support request (with your permission).`,
+      }
+    }
     return {
       intent,
       text:

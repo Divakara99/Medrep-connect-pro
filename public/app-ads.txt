@@ -1,0 +1,7 @@
+# app-ads.txt for MedRep Pro (Android, in.medrepconnect.app)
+# Served from the website root: https://medrepconnect.in/app-ads.txt
+#
+# Publisher ID = the owner's real AdMob publisher ID (the part before "~" in
+# the AdMob App ID ca-app-pub-3694622521401615~5426441207). Keep this line in
+# sync if the AdMob account ever changes. See ANDROID.md.
+google.com, pub-3694622521401615, DIRECT, f08c47fec0942fa0

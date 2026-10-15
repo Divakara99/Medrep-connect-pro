@@ -43,7 +43,9 @@ function isTeamLogin(metadata: Record<string, unknown> | null | undefined): bool
 }
 
 function passwordProblem(password: unknown): string | null {
-  if (typeof password !== 'string' || password.length < 12) return 'The password must be at least 12 characters.'
+  // Same 6-character minimum as every other account (owner decision); the
+  // 72-character ceiling matches what the Auth service accepts.
+  if (typeof password !== 'string' || password.length < 6) return 'The password must be at least 6 characters.'
   if (password.length > 72) return 'The password must be at most 72 characters.'
   return null
 }

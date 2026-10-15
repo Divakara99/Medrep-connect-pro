@@ -2,8 +2,8 @@ import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supa
 import { adminAccessAllowed, corsHeaders, isAdmin, jsonResponse } from './http.ts'
 
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
-type PaymentMethod = 'razorpay' | 'upi_manual' | 'manual_grant'
-type PaymentStatus = 'pending' | 'manual_review' | 'paid' | 'failed' | 'rejected'
+type PaymentMethod = 'razorpay' | 'upi_manual' | 'manual_grant' | 'google_play'
+type PaymentStatus = 'pending' | 'manual_review' | 'paid' | 'failed' | 'rejected' | 'refunded' | 'voided'
 
 type SubscriptionPaymentRow = {
   id: string
@@ -20,6 +20,13 @@ type SubscriptionPaymentRow = {
   upi_reference: string | null
   utr: string | null
   gateway_method: string | null
+  play_order_id: string | null
+  play_purchase_token_hash: string | null
+  play_product_id: string | null
+  play_acknowledged: boolean
+  play_consumed: boolean
+  refunded_at: string | null
+  needs_review: boolean
   created_at: string
   paid_at: string | null
   expires_at: string | null
@@ -42,6 +49,7 @@ export type Database = {
           active: boolean
           updated_at: string
           updated_by: string | null
+          play_product_id: string | null
         }
         Insert: {
           id: string
@@ -53,6 +61,7 @@ export type Database = {
           active?: boolean
           updated_at?: string
           updated_by?: string | null
+          play_product_id?: string | null
         }
         Update: {
           id?: string
@@ -92,6 +101,35 @@ export type Database = {
           failure_reason?: string | null
         }
         Update: Partial<SubscriptionPaymentRow>
+        Relationships: []
+      }
+      company_unlocks: {
+        Row: {
+          id: string
+          user_id: string
+          job_id: string
+          transaction_id: string
+          ad_unit_id: string
+          reward_amount: number | null
+          reward_item: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          job_id: string
+          transaction_id: string
+          ad_unit_id?: string
+          reward_amount?: number | null
+          reward_item?: string | null
+          created_at?: string
+        }
+        Update: Partial<{
+          user_id: string
+          job_id: string
+          transaction_id: string
+          ad_unit_id: string
+        }>
         Relationships: []
       }
       user_accounts: {
@@ -206,6 +244,24 @@ export type Database = {
       }
       review_manual_upi_subscription_payment: {
         Args: { p_payment_id: string; p_reviewer_id: string; p_approve: boolean }
+        Returns: Json
+      }
+      confirm_google_play_subscription_payment: {
+        Args: {
+          p_user_id: string
+          p_plan_id: string
+          p_play_product_id: string
+          p_play_order_id: string
+          p_purchase_token_hash: string
+        }
+        Returns: Json
+      }
+      mark_google_play_purchase_finalised: {
+        Args: { p_purchase_token_hash: string; p_acknowledged: boolean; p_consumed: boolean }
+        Returns: Json
+      }
+      handle_google_play_voided_purchase: {
+        Args: { p_purchase_token_hash: string; p_reason?: string }
         Returns: Json
       }
       admin_mfa_required: {

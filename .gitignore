@@ -15,6 +15,15 @@ dist-ssr
 .env.*
 !.env.example
 
+# Android signing — NEVER commit the upload key or its passwords.
+# Back these up OFFLINE instead (see ANDROID.md). keys/ also holds the
+# generated UPLOAD-KEY-BACKUP.txt with the keystore password.
+*.jks
+*.keystore
+*.p12
+keystore.properties
+keys/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

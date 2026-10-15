@@ -9,6 +9,7 @@ import {
 } from '../data/push'
 import { pushAvailability, pushAvailabilityMessage, type PushAvailability } from '../data/pushRules'
 import { setSoundEnabled, soundEnabled } from '../data/notifications'
+import { isNativeApp } from '../data/platform'
 
 /**
  * The "notifications on this phone" card.
@@ -66,6 +67,10 @@ export function PushCard({ compact = false }: { compact?: boolean }) {
       ? { kind: 'ok', text: 'Test sent — it should appear within a few seconds, with sound.' }
       : { kind: 'error', text: result.error })
   }
+
+  // Web-push UI is hidden inside the Android app (no service worker there;
+  // native Firebase push is a later release).
+  if (isNativeApp()) return null
 
   return (
     <Card className={`${compact ? 'p-3' : 'p-4'} space-y-3`}>

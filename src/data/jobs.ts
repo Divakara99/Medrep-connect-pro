@@ -21,8 +21,15 @@ export const CATEGORY_PRIORITY: Record<JobCategory, number> = {
 export type Job = {
   id: string
   title: string
-  // These fields are returned by list_visible_jobs ONLY while subscribed.
+  /**
+   * Company name. Returned by list_visible_jobs while subscribed, OR for a
+   * job whose company this user unlocked with a rewarded video
+   * (companyUnlocked). Deliberately separate from the subscription flag:
+   * unlocking a company never unlocks the four contact fields, and never
+   * enables Apply.
+   */
   company: string
+  companyUnlocked?: boolean
   manager?: string
   contact?: string
   managerAltPhone?: string // optional local 10-digit Indian mobile, shown with a +91 prefix
@@ -81,6 +88,7 @@ function parseJob(value: unknown): Job | null {
     id: row.id,
     title: row.title,
     company: typeof row.company === 'string' ? row.company : '',
+    companyUnlocked: row.companyUnlocked === true,
     manager: typeof row.manager === 'string' ? row.manager : undefined,
     contact: typeof row.contact === 'string' ? row.contact : undefined,
     managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,
