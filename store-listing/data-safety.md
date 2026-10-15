@@ -33,7 +33,7 @@ Fill **Play Console → App content → Data safety** with these answers. They m
 - **Target audience:** 18+ (see ANDROID.md — job seekers; not directed at children; TFUA off).
 - **News / COVID / government app:** No. **Financial features:** No (job listings only;
   payments are for the app's own passes through Google Play).
-- **Privacy policy URL:** `https://medrepjob.netlify.app/privacy-policy.html`
+- **Privacy policy URL:** `https://medrepconnect.in/privacy-policy.html`
   (live after the next Netlify deploy — verify it opens before submitting).
 
 ## Account deletion URL (App content → Data deletion)

@@ -34,10 +34,10 @@ App: **MedRep Pro** (`in.medrepconnect.app`) — job listings for medical repres
 
 ## Notes
 
-- The companion website (medrepjob.netlify.app) is a separate channel with its own checkout
+- The companion website (medrepconnect.in) is a separate channel with its own checkout
   and is **not** part of this Android review; inside the app there are no web payments,
   no external payment links, and no "pay on the website" prompts.
 - Push notifications are not part of this release (declared permissions are minimal: Internet
   and the AdMob advertising-ID permission added by the SDK).
 - Privacy policy (covers AdMob/advertising ID and Play purchases):
-  https://medrepjob.netlify.app/privacy-policy.html
+  https://medrepconnect.in/privacy-policy.html

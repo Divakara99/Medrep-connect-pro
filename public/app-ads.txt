@@ -1,5 +1,5 @@
 # app-ads.txt for MedRep Pro (Android, in.medrepconnect.app)
-# Served from the website root: https://medrepjob.netlify.app/app-ads.txt
+# Served from the website root: https://medrepconnect.in/app-ads.txt
 #
 # Publisher ID = the owner's real AdMob publisher ID (the part before "~" in
 # the AdMob App ID ca-app-pub-3694622521401615~5426441207). Keep this line in

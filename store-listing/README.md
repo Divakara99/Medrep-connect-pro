@@ -26,5 +26,5 @@ max 3840px per side). Overwrite the four template PNGs with the same filenames.
 ## Listing settings
 
 - **Contains ads:** Yes · **Target audience:** 18 and over · **Category:** Business (or Job search if offered)
-- **Privacy policy:** https://medrepjob.netlify.app/privacy-policy.html
+- **Privacy policy:** https://medrepconnect.in/privacy-policy.html
 - Contact email, app name **MedRep Pro**, package **in.medrepconnect.app** — all per ANDROID.md.

@@ -1,7 +1,7 @@
 # MedRep Pro — Android (Google Play) runbook
 
 Everything for the Android app. The **website stays exactly as it is today**
-(medrepjob.netlify.app, Razorpay/UPI, no ads) — nothing here changes it.
+(medrepconnect.in — also reachable at medrepjob.netlify.app — Razorpay/UPI, no ads) — nothing here changes it.
 In-app behaviour is gated on `isAndroidApp()` (`src/data/platform.ts`), so
 the web bundle never loads ads or Play Billing and keeps its service worker
 and web-push UI.
@@ -31,8 +31,8 @@ and web-push UI.
   answers, reviewer notes, screenshot **templates** (replace with real
   captures, §7).
 - `public/privacy-policy.html` — covers AdMob/advertising ID + Play purchases.
-  Live at `https://medrepjob.netlify.app/privacy-policy.html` after the next
-  Netlify deploy.
+  Live at `https://medrepconnect.in/privacy-policy.html` (custom domain on the
+  same Netlify site) after the next deploy.
 - `public/app-ads.txt` — already carries the real publisher ID
   (`pub-3694622521401615`, from the App ID); live after the next Netlify deploy.
 
@@ -118,8 +118,9 @@ unit, `user_id` = Supabase user id, `custom_data` = job id, de-duplicates
 ### 2e. Auth redirect allow-list
 
 **Supabase → Authentication → URL Configuration**: make sure
-`https://medrepjob.netlify.app/` is an allowed redirect URL — app-originated
-password-reset emails land there.
+`https://medrepconnect.in/` is an allowed redirect URL — app-originated
+password-reset emails land there. (Keep `https://medrepjob.netlify.app/`
+listed too, as a fallback.)
 
 ---
 
@@ -131,7 +132,7 @@ password-reset emails land there.
    (`com.google.android.gms.ads.APPLICATION_ID`) and mirrored as
    `ADMOB_APP_ID` in `src/data/adConfig.ts`. `public/app-ads.txt` already
    serves the matching real publisher ID (`pub-3694622521401615`) — check
-   `https://medrepjob.netlify.app/app-ads.txt` after the next site deploy.
+   `https://medrepconnect.in/app-ads.txt` after the next site deploy.
 2. ✅ **Done:** units created in the console and wired into
    `src/data/adConfig.ts` — **Banner home screen**
    `ca-app-pub-3694622521401615/2527533866`, **Rewarded_unlockfeature**

@@ -5,8 +5,8 @@ import { Capacitor } from '@capacitor/core'
  *
  * Every Android-only behaviour (AdMob ads, Google Play Billing, no service
  * worker, no web-push UI, hidden Razorpay/UPI) is gated on these helpers, so
- * the website at medrepjob.netlify.app keeps behaving exactly as it does
- * today: Razorpay/UPI checkout, service worker, web push, no ads.
+ * the website at medrepconnect.in keeps behaving exactly as it did on
+ * medrepjob.netlify.app: Razorpay/UPI checkout, service worker, web push, no ads.
  */
 
 export function isNativeApp(): boolean {
@@ -35,7 +35,7 @@ export const playBillingEnabled = isAndroidApp
  * Supabase would reject / strand the user on. On the web the current page
  * stays the redirect target, as before.
  */
-export const WEB_APP_ORIGIN = 'https://medrepjob.netlify.app'
+export const WEB_APP_ORIGIN = 'https://medrepconnect.in'
 
 export function passwordResetRedirectTo(): string {
   if (isNativeApp()) return `${WEB_APP_ORIGIN}/`
