@@ -48,8 +48,10 @@ length = 6**, or Auth will reject passwords this app accepts.
 
 ## 2. Supabase: run these (in this order)
 
-The agent environment has **no Supabase access**, so these are the exact
-steps. Full commands are also in the PR description.
+Project: **`lmhmbrusjizncumrufsx`** — `https://lmhmbrusjizncumrufsx.supabase.co`
+(the app already defaults to it in `src/data/supabase.ts`). The agent
+environment has **no Supabase access**, so these are the exact steps. Full
+commands are also in the PR description.
 
 ### 2a. SQL — Supabase → SQL Editor → New query
 
@@ -72,9 +74,16 @@ Run each file once, top to bottom (all are safe to re-run):
 ### 2b. Edge Functions — deploy
 
 ```bash
-supabase functions deploy admob-reward-verification   # JWT check OFF (set in supabase/config.toml)
-supabase functions deploy verify-google-play-purchase # JWT check ON
-supabase functions deploy admin-manage-employees      # redeploy: team-password minimum is now 6
+supabase link --project-ref lmhmbrusjizncumrufsx   # once
+supabase functions deploy admob-reward-verification   --project-ref lmhmbrusjizncumrufsx  # JWT check OFF (set in supabase/config.toml)
+supabase functions deploy verify-google-play-purchase --project-ref lmhmbrusjizncumrufsx  # JWT check ON
+supabase functions deploy admin-manage-employees      --project-ref lmhmbrusjizncumrufsx  # redeploy: team-password minimum is now 6
+```
+
+Set the secrets from the CLI if you prefer:
+
+```bash
+supabase secrets set --project-ref lmhmbrusjizncumrufsx ADMOB_REWARDED_AD_UNIT_ID=ca-app-pub-3694622521401615/4112078274
 ```
 
 > `supabase/config.toml` already declares
@@ -96,7 +105,7 @@ In **AdMob → Apps → MedRep Pro → the rewarded ad unit → Server-side
 verification**, set the callback URL to:
 
 ```
-https://<your-project-ref>.supabase.co/functions/v1/admob-reward-verification
+https://lmhmbrusjizncumrufsx.supabase.co/functions/v1/admob-reward-verification
 ```
 
 (Real units are live, so this callback is what turns a watched video into
