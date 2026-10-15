@@ -5,7 +5,6 @@ import {
   ADMOB_REWARDED_AD_UNIT_ID,
   bannerAllowedOnTab,
   rewardedUnlockOffered,
-  usingTestAdUnits,
 } from '../src/data/adConfig.ts'
 import { defaultPlayProductId, playPurchasablePlans } from '../src/data/playProducts.ts'
 
@@ -22,9 +21,6 @@ import { defaultPlayProductId, playPurchasablePlans } from '../src/data/playProd
 assert.equal(ADMOB_APP_ID, 'ca-app-pub-3694622521401615~5426441207', 'real MedRep Pro AdMob app ID (matches AndroidManifest.xml)')
 assert.equal(ADMOB_BANNER_AD_UNIT_ID, 'ca-app-pub-3694622521401615/2527533866', 'real Banner home screen unit')
 assert.equal(ADMOB_REWARDED_AD_UNIT_ID, 'ca-app-pub-3694622521401615/4112078274', 'real Rewarded_unlockfeature unit')
-assert.equal(usingTestAdUnits(), false, 'real units configured — production ads')
-assert.equal(usingTestAdUnits('ca-app-pub-3940256099942544/6300978111', 'ca-app-pub-3940256099942544/5224354917'), true, 'Google sample units still detected')
-assert.equal(usingTestAdUnits('ca-app-pub-1234567890123456/1', 'ca-app-pub-1234567890123456/2'), false, 'real units detected')
 
 for (const tab of ['home', 'priority', 'ai', 'account']) {
   assert.equal(bannerAllowedOnTab(tab), true, `banner allowed on content screen: ${tab}`)

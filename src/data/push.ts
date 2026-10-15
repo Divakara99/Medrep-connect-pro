@@ -39,7 +39,7 @@ async function functionError(error: unknown, fallback: string): Promise<string> 
   }
   return error instanceof Error && error.message ? error.message : fallback
 }
-const TEST_TAG = 'mrc-test'
+const WELCOME_TAG = 'mrc-welcome'
 
 let configCache: PushConfig | null = null
 let subscribeInFlight: Promise<PushOutcome> | null = null
@@ -193,7 +193,7 @@ export async function enablePush(): Promise<PushOutcome> {
         try {
           await registration.showNotification('Notifications are on', {
             body: 'Announcements and new vacancies will arrive like this, with sound and vibration.',
-            tag: TEST_TAG,
+            tag: WELCOME_TAG,
             icon: './icon-192.png',
             badge: './icon-192.png',
           } as NotificationOptions)

@@ -6,9 +6,9 @@
  * the units in the AdMob console, and the Supabase secret
  * ADMOB_REWARDED_AD_UNIT_ID must equal ADMOB_REWARDED_AD_UNIT_ID here —
  * the admob-reward-verification Edge Function refuses SSV callbacks for
- * any other unit. `usingTestAdUnits()` still recognises Google's sample
- * IDs (publisher 3940256099942544) so tests/dev builds can drop those
- * back in safely; never ship a release with them.
+ * any other unit. No test/sample ad IDs exist anywhere in the app;
+ * on-device ad testing uses AdMob test devices (console setting), never
+ * test units in a shipped build.
  *
  * Pure data + pure helpers only: this module is unit-tested on the web
  * (scripts/test-android-ads.mjs) and imported by the native ads wrapper.
@@ -16,14 +16,6 @@
 export const ADMOB_APP_ID = 'ca-app-pub-3694622521401615~5426441207'
 export const ADMOB_BANNER_AD_UNIT_ID = 'ca-app-pub-3694622521401615/2527533866'
 export const ADMOB_REWARDED_AD_UNIT_ID = 'ca-app-pub-3694622521401615/4112078274'
-
-/** True while any configured unit is still one of Google's test IDs. */
-export function usingTestAdUnits(
-  bannerId: string = ADMOB_BANNER_AD_UNIT_ID,
-  rewardedId: string = ADMOB_REWARDED_AD_UNIT_ID,
-): boolean {
-  return bannerId.includes('3940256099942544') || rewardedId.includes('3940256099942544')
-}
 
 /**
  * Should a banner be requested on this tab?

@@ -1,5 +1,5 @@
 import { isAndroidApp } from './platform'
-import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, usingTestAdUnits } from './adConfig'
+import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID } from './adConfig'
 
 /**
  * AdMob wrapper (Android app only).
@@ -48,7 +48,7 @@ export async function initAds(): Promise<void> {
     // Consent problems must never block the app; ads simply may not load.
   }
   try {
-    await AdMob.initialize({ initializeForTesting: usingTestAdUnits() })
+    await AdMob.initialize({ initializeForTesting: false })
   } catch {
     // Ad load failures are non-fatal by design.
   }
@@ -66,7 +66,7 @@ export async function showBanner(margin = 0): Promise<void> {
       // Bottom margin lifts the native banner above a screen's own fixed
       // bottom bar (Account's Save/Logout bar) instead of covering it.
       margin,
-      isTesting: usingTestAdUnits(),
+      isTesting: false,
     })
     bannerVisible = true
   } catch {
@@ -105,7 +105,7 @@ export async function showRewardedUnlock(userId: string, jobId: string): Promise
   try {
     await AdMob.prepareRewardVideoAd({
       adId: ADMOB_REWARDED_AD_UNIT_ID,
-      isTesting: usingTestAdUnits(),
+      isTesting: false,
       ssv: { userId, customData: jobId },
     })
     await AdMob.showRewardVideoAd()

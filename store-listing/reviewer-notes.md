@@ -19,8 +19,8 @@ App: **MedRep Pro** (`in.medrepconnect.app`) — job listings for medical repres
 ## What to try
 
 1. Sign in → Home: job cards show role/city/salary; company names are locked for free users.
-2. On any locked job tap **"Watch video to unlock company name"** → a Google test rewarded ad
-   plays (test ads until launch) → that one job's company name unlocks permanently. Manager
+2. On any locked job tap **"Watch video to unlock company name"** → a rewarded ad
+   plays → that one job's company name unlocks permanently. Manager
    name/email/phone stay locked — that is intended, not a bug.
 3. Open any job: city, HQ, division, salary, experience and the full description are visible
    without paying. **Apply** asks for a plan — intended.

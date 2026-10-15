@@ -235,8 +235,9 @@ Workflow: **Android (MedRep Pro)** (`.github/workflows/android.yml`)
 - Runs on PRs touching the app, pushes to `main`, and manually
   (**Actions → Android (MedRep Pro) → Run workflow**).
 - **`medrep-pro-debug-apk`** artifact: install on your phone
-  (enable "install from browser/files" once). Test ads show until §3 is done;
-  Play purchases need a Play test track + licence tester (below).
+  (enable "install from browser/files" once). Real ad units are configured —
+  test on your phone only with an AdMob **test device** registered, never
+  click real ads. Play purchases need a Play test track + licence tester (below).
 - **`medrep-pro-release-aab`** artifact (only when §5 secrets/variable are
   set): upload this `.aab` to Play Console.
 
