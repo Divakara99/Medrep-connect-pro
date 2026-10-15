@@ -53,7 +53,13 @@ Deno.serve(async (request: Request) => {
   }
   if (!verified) return text('Invalid signature.', 403)
 
-  if (params.adUnit !== expectedAdUnit) return text('Unknown ad unit.', 400)
+  // Google sends ad_unit either as the full "ca-app-pub-…/…" id or as the
+  // bare numeric unit id; accept exactly our unit in either form.
+  const expectedNumericUnit = expectedAdUnit.split('/').pop() ?? ''
+  if (params.adUnit !== expectedAdUnit && params.adUnit !== expectedNumericUnit) {
+    console.error('Ad unit mismatch: received', params.adUnit, 'expected', expectedAdUnit)
+    return text('Unknown ad unit.', 400)
+  }
   if (!UUID_PATTERN.test(params.userId)) return text('Invalid user.', 400)
   if (!params.customData || params.customData.length > 200) return text('Invalid job.', 400)
 
