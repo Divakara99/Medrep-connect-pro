@@ -28,3 +28,5 @@ max 3840px per side). Overwrite the four template PNGs with the same filenames.
 - **Contains ads:** Yes · **Target audience:** 18 and over · **Category:** Business (or Job search if offered)
 - **Privacy policy:** https://medrepconnect.in/privacy-policy.html
 - Contact email, app name **MedRep Pro**, package **in.medrepconnect.app** — all per ANDROID.md.
+
+Screenshot capture checklist: [`SCREENSHOTS.md`](SCREENSHOTS.md).
