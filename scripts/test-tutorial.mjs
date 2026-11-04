@@ -121,7 +121,7 @@ assert.ok(walkthroughMb > 0.05 && walkthroughMb < 12, `walkthrough size is sane 
 
 // Languages with their own narrated cut play it; the rest fall back to the
 // silent walkthrough (with the written steps in that language).
-const narrated = ['en', 'hi', 'te']
+const narrated = ['en', 'hi', 'te', 'ta', 'kn', 'ml', 'mr']
 for (const code of narrated) {
   const lang = TUTORIAL_LANGUAGES.find((l) => l.code === code)
   const own = resolveTutorialVideo(lang, {})
@@ -134,11 +134,15 @@ for (const code of narrated) {
   assert.ok(mb > 0.3 && mb < 20, `${code}: video size is sane (${mb.toFixed(1)} MB)`)
 }
 
-const pending = TUTORIAL_LANGUAGES.find((l) => l.code === 'mr')
-assert.equal(resolveTutorialVideo(pending, {}).shared, true, 'no recording → shared walkthrough')
-assert.equal(resolveTutorialVideo(pending, {}).url, TUTORIAL_DEFAULT_VIDEO)
-const recorded = resolveTutorialVideo(pending, { mr: 'https://youtu.be/abc12345678' })
-assert.equal(recorded.shared, false, 'a published recording wins')
+// Every shipped language has its own narrated cut, so the silent walkthrough is
+// only a fallback for a language added later without a recording.
+for (const lang of TUTORIAL_LANGUAGES) {
+  assert.equal(resolveTutorialVideo(lang, {}).shared, false, `${lang.code}: ships a narrated video`)
+}
+const future = { ...TUTORIAL_LANGUAGES[0], code: 'en', videoUrl: undefined }
+assert.equal(resolveTutorialVideo(future, {}).url, TUTORIAL_DEFAULT_VIDEO, 'no recording → silent walkthrough')
+const recorded = resolveTutorialVideo({ ...future, code: 'hi' }, { hi: 'https://youtu.be/abc12345678' })
+assert.equal(recorded.shared, false, 'a published link wins over the bundled file')
 
 // Every language resolves to something playable.
 for (const lang of TUTORIAL_LANGUAGES) {
@@ -146,4 +150,4 @@ for (const lang of TUTORIAL_LANGUAGES) {
   assert.match(resolved.url, /^(\/|https?:\/\/)/, `${lang.code}: resolves to a playable URL`)
 }
 
-console.log('tutorial tour: 7 languages, founder intro first, en/hi/te narrated videos + silent fallback and link safety passed')
+console.log('tutorial tour: all 7 languages narrated, founder intro first, silent fallback and link safety passed')

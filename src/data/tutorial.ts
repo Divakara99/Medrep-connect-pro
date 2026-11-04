@@ -228,6 +228,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'தமிழ்',
     english: 'Tamil',
     locale: 'ta-IN',
+    videoUrl: '/tutorial/ta.mp4',
     slides: [
       {
         title: 'எம் திவாகர் ரெட்டி உருவாக்கியது',
@@ -260,6 +261,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'ಕನ್ನಡ',
     english: 'Kannada',
     locale: 'kn-IN',
+    videoUrl: '/tutorial/kn.mp4',
     slides: [
       {
         title: 'ಎಂ ದಿವಾಕರ್ ರೆಡ್ಡಿ ರಚನೆ',
@@ -292,6 +294,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'മലയാളം',
     english: 'Malayalam',
     locale: 'ml-IN',
+    videoUrl: '/tutorial/ml.mp4',
     slides: [
       {
         title: 'എം ദിവാകർ റെഡ്ഡിയുടെ ആശയം',
@@ -324,6 +327,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'मराठी',
     english: 'Marathi',
     locale: 'mr-IN',
+    videoUrl: '/tutorial/mr.mp4',
     slides: [
       {
         title: 'एम दिवाकर रेड्डी यांची निर्मिती',

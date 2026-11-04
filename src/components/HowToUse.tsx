@@ -132,17 +132,23 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
           <div className="space-y-3">
             {url ? (
               isDirectVideoFile(url) ? (
-                <video
-                  key={url}
-                  className="w-full rounded-xl bg-black"
-                  src={url}
-                  controls
-                  autoPlay
-                  playsInline
-                  lang={language.locale}
-                />
+                // Portrait footage (1080x1920) would otherwise fill the whole
+                // sheet and swallow the drag: cap the height and allow vertical
+                // panning so the steps below stay reachable by scrolling.
+                <div className="flex justify-center overflow-hidden rounded-xl bg-black">
+                  <video
+                    key={url}
+                    className="max-h-[52vh] w-auto max-w-full"
+                    style={{ touchAction: 'pan-y' }}
+                    src={url}
+                    controls
+                    autoPlay
+                    playsInline
+                    lang={language.locale}
+                  />
+                </div>
               ) : (
-                <div className="aspect-video w-full overflow-hidden rounded-xl bg-black">
+                <div className="aspect-video max-h-[52vh] w-full overflow-hidden rounded-xl bg-black">
                   <iframe
                     key={url}
                     src={toEmbeddableUrl(url)}

@@ -6,15 +6,19 @@ play — starting with the founder's introduction.
 
 **Every language plays a video, in its own language:**
 
-| Language | File | Narration |
-|---|---|---|
-| English | `public/tutorial/en.mp4` (52 s) | AI narrator voice |
-| हिन्दी | `public/tutorial/hi.mp4` (64 s) | AI narrator voice |
-| తెలుగు | `public/tutorial/te.mp4` (56 s) | AI narrator voice |
-| தமிழ் · ಕನ್ನಡ · മലയാളം · मराठी | `public/tutorial/walkthrough.mp4` (44 s, silent) | pending — written steps shown below the player |
+| Language | File | Length | Narration |
+|---|---|---|---|
+| English | `public/tutorial/en.mp4` | 52 s | AI narrator voice |
+| हिन्दी | `public/tutorial/hi.mp4` | 64 s | AI narrator voice |
+| తెలుగు | `public/tutorial/te.mp4` | 56 s | AI narrator voice |
+| தமிழ் | `public/tutorial/ta.mp4` | 53 s | AI narrator voice |
+| ಕನ್ನಡ | `public/tutorial/kn.mp4` | 60 s | AI narrator voice |
+| മലയാളം | `public/tutorial/ml.mp4` | 57 s | AI narrator voice |
+| मराठी | `public/tutorial/mr.mp4` | 55 s | AI narrator voice |
 
-Anything without its own cut falls back to the silent walkthrough plus the
-written steps in that language, so no screen is ever empty or English-only.
+All seven languages are narrated. A language added later without a recording
+falls back to `walkthrough.mp4` (silent) plus the written steps, so no screen is
+ever empty or English-only.
 
 The narration is **third person**: a narrator introduces M Divakar Reddy and the
 app ("MedRep Pro is created by M Divakar Reddy…"), never the founder speaking
