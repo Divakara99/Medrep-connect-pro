@@ -1,13 +1,15 @@
 package in.medrepconnect.app;
 
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -50,6 +52,15 @@ public class MainActivity extends BridgeActivity {
         applySystemBarAppearance();
     }
 
+    /**
+     * Dark icons on the white window background, and the bars always shown.
+     *
+     * Framework APIs only (no androidx controller), guarded by version:
+     *   - API 30+: WindowInsetsController with APPEARANCE_LIGHT_* flags
+     *   - API 23-29: the legacy SYSTEM_UI_FLAG_LIGHT_* visibility flags
+     * minSdk 24, so both paths exist at compile time and exactly one runs.
+     */
+    @SuppressWarnings("deprecation")
     private void applySystemBarAppearance() {
         Window window = getWindow();
         if (window == null) {
@@ -59,14 +70,23 @@ public class MainActivity extends BridgeActivity {
         if (decor == null) {
             return;
         }
-        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, decor);
-        // White window background: dark clock/battery/signal icons, and dark
-        // gesture-bar handle. Without this they are white on white.
-        controller.setAppearanceLightStatusBars(true);
-        controller.setAppearanceLightNavigationBars(true);
-        // The bars themselves always stay visible — they carry the time,
-        // battery and network the user expects to see.
-        controller.show(WindowInsetsCompat.Type.systemBars());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                int darkIcons = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(darkIcons, darkIcons);
+                // The bars carry the time, battery and network — never hide them.
+                controller.show(WindowInsets.Type.systemBars());
+            }
+            return;
+        }
+        int flags = decor.getSystemUiVisibility();
+        flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        decor.setSystemUiVisibility(flags);
     }
 
     private void applyEdgeToEdgeInsets() {
