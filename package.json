@@ -1,7 +1,7 @@
 {
   "name": "medrep-connect-pro",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,7 +25,7 @@
     "test:vacancy-team": "node scripts/test-vacancy-team.mjs",
     "test:vacancy-rules": "node scripts/test-vacancy-rules.mjs",
     "test:vacancy-extraction": "node scripts/test-vacancy-extraction.mjs",
-    "test": "npm run test:android && npm run test:security && npm run test:password-rules && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:profile && npm run test:descriptions && npm run test:support && npm run test:notification-privacy && npm run test:refund-check && npm run test:vacancy-team && npm run test:vacancy-rules && npm run test:vacancy-extraction && npm run test:push",
+    "test": "npm run test:android && npm run test:security && npm run test:password-rules && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:profile && npm run test:descriptions && npm run test:support && npm run test:notification-privacy && npm run test:refund-check && npm run test:vacancy-team && npm run test:vacancy-rules && npm run test:vacancy-extraction && npm run test:tutorial && npm run test:push",
     "preview": "vite preview",
     "android:add": "cap add android",
     "android:sync": "npm run build && cap sync android",
@@ -34,7 +34,8 @@
     "android:aab:release": "npm run android:sync && cd android && ./gradlew bundleRelease",
     "store:assets": "node scripts/generate-store-assets.mjs",
     "test:android": "node scripts/test-android-unlocks.mjs && node scripts/test-android-ads.mjs && node scripts/test-play-billing.mjs",
-    "test:push": "node scripts/test-push-rules.mjs && node scripts/test-admin-access-rules.mjs && node scripts/test-webpush-crypto.mjs && node scripts/test-send-push-function.mjs && node scripts/test-admin-mfa-toggle.mjs && node scripts/test-push-subscriptions.mjs"
+    "test:push": "node scripts/test-push-rules.mjs && node scripts/test-admin-access-rules.mjs && node scripts/test-webpush-crypto.mjs && node scripts/test-send-push-function.mjs && node scripts/test-admin-mfa-toggle.mjs && node scripts/test-push-subscriptions.mjs",
+    "test:tutorial": "node scripts/test-tutorial.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.2.1",

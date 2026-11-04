@@ -1,21 +1,72 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# R8 / ProGuard rules for MedRep Pro (Capacitor 8 + AdMob + Play Billing).
 #
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# R8 is ON for release builds (see android/app/build.gradle) because Google Play
+# reports "DEX code optimization below your threshold — Obfuscation (0%)" and
+# throttles publishing when a bundle has no obfuscation at all.
+#
+# Everything below protects code that is only reachable by REFLECTION or by name
+# from JavaScript/Android, so shrinking must never rename or delete it. If a new
+# Capacitor plugin is added later, add its package to the plugin block; otherwise
+# the plugin silently fails at runtime in the release build while working in
+# debug (the classic symptom: "plugin not implemented on Android").
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Keep line numbers so Play Console crash reports stay readable.
+-keepattributes SourceFile,LineNumberTable
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ---------------------------------------------------------------- Capacitor ---
+-keep class com.getcapacitor.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keep class * extends com.getcapacitor.Plugin { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod public <methods>;
+}
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keep class com.getcapacitor.BridgeActivity { *; }
+-keep class com.getcapacitor.BridgeWebViewClient { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# ------------------------------------------------------------ Capacitor plugins ---
+# AdMob (banner + rewarded + UMP consent), instantiates SDK classes reflectively.
+-keep class ee.forgr.capacitor.admob.** { *; }
+# Native Purchases (Google Play Billing wrapper).
+-keep class ee.forgr.** { *; }
+# App plugin (back button / app state).
+-keep class com.capacitorjs.plugins.app.** { *; }
+
+# --------------------------------------------------------------- Google Mobile Ads ---
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.android.gms.internal.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+# UMP consent SDK (AdMob consent form) — reflectively constructed.
+-keep class com.google.android.ump.** { *; }
+-dontwarn com.google.android.ump.**
+
+# ------------------------------------------------------------------ Play Billing ---
+-keep class com.android.billingclient.** { *; }
+-keepclassmembers class com.android.billingclient.** {
+    *** onBillingServiceDisconnected(...);
+    *** onBillingSetupFinished(...);
+    *** onPurchasesUpdated(...);
+}
+-dontwarn com.android.billingclient.**
+
+# ----------------------------------------------------------- Kotlin / coroutines ---
+# Plugins are written in Kotlin; R8 must keep the metadata Kotlin reflection reads.
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class **$WhenMappings {
+    <fields>;
+}
+-dontwarn kotlin.**
+-dontwarn kotlinx.**
+
+# Optional annotations that libraries reference but do not ship.
+-dontwarn org.jetbrains.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn org.apache.commons.**
+-dontwarn org.json.**
+
+# The bundled web app is loaded from assets/ by file name; never strip it.
+-keep class in.medrepconnect.app.** { *; }
