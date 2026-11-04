@@ -115,4 +115,17 @@ const plan = (planId, expiresAt, extra = {}) => ({
   assert.equal(state.purchased.get('p5'), NOW - 1 * DAY, 'old purchases stay in the history badge')
 }
 
+// 9. A live subscription whose payment row carries no expiry (an admin grant,
+//    or a record written before expires_at existed) still shows as Active —
+//    the server's access flag wins over a missing date.
+{
+  const granted = { planId: 'p30', status: 'success', createdAt: NOW - 40 * DAY }
+  const state = readPlanState([granted], { unlocked: true, subscribedUntil: NOW + 20 * DAY, now: NOW })
+  assert.equal(state.activePlanId, 'p30', 'a granted subscription is active')
+  assert.equal(state.activeUntil, NOW + 20 * DAY)
+  assert.equal(state.expiredPlanId, null)
+  // Without the server flag it is just an old payment: nothing is unlocked.
+  assert.equal(readPlanState([granted], { unlocked: false, now: NOW }).activePlanId, null)
+}
+
 console.log('plan state: expired passes are never Active, renewals re-activate passed')

@@ -73,6 +73,19 @@ export function readPlanState(
     }
   }
 
+  // A live subscription with no dated row — an admin grant, or a payment
+  // recorded before expires_at was written. The server's access flag is the
+  // authority, so the newest purchase still shows as the active plan.
+  if (options.unlocked && (options.subscribedUntil ?? 0) > now && paid[0]) {
+    return {
+      activePlanId: paid[0].planId,
+      activeUntil: options.subscribedUntil,
+      expiredPlanId: null,
+      purchased,
+      suggestedPlanId: paid[0].planId,
+    }
+  }
+
   // The seconds right after a purchase: the checkout confirmed the plan and the
   // server says access is paid, but the ledger read has not come back yet.
   if (options.unlocked && options.purchasedPlanId) {
