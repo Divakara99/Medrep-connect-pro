@@ -1,3 +1,4 @@
+import { daysLabel, planTitle } from './planDisplay'
 import { getPlans } from './plans'
 import { isSecretProbe, sanitizeSecrets } from './secrets'
 import { CREATOR } from './creator'
@@ -24,7 +25,7 @@ function planLine(): string {
   const plans = getPlans()
   if (plans.length === 0) return 'Plans start from ₹19 (1 day) up to ₹1799 (1 year).'
   return plans
-    .map((p) => `• ${p.title} — ₹${p.price} (${p.days === 1 ? '1 day' : `${p.days} days`})`)
+    .map((p) => `• ${planTitle(p.title)} — ₹${p.price} (${daysLabel(p.days)})`)
     .join('\n')
 }
 

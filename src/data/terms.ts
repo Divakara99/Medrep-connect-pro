@@ -10,7 +10,7 @@
  */
 import { CREATOR } from './creator'
 
-export const TERMS_LAST_UPDATED = '13 October 2026'
+export const TERMS_LAST_UPDATED = '4 November 2026'
 
 export type TermsSection = { title: string; paragraphs: string[] }
 
@@ -51,7 +51,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Payments',
     paragraphs: [
-      'Online payments are processed by Razorpay through Razorpay Checkout. The methods available (cards, netbanking, UPI apps or QR codes) depend on what Razorpay enables for our merchant account. We do not store your card or bank details.',
+      'In the Android app, plans are bought through Google Play Billing: Google charges the payment method on your Play account and processes the transaction under Google Play\'s terms. On the website, payments are processed by Razorpay through Razorpay Checkout, and the methods available (cards, netbanking, UPI apps or QR codes) depend on what Razorpay enables for our merchant account. We never see or store your card or bank details.',
       'We never ask you to transfer money to a personal UPI ID or bank account. If anyone asks you to do so in our name, do not pay, and report it through a support request in AI Help.',
       'For any older manual UPI request, our administrator may verify the payment against the bank statement before access is activated. This can take longer than an online payment.',
       'Never share your bank PIN, UPI PIN, OTP or password with anyone, including our support staff.',
@@ -61,6 +61,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: 'Refunds and cancellations',
     paragraphs: [
       'Plans give immediate access to digital content once the payment is verified, so plans are non-refundable after activation, except as described below.',
+      'Purchases made through Google Play are refunded by Google under the Google Play refund policy. If Google refunds or reverses a purchase, the remaining days of that pass are removed from your account.',
       'You may request a refund in AI Help (choose "Payment & refunds"). The assistant asks you for the reason and the payment, then checks it against these rules. A refund request is raised only if: (a) your payment was captured but your plan was not activated and we cannot fix this; (b) you were charged more than once for the same plan; or (c) a payment failed but the amount was debited. A request is sent only when you confirm it.',
       'A refund request sends the reason, your payment details (payment ID, UTR and amount) and your account details to the administrator. A payment that does not meet these rules, or that already has a refund request, cannot be sent as a refund request. You can still send a support request about it.',
       'You can follow every request, and the administrator\'s reply, under Account → My requests.',
@@ -91,7 +92,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     paragraphs: [
       'When you choose to apply, the information in the application (such as your name, phone number, email address and resume) is shared with the hiring manager of that vacancy.',
       'Do not put sensitive personal information (for example Aadhaar, PAN, bank details or medical records) in your profile, resume or applications unless an employer specifically asks for it.',
-      'How we process personal data is described in our privacy policy. [Owner to publish the privacy policy and add its link here.]',
+      'How we process personal data is described in our privacy policy at https://medrepconnect.in/privacy-policy.html.',
       'When you send a refund or support request, we store it with your name, account email, phone number, city and state, subscription dates and the recent AI Help messages. The administrator uses these details only to review your request. You can see your own requests under Account → My requests.',
     ],
   },
@@ -106,6 +107,12 @@ export const TERMS_SECTIONS: TermsSection[] = [
     paragraphs: [
       'You must not: scrape, copy or resell listings; share confidential vacancy details or manager contacts with others; use contact details to send spam, harassing or unsolicited bulk messages; create several accounts to obtain free access; attempt to bypass the subscription, access other users\' data or interfere with the service; or upload malicious files or false information.',
       'We may suspend or close accounts that break these terms. Where a breach causes a loss to us or to others, we may refuse a refund for the affected period, subject to applicable law.',
+    ],
+  },
+  {
+    title: 'Advertising',
+    paragraphs: [
+      'The Android app is supported by ads served by Google AdMob: a banner on job screens, and optional rewarded videos that reveal a company name to free users. Subscribers see the banner only and are never shown rewarded videos. The website shows no ads.',
     ],
   },
   {
@@ -151,7 +158,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Governing law and disputes',
     paragraphs: [
-      'These terms are governed by the laws of India. Subject to any mandatory rights you have as a consumer, the courts at Bengaluru, Karnataka, have jurisdiction. [Owner to confirm.]',
+      'These terms are governed by the laws of India. Subject to any mandatory rights you have as a consumer, the courts at Bengaluru, Karnataka, have jurisdiction.',
     ],
   },
   {
