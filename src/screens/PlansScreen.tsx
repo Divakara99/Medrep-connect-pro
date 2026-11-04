@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
+import { readPlanState } from '../data/planState'
 import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
 import { CREATOR } from '../data/creator'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
@@ -41,6 +42,9 @@ export function PlansScreen({
   )
   const [showTerms, setShowTerms] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
+  // Tapped × / backdrop / phone-back while a payment was still running: ask
+  // instead of doing nothing, so the sheet can never become unclosable.
+  const [closeAsk, setCloseAsk] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -63,40 +67,31 @@ export function PlansScreen({
   /** Expiry date of a plan, in the same wording the Account page uses. */
   const when = (ms: number) => new Date(ms).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 
-  // Which plan each successful payment bought, with the latest expiry it
-  // reached. Read from the server ledger only.
-  const purchasedPlans = useMemo(() => {
-    const bought = new Map<string, number>()
-    payments
-      .filter((payment) => payment.status === 'success')
-      .forEach((payment) => {
-        const at = payment.expiresAt ?? payment.createdAt
-        const known = bought.get(payment.planId)
-        if (known === undefined || at > known) bought.set(payment.planId, at)
-      })
-    return bought
-  }, [payments])
+  // Active vs expired is decided by planState.ts, which the test suite pins:
+  // a pass whose days have run out is never labelled Active, because the
+  // contact details it unlocked are locked again at that same moment.
+  const planState = useMemo(
+    () => readPlanState(payments, {
+      unlocked,
+      purchasedPlanId,
+      subscribedUntil: user.subscribedUntil,
+    }),
+    [payments, unlocked, purchasedPlanId, user.subscribedUntil],
+  )
+  const purchasedPlans = planState.purchased
+  const activePlanId = planState.activePlanId
+  const activePlan = activePlanId ? { planId: activePlanId, expiresAt: planState.activeUntil } : null
+  const expiredPlan = planState.expiredPlanId
+    ? { planId: planState.expiredPlanId, expiresAt: planState.expiredAt }
+    : null
 
-  // The plan that is active now: the newest verified payment that still covers
-  // the subscription (a renewal moves the active plan to the newer one).
-  const activePlan = useMemo(() => {
-    const paid = payments
-      .filter((payment) => payment.status === 'success')
-      .sort((a, b) => (b.expiresAt ?? b.createdAt) - (a.expiresAt ?? a.createdAt))
-    const covering = paid.filter((payment) => (payment.expiresAt ?? 0) > Date.now())
-    const chosen = covering[0] ?? paid[0]
-    const planId = chosen?.planId ?? purchasedPlanId
-    if (!planId) return null
-    const expiresAt = Math.max(chosen?.expiresAt ?? 0, user.subscribedUntil ?? 0) || undefined
-    return { planId, expiresAt }
-  }, [payments, purchasedPlanId, user.subscribedUntil])
-
-  // Show the plan the user already owns as the selected one, so its button
+  // Show the plan the user already owns as the selected one — the active pass,
+  // or the one that just ran out, so renewing it is one tap — so the button
   // reads "Extend / Renew" instead of "Select plan".
   useEffect(() => {
-    if (selectedId || !activePlan) return
-    setSelectedId(activePlan.planId)
-  }, [activePlan, selectedId])
+    if (selectedId || !planState.suggestedPlanId) return
+    setSelectedId(planState.suggestedPlanId)
+  }, [planState.suggestedPlanId, selectedId])
 
   async function loadPaymentHistory() {
     try {
@@ -141,7 +136,28 @@ export function PlansScreen({
     setSelectedId(planId)
   }
 
+  /**
+   * One way out of the confirm sheet, used by ×, the backdrop and the phone's
+   * back gesture. A payment in flight asks first — the old guard ignored the
+   * close silently, which read as a dead × button.
+   */
+  function requestClose() {
+    if (processing) {
+      setCloseAsk(true)
+      return
+    }
+    setShowCheckout(false)
+  }
+
+  function forceClose() {
+    setCloseAsk(false)
+    setProcessing(false)
+    setShowCheckout(false)
+  }
+
   function openCheckout(plan: Plan) {
+    setCloseAsk(false)
+    setProcessing(false)
     setSelectedId(plan.id)
     checkoutPlanId.current = plan.id
     setError(null)
@@ -251,6 +267,18 @@ export function PlansScreen({
     }
   }
 
+  // Google Play can leave the purchase promise hanging (system UI dismissed, no
+  // network). Never let that lock the sheet: after three minutes the buttons
+  // come back and the sheet says what to do.
+  useEffect(() => {
+    if (!inApp || !processing) return
+    const timer = window.setTimeout(() => {
+      setProcessing(false)
+      setError('Google Play has not answered yet. If you completed the payment, reopen Plans — the purchase is restored automatically, and nothing was charged twice.')
+    }, 180_000)
+    return () => window.clearTimeout(timer)
+  }, [inApp, processing])
+
   // Capture/webhooks may take a few seconds. Retry verification with the same
   // Razorpay response; never create a second order or ask for another payment.
   useEffect(() => {
@@ -296,6 +324,11 @@ export function PlansScreen({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
           </div>
         )}
+        {!unlocked && expiredPlan?.expiresAt !== undefined && (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-950 ring-1 ring-amber-300">
+            Pass expired on {when(expiredPlan.expiresAt)} — company details are locked until you renew
+          </div>
+        )}
       </Card>
 
       {catalogError && (
@@ -312,6 +345,8 @@ export function PlansScreen({
           // session a moment ago.
           const isActive = activePlan?.planId === plan.id
           const activeExpiry = isActive ? activePlan.expiresAt : undefined
+          // Ran out: no green badge, an amber Expired badge and a renewal.
+          const isExpired = !isActive && expiredPlan?.planId === plan.id
           const boughtAt = purchasedPlans.get(plan.id)
           return (
             <Card
@@ -320,9 +355,10 @@ export function PlansScreen({
               className={`p-4 relative cursor-pointer transition ${isActive ? 'ring-2 ring-emerald-500 ring-offset-2 bg-gradient-to-br from-emerald-50 to-white' : isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : 'hover:ring-1 hover:ring-brand-300'} ${plan.popular && !isSelected && !isActive ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}
             >
               {isActive && <div className="absolute -top-2 right-3"><Badge color="green">✓ Active</Badge></div>}
+              {isExpired && <div className="absolute -top-2 right-3"><Badge color="amber">Expired</Badge></div>}
               {!isActive && isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
               {!isActive && !isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
-              {!isActive && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
+              {!isActive && !isExpired && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
               <div className="flex items-center justify-between gap-2">
                 <div className="font-bold text-slate-900">{plan.title}</div>
                 <div className="text-2xl font-extrabold text-brand-800">{inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}</div>
@@ -336,11 +372,14 @@ export function PlansScreen({
               </div>
               <div className="text-sm text-slate-800 mt-2">{plan.tagline}</div>
               {isActive && activeExpiry !== undefined && (
-                <div className={`mt-2 text-sm font-extrabold ${activeExpiry > Date.now() ? 'text-emerald-700' : 'text-amber-800'}`}>
-                  {activeExpiry > Date.now() ? `Active until ${when(activeExpiry)}` : `Expired on ${when(activeExpiry)}`}
+                <div className="mt-2 text-sm font-extrabold text-emerald-700">Active until {when(activeExpiry)}</div>
+              )}
+              {isExpired && expiredPlan?.expiresAt !== undefined && (
+                <div className="mt-2 text-sm font-extrabold text-amber-800">
+                  Expired on {when(expiredPlan.expiresAt)} — renew to unlock company details again
                 </div>
               )}
-              {!isActive && boughtAt !== undefined && (
+              {!isActive && !isExpired && boughtAt !== undefined && (
                 <div className="mt-2 text-xs font-semibold text-slate-600">
                   {boughtAt > Date.now() ? `Purchased earlier · access till ${when(boughtAt)}` : `Purchased earlier · expired ${when(boughtAt)}`}
                 </div>
@@ -350,7 +389,7 @@ export function PlansScreen({
                 className="w-full mt-3"
                 onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
               >
-                {isSelected ? (unlocked ? 'Extend / Renew' : 'Choose plan') : 'Select plan'}
+                {isSelected ? (unlocked ? 'Extend / Renew' : isExpired ? 'Renew this plan' : 'Choose plan') : 'Select plan'}
               </Button>
             </Card>
           )
@@ -489,7 +528,7 @@ export function PlansScreen({
         </Card>
       )}
 
-      <Modal open={showCheckout} onClose={() => { if (!processing) setShowCheckout(false) }} title="Confirm your plan">
+      <Modal open={showCheckout} onClose={requestClose} title="Confirm your plan">
         {success ? (
           <div role="status" className="text-center py-6 space-y-2">
             <div className="text-5xl">✅</div>
@@ -504,6 +543,19 @@ export function PlansScreen({
           </div>
         ) : (
           <div className="space-y-4">
+            {closeAsk && (
+              <div role="alert" className="space-y-2 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-300">
+                <div className="text-sm font-bold text-amber-950">A payment is still open</div>
+                <p className="text-xs text-amber-900">
+                  If you close now, the payment can still complete on its own — reopen Plans and the pass is
+                  restored automatically. You are never charged twice for one pass.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => setCloseAsk(false)}>Keep waiting</Button>
+                  <Button variant="ghost" className="flex-1" onClick={forceClose}>Close anyway</Button>
+                </div>
+              </div>
+            )}
             <div className="rounded-xl bg-indigo-50 p-4 ring-1 ring-indigo-200 flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-bold text-slate-900">{selected.title}</div>
