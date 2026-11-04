@@ -32,7 +32,7 @@ export type Plan = {
  * can never start a checkout: create-razorpay-order reads the server table.
  */
 export const FALLBACK_PLANS: Plan[] = [
-  { id: 'p5', title: '5 Days Trial', days: 5, price: 49, tagline: 'Quick access — test the network', active: true, playProductId: 'medrep_pass_5d' },
+  { id: 'p5', title: '1 Day Trial', days: 1, price: 19, tagline: 'Quick access — test the network', active: true, playProductId: 'medrep_pass_5d' },
   { id: 'p10', title: '10 Days Basic', days: 10, price: 99, tagline: 'Short hunt for a field role', active: true, playProductId: 'medrep_pass_10d' },
   { id: 'p15', title: '15 Days Pro', days: 15, price: 149, tagline: 'Most chosen for MR switchers', popular: true, active: true, playProductId: 'medrep_pass_15d' },
   { id: 'p30', title: '30 Days Standard', days: 30, price: 249, tagline: 'Full month of unlocked jobs', active: true, playProductId: 'medrep_pass_30d' },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
+import { BackButton, Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
 import { Wordmark } from '../components/Logo'
 import { VacancyForm } from '../components/VacancyForm'
 import { currentUser } from '../data/auth'
@@ -64,10 +64,11 @@ export function VacancyPortal({ onExit }: { onExit: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-[100dvh] bg-slate-50">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
+          <BackButton onClick={onExit} label="Sign out of the employee portal" />
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2"><Wordmark size="text-sm" /><Badge color="green">Vacancy team</Badge></div>
             <div className="text-xs text-slate-500 truncate">{currentUser()?.email}</div>
           </div>

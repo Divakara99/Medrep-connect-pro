@@ -1,3 +1,4 @@
+import { rewardedErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
 import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID } from './adConfig'
 
@@ -111,11 +112,8 @@ export async function showRewardedUnlock(userId: string, jobId: string): Promise
     await AdMob.showRewardVideoAd()
     return { ok: true }
   } catch (cause) {
-    return {
-      ok: false,
-      error: cause instanceof Error && cause.message
-        ? cause.message
-        : 'The video could not be played. Check your connection and try again.',
-    }
+    // AdMob's "no fill" until the app is reviewed is not a connection problem;
+    // storeMessages.ts words it so the user knows the unlock is still free.
+    return { ok: false, error: rewardedErrorMessage(cause).message }
   }
 }

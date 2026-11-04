@@ -29,7 +29,7 @@ import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
 import { bannerAllowedOnTab, rewardedUnlockOffered } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
-import { showRewardedUnlock } from './data/ads'
+import { showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
@@ -329,7 +329,19 @@ export default function App() {
     if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: job.companyUnlocked === true })) return
     setUnlockingJobId(job.id)
     try {
-      const outcome = await showRewardedUnlock(user.id, job.id)
+      // The Play/AdMob video UI can be dismissed without ever calling back, and
+      // a rewarded unit with no inventory can stall while it loads. Either way
+      // the button must not stay on "Checking your unlock…" — after a minute the
+      // attempt is abandoned with a message the user can act on.
+      const outcome = await Promise.race<RewardedOutcome>([
+        showRewardedUnlock(user.id, job.id),
+        new Promise<RewardedOutcome>((resolve) => {
+          window.setTimeout(() => resolve({
+            ok: false,
+            error: 'The video did not start or finish in time. Please try again.',
+          }), 60_000)
+        }),
+      ])
       if (!outcome.ok) {
         showToast(outcome.error)
         return
@@ -399,11 +411,41 @@ export default function App() {
   }
 
   if (view === 'loading') {
-    return <main role="status" aria-live="polite" className="min-h-screen bg-brand-50 grid place-items-center px-6 text-center text-brand-900 font-bold text-lg">
-      <div>Loading your account…
-        {authTimedOut && <div className="mt-3 text-base">Sign-in is taking longer than expected. Check your connection, then <button className="underline" onClick={() => window.location.reload()}>retry</button>.</div>}
-      </div>
-    </main>
+    // A dead connection must not look like a frozen app: after ten seconds the
+    // spinner becomes a card with a way out, instead of "Loading your account…"
+    // spinning forever.
+    return (
+      <main role="status" aria-live="polite" className="grid min-h-[100dvh] place-items-center bg-brand-50 px-6 text-center text-brand-900">
+        {authTimedOut ? (
+          <div className="w-full max-w-sm space-y-3">
+            <div className="text-4xl" aria-hidden="true">📶</div>
+            <div className="text-xl font-extrabold">Can't reach MedRep Pro</div>
+            <p className="text-base font-medium text-slate-700">
+              Your connection looks down, or the server is busy. Nothing on your account has changed.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="w-full rounded-xl bg-brand-600 px-4 py-3 text-base font-bold text-white transition hover:bg-brand-700 active:scale-95"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => setView(portalLoginView)}
+              className="w-full rounded-xl bg-white px-4 py-3 text-base font-bold text-brand-900 ring-1 ring-brand-200 transition hover:bg-brand-50 active:scale-95"
+            >
+              Go to sign in
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-lg font-bold">Loading your account…</div>
+            <div className="text-sm font-medium text-slate-600">Checking your saved session.</div>
+          </div>
+        )}
+      </main>
+    )
   }
 
   if (view === 'login') {
@@ -434,7 +476,7 @@ export default function App() {
 
   // User app
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-[100dvh] bg-slate-50">
       <TopBar
         left={
           <span className="inline-flex min-w-0">

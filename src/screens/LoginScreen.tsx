@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Input, Label } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { CreatorCredit } from '../components/CreatorCredit'
+import { HowToUseVideoButton } from '../components/HowToUse'
 import { isStaffUser, loginUser, registerUser, resetPassword, updatePassword } from '../data/auth'
 import { MIN_USER_PASSWORD_LENGTH, minimumForAccount } from '../data/passwordRules'
 import { supabase } from '../data/supabase'
@@ -102,7 +103,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-brand-50 via-white to-white flex flex-col">
+    <main className="min-h-[100dvh] bg-gradient-to-b from-brand-50 via-white to-white flex flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
           <header className="flex flex-col items-center mb-6">
@@ -218,6 +219,15 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
               )}
             </form>
           </Card>
+
+          {/*
+            Guided tour: opens the language picker first, never autoplays, and
+            starts with the founder's introduction in the chosen language.
+            Shown on the sign-in page only — never on payment or admin screens.
+          */}
+          <div className="mt-3">
+            <HowToUseVideoButton />
+          </div>
 
           <div className="mt-3 text-center">
             <a

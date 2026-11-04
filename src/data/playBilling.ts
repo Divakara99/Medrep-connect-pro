@@ -1,3 +1,4 @@
+import { billingErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
 import { supabase } from './supabase'
 import type { Plan } from './plans'
@@ -124,9 +125,10 @@ export async function buyPlanWithGooglePlay(plan: Plan, appAccountToken?: string
     }
     return { ok: true, expiresAt: typeof result.expiresAt === 'string' ? result.expiresAt : undefined }
   } catch (cause) {
-    const message = cause instanceof Error ? cause.message : 'Google Play purchase failed.'
-    if (/cancel/i.test(message)) return { ok: false, error: 'Purchase cancelled — nothing was charged.' }
-    return { ok: false, error: message }
+    // Raw Play codes ("ITEM_UNAVAILABLE", "BILLING_UNAVAILABLE", ...) mean
+    // nothing on a phone, and "check your connection" is wrong advice while the
+    // products are still in review — storeMessages.ts decides the sentence.
+    return { ok: false, error: billingErrorMessage(cause).message }
   }
 }
 

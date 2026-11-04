@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, Card, EmptyState } from '../components/ui'
+import { BackButton, Badge, Button, Card, EmptyState } from '../components/ui'
 import { useBackHandler } from '../components/useBackHandler'
 import { getCachedMyApplications, listMyApplications, type ApplicationRecord } from '../data/apply'
 
@@ -42,7 +42,7 @@ export function ApplicationsScreen({ onClose, onBrowseJobs }: { onClose: () => v
     <div className="fixed inset-0 z-40 bg-slate-50 overflow-y-auto">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="secondary" className="px-3 py-2 text-sm" onClick={onClose}>← Back</Button>
+          <BackButton onClick={onClose} label="Back to account" />
           <div className="min-w-0 flex-1">
             <div className="text-base font-extrabold text-slate-900 truncate">My applications</div>
             <div className="text-xs text-slate-600">Jobs you applied to from this account</div>

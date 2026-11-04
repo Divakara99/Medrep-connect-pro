@@ -15,7 +15,7 @@ export async function pollForCompanyUnlock(
   jobId: string,
   options: { attempts?: number; delayMs?: number; onJobs?: (jobs: Job[]) => void } = {},
 ): Promise<Job | null> {
-  const attempts = options.attempts ?? 15
+  const attempts = options.attempts ?? 10
   const delayMs = options.delayMs ?? 2000
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))

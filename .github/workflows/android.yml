@@ -73,7 +73,25 @@ jobs:
         run: npx cap sync android
       - name: Assemble debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        # On failure the compiler output is also written to the job summary, so
+        # the reason is visible on the run page without downloading the log.
+        run: |
+          set +e
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/gradle-debug.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "### Debug build failed"
+              echo '```'
+              grep -iE "error:|what went wrong|caused by|FAILED|Execution failed for task" -A 4 /tmp/gradle-debug.log | head -80
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            for line in $(grep -iE "error:|what went wrong|Execution failed for task|Caused by" /tmp/gradle-debug.log | head -6 | tr '\n' '\a'); do
+              echo "::error::$(printf '%s' "$line" | tr '\a' ' ' | cut -c1-500)"
+            done
+            tail -6 /tmp/gradle-debug.log | while IFS= read -r line; do echo "::error::$(printf '%s' "$line" | cut -c1-500)"; done
+          fi
+          exit $status
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -122,13 +140,29 @@ jobs:
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.p12"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload-keystore.p12" >> "$GITHUB_ENV"
-      - name: Build release AAB
+      - name: Build release AAB and release APK
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --no-daemon
+        run: |
+          set +e
+          ./gradlew bundleRelease assembleRelease --no-daemon 2>&1 | tee /tmp/gradle-release.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "### Release build failed"
+              echo '```'
+              grep -iE "error:|what went wrong|caused by|FAILED|Execution failed for task" -A 4 /tmp/gradle-release.log | head -80
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            for line in $(grep -iE "error:|what went wrong|Execution failed for task|Caused by" /tmp/gradle-release.log | head -6 | tr '\n' '\a'); do
+              echo "::error::$(printf '%s' "$line" | tr '\a' ' ' | cut -c1-500)"
+            done
+            tail -6 /tmp/gradle-release.log | while IFS= read -r line; do echo "::error::$(printf '%s' "$line" | cut -c1-500)"; done
+          fi
+          exit $status
       - name: Verify the AAB is signed
         working-directory: android
         run: |
@@ -148,3 +182,19 @@ jobs:
           name: medrep-pro-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 90
+      # The .aab cannot be installed directly, and R8/obfuscation only affects
+      # release builds — so ship a release-signed APK too, to verify the shipped
+      # binary on a real phone before uploading the bundle to Play.
+      - name: Verify the release APK is signed
+        working-directory: android
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          jarsigner -verify "$APK"
+          echo "Signed release APK verified: $APK"
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: medrep-pro-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30

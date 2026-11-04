@@ -29,6 +29,18 @@
 html, body, #root {
   min-height: 100%;
   height: 100%;
+  /* A drawer, a long ₹ range or a wide table must never make the whole page
+     scroll sideways on a phone. */
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/*
+ * Height helpers. `100dvh` follows the visible viewport, so the bottom bar is
+ * not hidden behind a mobile browser toolbar or the Android gesture bar.
+ */
+@supports (height: 100dvh) {
+  html, body, #root { min-height: 100dvh; }
 }
 
 body {

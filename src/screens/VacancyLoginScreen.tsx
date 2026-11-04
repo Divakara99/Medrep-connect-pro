@@ -30,7 +30,7 @@ export function VacancyLoginScreen({ onAuthed }: { onAuthed: () => void }) {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-emerald-100 via-white to-white flex flex-col">
+    <main className="min-h-[100dvh] bg-gradient-to-b from-emerald-100 via-white to-white flex flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
           <header className="flex flex-col items-center mb-6">

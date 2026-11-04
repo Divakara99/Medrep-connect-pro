@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
+import { BackButton, Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
@@ -95,6 +95,9 @@ function useCurrentTime() {
 export function AdminScreen({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState<AdminTab>('dashboard')
   const [adminMenuOpen, setAdminMenuOpen] = useState(false)
+  // The back arrow leaves the panel; signing out is irreversible for the
+  // session, so it asks first instead of logging out on a stray tap.
+  const [exitOpen, setExitOpen] = useState(false)
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
   useBackHandler(adminMenuOpen, () => setAdminMenuOpen(false))
   const [version, setVersion] = useState(0) // re-render trigger after mutations
@@ -139,11 +142,12 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50" key={version}>
+    <div className="min-h-[100dvh] bg-slate-50" key={version}>
       {/* Header */}
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
+          <BackButton onClick={() => setExitOpen(true)} label="Leave the admin panel" />
+          <div className="min-w-0 flex-1">
             <Wordmark size="text-sm" />
           </div>
           <button
@@ -161,6 +165,16 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
           </button>
         </div>
       </header>
+
+      <ConfirmDialog
+        open={exitOpen}
+        title="Leave the admin panel?"
+        message="You will be signed out of the administrator session and returned to the sign-in page. Nothing you changed is undone."
+        confirmLabel="Sign out"
+        danger
+        onConfirm={() => { setExitOpen(false); onExit() }}
+        onCancel={() => setExitOpen(false)}
+      />
 
       <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
         <AdminSearchCard requests={requests} onNavigate={navigate} />
