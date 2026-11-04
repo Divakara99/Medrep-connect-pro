@@ -29,7 +29,7 @@ import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
 import { bannerAllowedOnTab, rewardedUnlockOffered } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
-import { showRewardedUnlock } from './data/ads'
+import { showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
@@ -329,7 +329,19 @@ export default function App() {
     if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: job.companyUnlocked === true })) return
     setUnlockingJobId(job.id)
     try {
-      const outcome = await showRewardedUnlock(user.id, job.id)
+      // The Play/AdMob video UI can be dismissed without ever calling back, and
+      // a rewarded unit with no inventory can stall while it loads. Either way
+      // the button must not stay on "Checking your unlock…" — after a minute the
+      // attempt is abandoned with a message the user can act on.
+      const outcome = await Promise.race<RewardedOutcome>([
+        showRewardedUnlock(user.id, job.id),
+        new Promise<RewardedOutcome>((resolve) => {
+          window.setTimeout(() => resolve({
+            ok: false,
+            error: 'The video did not start or finish in time. Please try again.',
+          }), 60_000)
+        }),
+      ])
       if (!outcome.ok) {
         showToast(outcome.error)
         return
