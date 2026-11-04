@@ -22,9 +22,9 @@ const CREATOR_PUBLIC = `Mr. ${CREATOR.name} — ${CREATOR.role}`
 
 function planLine(): string {
   const plans = getPlans()
-  if (plans.length === 0) return 'Plans start from ₹49 (5 days) up to ₹1799 (1 year).'
+  if (plans.length === 0) return 'Plans start from ₹19 (1 day) up to ₹1799 (1 year).'
   return plans
-    .map((p) => `• ${p.title} — ₹${p.price} (${p.days} days)`)
+    .map((p) => `• ${p.title} — ₹${p.price} (${p.days === 1 ? '1 day' : `${p.days} days`})`)
     .join('\n')
 }
 

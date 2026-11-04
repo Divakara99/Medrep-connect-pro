@@ -135,7 +135,7 @@ function generateCopy(ev: EventKind): { title: string; body: string } {
       return {
         title: 'Payment confirmed — plan activated! 🎉',
         body:
-          `Great news!\n\nYour payment of ₹${ev.amount.toLocaleString('en-IN')} has been confirmed and your ${ev.planName} plan (${ev.days} days) is now ACTIVE.\n\n` +
+          `Great news!\n\nYour payment of ₹${ev.amount.toLocaleString('en-IN')} has been confirmed and your ${ev.planName} plan (${ev.days === 1 ? '1 day' : `${ev.days} days`}) is now ACTIVE.\n\n` +
           `🗓 Expiry date: ${exp}\nYou can now view company names, manager contacts, and apply to all vacancies with one tap.`,
       }
     }

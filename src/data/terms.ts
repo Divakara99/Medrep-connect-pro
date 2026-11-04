@@ -41,7 +41,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: 'Subscription plans and access',
     paragraphs: [
-      'Plans are one-time purchases for a fixed number of days (for example 5 days, 15 days, 30 days, 3 months, 6 months or 1 year). Each plan has a price in Indian rupees (INR) shown in the App.',
+      'Plans are one-time purchases for a fixed number of days (for example 1 day, 10 days, 15 days, 30 days, 3 months, 6 months or 1 year). Each plan has a price in Indian rupees (INR) shown in the App.',
       'Prices and durations are held on our server. The amount charged at checkout is the server price; the App cannot change it.',
       'Access starts only after our server has verified the payment. Plans do not renew automatically. To extend access, buy another plan.',
       'If you buy a plan while your access is still active, the new days are added to your current expiry date. If your access has expired, the new plan starts from the time of purchase.',

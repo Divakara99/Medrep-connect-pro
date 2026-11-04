@@ -160,7 +160,28 @@ try {
   assert.equal(grants.anon_read, false, 'pricing is only exposed to signed-in users')
   assert.equal(grants.user_write, false, 'only the guarded RPC may write the catalog')
 
-  console.log('billing plans SQL: catalog, admin-only pricing, checkout floor and order snapshots passed')
+  // The offline fallback catalog must describe the same passes the server sells,
+  // otherwise a failed catalog read shows a price Google Play will not charge
+  // (it once said "5 Days Trial — Rs 49" after the Rs 19 one-day pass shipped).
+  {
+    const source = await readFile(new URL('../src/data/plans.ts', import.meta.url), 'utf8')
+    const rows = [...source.matchAll(
+      /id: '([^']+)', title: '([^']+)', days: (\d+), price: (\d+), tagline: '[^']*'[^}]*?playProductId: '([^']+)'/g,
+    )].map(([, id, title, days, price, playProductId]) => ({ id, title, days: Number(days), price: Number(price), playProductId }))
+    assert.equal(rows.length, 7, 'all seven passes are represented in the fallback catalog')
+    const live = [
+      ['p5', '1 Day Trial', 1, 19, 'medrep_pass_5d'],
+      ['p10', '10 Days Basic', 10, 99, 'medrep_pass_10d'],
+      ['p15', '15 Days Pro', 15, 149, 'medrep_pass_15d'],
+      ['p30', '30 Days Standard', 30, 249, 'medrep_pass_30d'],
+      ['p90', '3 Months Premium', 90, 599, 'medrep_pass_90d'],
+      ['p180', '6 Months Elite', 180, 999, 'medrep_pass_180d'],
+      ['p365', '1 Year Ultimate', 365, 1799, 'medrep_pass_365d'],
+    ].map(([id, title, days, price, playProductId]) => ({ id, title, days, price, playProductId }))
+    assert.deepEqual(rows, live, 'FALLBACK_PLANS must match the live billing_plans catalog')
+  }
+
+  console.log('billing plans SQL: catalog, admin-only pricing, checkout floor, order snapshots and fallback prices passed')
 } finally {
   await db.close()
 }
