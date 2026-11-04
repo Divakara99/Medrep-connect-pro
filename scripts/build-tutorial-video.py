@@ -98,7 +98,7 @@ def intro_card() -> Image.Image:
     y = centered(draw, 860, "MedRep Pro", 96, (255, 255, 255), 24)
     y = centered(draw, y, "How to use the app", 56, (219, 234, 254), 60)
     centered(draw, y, "Created by M. Divakar Reddy", 38, (191, 219, 254))
-    centered(draw, H - 150, "Pharma & MR jobs across India", 34, (191, 219, 254))
+    centered(draw, H - 150, "MR, FMCG, Finance, IT & field sales jobs", 34, (191, 219, 254))
     return img
 
 
@@ -109,7 +109,7 @@ def outro_card() -> Image.Image:
     y = centered(draw, y, "Unlock company names free", 52, (219, 234, 254), 28)
     y = centered(draw, y, "Passes from Rs 19 for 1 day", 46, (191, 219, 254), 90)
     centered(draw, y, "medrepconnect.in", 48, (255, 255, 255))
-    centered(draw, H - 140, "Made in India for pharma field teams", 32, (191, 219, 254))
+    centered(draw, H - 140, "Pharma - FMCG - Finance - IT - Field sales", 32, (191, 219, 254))
     return img
 
 
@@ -219,7 +219,7 @@ def mux(video: pathlib.Path, audio: pathlib.Path, out: pathlib.Path) -> None:
 
 SCENES = [
     (intro_card, 5.0),
-    (lambda: screen_card("screenshot-1-home.png", 1, "Find live MR & pharma jobs"), 9.0),
+    (lambda: screen_card("screenshot-1-home.png", 1, "MR, FMCG, IT & more jobs"), 9.0),
     (lambda: screen_card("screenshot-2-unlock.png", 2, "Unlock company names free"), 9.0),
     (lambda: screen_card("screenshot-3-details.png", 3, "See every job detail"), 9.0),
     (lambda: screen_card("screenshot-4-plans.png", 4, "Choose a pass for manager contacts"), 9.0),
