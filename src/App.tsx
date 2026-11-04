@@ -399,11 +399,41 @@ export default function App() {
   }
 
   if (view === 'loading') {
-    return <main role="status" aria-live="polite" className="min-h-[100dvh] bg-brand-50 grid place-items-center px-6 text-center text-brand-900 font-bold text-lg">
-      <div>Loading your account…
-        {authTimedOut && <div className="mt-3 text-base">Sign-in is taking longer than expected. Check your connection, then <button className="underline" onClick={() => window.location.reload()}>retry</button>.</div>}
-      </div>
-    </main>
+    // A dead connection must not look like a frozen app: after ten seconds the
+    // spinner becomes a card with a way out, instead of "Loading your account…"
+    // spinning forever.
+    return (
+      <main role="status" aria-live="polite" className="grid min-h-[100dvh] place-items-center bg-brand-50 px-6 text-center text-brand-900">
+        {authTimedOut ? (
+          <div className="w-full max-w-sm space-y-3">
+            <div className="text-4xl" aria-hidden="true">📶</div>
+            <div className="text-xl font-extrabold">Can't reach MedRep Pro</div>
+            <p className="text-base font-medium text-slate-700">
+              Your connection looks down, or the server is busy. Nothing on your account has changed.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="w-full rounded-xl bg-brand-600 px-4 py-3 text-base font-bold text-white transition hover:bg-brand-700 active:scale-95"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={() => setView(portalLoginView)}
+              className="w-full rounded-xl bg-white px-4 py-3 text-base font-bold text-brand-900 ring-1 ring-brand-200 transition hover:bg-brand-50 active:scale-95"
+            >
+              Go to sign in
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-lg font-bold">Loading your account…</div>
+            <div className="text-sm font-medium text-slate-600">Checking your saved session.</div>
+          </div>
+        )}
+      </main>
+    )
   }
 
   if (view === 'login') {
