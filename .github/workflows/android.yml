@@ -86,6 +86,10 @@ jobs:
               grep -iE "error:|what went wrong|caused by|FAILED|Execution failed for task" -A 4 /tmp/gradle-debug.log | head -80
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            for line in $(grep -iE "error:|what went wrong|Execution failed for task|Caused by" /tmp/gradle-debug.log | head -6 | tr '\n' '\a'); do
+              echo "::error::$(printf '%s' "$line" | tr '\a' ' ' | cut -c1-500)"
+            done
+            tail -6 /tmp/gradle-debug.log | while IFS= read -r line; do echo "::error::$(printf '%s' "$line" | cut -c1-500)"; done
           fi
           exit $status
       - name: Upload debug APK
@@ -153,6 +157,10 @@ jobs:
               grep -iE "error:|what went wrong|caused by|FAILED|Execution failed for task" -A 4 /tmp/gradle-release.log | head -80
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            for line in $(grep -iE "error:|what went wrong|Execution failed for task|Caused by" /tmp/gradle-release.log | head -6 | tr '\n' '\a'); do
+              echo "::error::$(printf '%s' "$line" | tr '\a' ' ' | cut -c1-500)"
+            done
+            tail -6 /tmp/gradle-release.log | while IFS= read -r line; do echo "::error::$(printf '%s' "$line" | cut -c1-500)"; done
           fi
           exit $status
       - name: Verify the AAB is signed
