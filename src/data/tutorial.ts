@@ -57,6 +57,29 @@ export type TutorialLanguage = {
  */
 export const TUTORIAL_VIDEO_CONFIG_URL = 'https://medrepconnect.in/tutorial/videos.json'
 
+/**
+ * The walkthrough that ships inside the app: 44 s, 1080x1920, built from this
+ * project's own screens by scripts/build-tutorial-video.py. It is SILENT on
+ * purpose — narration must be the founder's recorded voice, never synthetic.
+ * Bundled (not streamed) so it also works offline and adds < 1 MB to the APK.
+ */
+export const TUTORIAL_DEFAULT_VIDEO = '/tutorial/walkthrough.mp4'
+
+/**
+ * Which video a language should play.
+ *   shared: true  → the bundled silent walkthrough (no recording for this
+ *                   language yet), so the UI can say the spoken version is
+ *                   still being recorded.
+ *   shared: false → a real per-language recording from videos.json / videoUrl.
+ */
+export function resolveTutorialVideo(
+  language: TutorialLanguage,
+  videos: TutorialVideoMap,
+): { url: string; shared: boolean } {
+  const specific = videos[language.code] ?? language.videoUrl
+  return specific ? { url: specific, shared: false } : { url: TUTORIAL_DEFAULT_VIDEO, shared: true }
+}
+
 /** A language → link map, e.g. { en: 'https://…', hi: 'https://…' }. */
 export type TutorialVideoMap = Partial<Record<TutorialLanguageCode, string>>
 

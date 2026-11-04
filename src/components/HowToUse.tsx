@@ -5,6 +5,7 @@ import {
   TUTORIAL_VIDEO_CONFIG_URL,
   isDirectVideoFile,
   preferredTutorialLanguage,
+  resolveTutorialVideo,
   sanitizeVideos,
   toEmbeddableUrl,
   type TutorialLanguage,
@@ -66,8 +67,8 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
     }
   }, [open])
 
-  function videoFor(lang: TutorialLanguage): string | undefined {
-    return videos[lang.code] ?? lang.videoUrl
+  function videoFor(lang: TutorialLanguage) {
+    return resolveTutorialVideo(lang, videos)
   }
 
   function openTour() {
@@ -81,8 +82,8 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
     setLanguage(null)
   }
 
-  const url = language ? videoFor(language) : undefined
-  const anyVideo = TUTORIAL_LANGUAGES.some((lang) => Boolean(videoFor(lang)))
+  const chosen = language ? videoFor(language) : undefined
+  const url = chosen?.url
 
   return (
     <>
@@ -99,7 +100,7 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {TUTORIAL_LANGUAGES.map((lang) => {
-                const ready = Boolean(videoFor(lang))
+                const recorded = !videoFor(lang).shared
                 const isSuggested = lang.code === suggested.code
                 return (
                   <button
@@ -116,21 +117,16 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
                     </span>
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                        ready ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500'
+                        recorded ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
                       }`}
                     >
-                      {ready ? 'Video' : 'Soon'}
+                      {recorded ? 'Video' : 'Walkthrough'}
                     </span>
                   </button>
                 )
               })}
             </div>
             {loadingVideos && <p className="text-xs text-slate-500">Checking for the latest videos…</p>}
-            {!anyVideo && !loadingVideos && (
-              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
-                Videos are being recorded in each language. For now the tour shows the written steps below.
-              </p>
-            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -157,16 +153,14 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
                   />
                 </div>
               )
-            ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <h4 className="text-base font-bold text-slate-900">The {language.english} video is being recorded</h4>
-                <p className="mt-1 text-sm leading-relaxed text-slate-700">
-                  Until it is ready, here is the same walkthrough in words — start with the founder's introduction.
-                </p>
-              </div>
+            ) : null}
+            {chosen?.shared && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
+                Silent walkthrough of the app. The spoken {language.english} version is being recorded — the steps are written out below.
+              </p>
             )}
 
-            <details className="rounded-xl border border-slate-200 bg-white" open={!url}>
+            <details className="rounded-xl border border-slate-200 bg-white" open={Boolean(chosen?.shared)}>
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-slate-800">
                 Steps in this video
               </summary>

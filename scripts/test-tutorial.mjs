@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { existsSync, statSync } from 'node:fs'
 import {
+  TUTORIAL_DEFAULT_VIDEO,
   TUTORIAL_LANGUAGES,
   TUTORIAL_VIDEO_CONFIG_URL,
   isDirectVideoFile,
   preferredTutorialLanguage,
+  resolveTutorialVideo,
   sanitizeVideos,
   toEmbeddableUrl,
 } from '../src/data/tutorial.ts'
@@ -108,4 +111,24 @@ assert.equal(
   'direct files are left alone',
 )
 
-console.log('tutorial tour: 7 languages, founder intro first, real-video links, link safety and language fallback passed')
+// The bundled walkthrough must ship with the app: it is what plays before any
+// per-language recording exists (silent, built from this project's screens).
+assert.equal(TUTORIAL_DEFAULT_VIDEO, '/tutorial/walkthrough.mp4')
+const walkthrough = new URL('../public/tutorial/walkthrough.mp4', import.meta.url)
+assert.ok(existsSync(walkthrough), 'public/tutorial/walkthrough.mp4 is committed')
+const walkthroughMb = statSync(walkthrough).size / (1024 * 1024)
+assert.ok(walkthroughMb > 0.05 && walkthroughMb < 12, `walkthrough size is sane (${walkthroughMb.toFixed(1)} MB)`)
+
+const hindi = TUTORIAL_LANGUAGES.find((l) => l.code === 'hi')
+assert.equal(resolveTutorialVideo(hindi, {}).shared, true, 'no recording → shared walkthrough')
+assert.equal(resolveTutorialVideo(hindi, {}).url, TUTORIAL_DEFAULT_VIDEO)
+const recorded = resolveTutorialVideo(hindi, { hi: 'https://youtu.be/abc12345678' })
+assert.equal(recorded.shared, false, 'a published recording wins')
+
+// Every language resolves to something playable.
+for (const lang of TUTORIAL_LANGUAGES) {
+  const resolved = resolveTutorialVideo(lang, {})
+  assert.match(resolved.url, /^(\/|https?:\/\/)/, `${lang.code}: resolves to a playable URL`)
+}
+
+console.log('tutorial tour: 7 languages, founder intro first, bundled silent walkthrough, real-video links and language fallback passed')

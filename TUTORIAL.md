@@ -4,8 +4,45 @@ The sign-in page has one button: **How to use the app**. It never autoplays. It
 opens a language picker, and only after the user picks a language does the tour
 play — starting with the founder's introduction.
 
-**Narration is a real recorded video, never a synthetic voice.** A language whose
-recording is not ready yet shows the written steps instead of computer speech.
+**No synthetic voice anywhere.** Every language plays a video:
+
+- the **built-in walkthrough** (`public/tutorial/walkthrough.mp4`, 44 s, silent,
+  generated from this project's own screens) until a spoken recording exists —
+  the written steps are shown underneath it in the chosen language;
+- the **real recorded video** for a language once its link is published.
+
+The built-in walkthrough is silent on purpose: narration must be a human voice.
+
+## The built-in walkthrough (already in the app)
+
+`public/tutorial/walkthrough.mp4` is generated from the repo's own artwork — 44 s,
+1080×1920, 24 fps, ~0.95 MB, bundled into the APK so it works offline:
+
+| Scene | Source |
+|---|---|
+| Intro card | `store-listing/icon-512.png` + founder credit |
+| Step 1 — find live MR & pharma jobs | `store-listing/screenshot-1-home.png` |
+| Step 2 — unlock company names free | `screenshot-2-unlock.png` |
+| Step 3 — see every job detail | `screenshot-3-details.png` |
+| Step 4 — choose a pass | `screenshot-4-plans.png` |
+| Outro — apply in one tap, medrepconnect.in | brand gradient |
+
+Regenerate it after any artwork change:
+
+```bash
+python3 -m venv .videnv && .videnv/bin/pip install imageio-ffmpeg pillow
+.videnv/bin/python scripts/build-tutorial-video.py
+```
+
+Add a spoken version without re-rendering the picture — record your voice for the
+same beats, then mux:
+
+```bash
+ffmpeg -i public/tutorial/walkthrough.mp4 -i public/tutorial/en.mp3 \
+       -c:v copy -c:a aac -b:a 128k -shortest public/tutorial/en.mp4
+```
+
+Then publish `en.mp4` in `videos.json` (below) and the app plays that instead.
 
 ## How a language becomes "live"
 
@@ -19,11 +56,13 @@ recording is not ready yet shows the written steps instead of computer speech.
 
 ```json
 {
-  "en": "https://go.screenpal.com/watch/cOXflBnyS1e",
-  "hi": "https://youtu.be/XXXXXXXXXXX",
-  "te": "https://medrepconnect.in/tutorial/te.mp4"
+  "hi": "https://medrepconnect.in/tutorial/hi.mp4",
+  "te": "https://youtu.be/XXXXXXXXXXX"
 }
 ```
+
+(Leave a language out and it plays the bundled silent walkthrough plus the
+written {language} steps.)
 
 Language codes: `en` English · `hi` Hindi · `te` Telugu · `ta` Tamil ·
 `kn` Kannada · `ml` Malayalam · `mr` Marathi.
