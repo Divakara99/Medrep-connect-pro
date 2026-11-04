@@ -1,11 +1,14 @@
 # Store screenshots — capture on a phone
 
-The four `screenshot-*.png` files in this folder are **layout templates** made by
-`npm run store:assets`. Google Play expects screenshots of the real app, so
-replace them with phone captures before the next submission.
+The four `screenshot-*.png` files in this folder are rendered from the app's own
+screens by `npm run store:screenshots:render` (1080x1920, opaque, the live
+catalogue prices). They show the real layout, wording and prices, but they are
+**renders, not OS captures** — this build machine has no browser and no route to
+Supabase, so a signed-in phone cannot be photographed here.
 
-They cannot be produced from the build machine: the app needs a signed-in
-account, and the build environment has no route to Supabase.
+Real captures always beat renders and remove any doubt during review. Replace
+the four files with the phone shots below whenever you have two minutes; keep
+the same names and run `npm run store:screenshots` to check them first.
 
 ## What to capture (in this order)
 
