@@ -103,7 +103,7 @@ export function JobDetail({
   const hqItems = job ? parseHeadquarters(job.hq) : []
 
   return (
-    <Modal open={!!job} onClose={onClose} title={job?.title}>
+    <Modal open={!!job} onClose={onClose} onBack={onClose} title={job?.title}>
       {job && (
         <div className="space-y-4">
           <div className="flex items-start gap-3">

@@ -399,7 +399,7 @@ export default function App() {
   }
 
   if (view === 'loading') {
-    return <main role="status" aria-live="polite" className="min-h-screen bg-brand-50 grid place-items-center px-6 text-center text-brand-900 font-bold text-lg">
+    return <main role="status" aria-live="polite" className="min-h-[100dvh] bg-brand-50 grid place-items-center px-6 text-center text-brand-900 font-bold text-lg">
       <div>Loading your account…
         {authTimedOut && <div className="mt-3 text-base">Sign-in is taking longer than expected. Check your connection, then <button className="underline" onClick={() => window.location.reload()}>retry</button>.</div>}
       </div>
@@ -434,7 +434,7 @@ export default function App() {
 
   // User app
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-[100dvh] bg-slate-50">
       <TopBar
         left={
           <span className="inline-flex min-w-0">

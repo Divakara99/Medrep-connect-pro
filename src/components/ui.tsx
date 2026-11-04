@@ -76,7 +76,28 @@ export function Badge({ children, color = 'slate' }: { children: ReactNode; colo
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${map[color]}`}>{children}</span>
 }
 
-export function Modal({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+/**
+ * The one back control used on every standalone page, so "how do I get out of
+ * this screen" always looks the same and sits in the same corner.
+ */
+export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="inline-flex items-center gap-1.5 shrink-0 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+      Back
+    </button>
+  )
+}
+
+export function Modal({ open, onClose, children, title, onBack }: { open: boolean; onClose: () => void; children: ReactNode; title?: string; onBack?: () => void }) {
   // The phone's back button closes the open sheet (page → sheet → page) instead
   // of leaving the app.
   useBackHandler(open, onClose)
@@ -85,9 +106,27 @@ export function Modal({ open, onClose, children, title }: { open: boolean; onClo
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4 animate-fade-in" onClick={onClose}>
       <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
-            <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-            <button className="text-slate-400 hover:text-slate-700 text-xl leading-none" onClick={onClose}>×</button>
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                aria-label="Back"
+                title="Back"
+                className="-ml-2 grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-600 transition hover:bg-slate-100"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+            )}
+            <h3 className="min-w-0 flex-1 truncate text-lg font-bold text-slate-900">{title}</h3>
+            <button
+              type="button"
+              aria-label="Close"
+              className="shrink-0 text-slate-400 hover:text-slate-700 text-xl leading-none"
+              onClick={onClose}
+            >×</button>
           </div>
         )}
         <div className="p-5">{children}</div>

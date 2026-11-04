@@ -13,6 +13,15 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!--
+          Android 15+ draws the app edge-to-edge. MainActivity pads the content
+          view by the system-bar insets; these two attributes only control the
+          colour of the icons on the white background behind them, so the clock
+          and battery stay legible instead of white-on-white.
+        -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">@android:color/white</item>
     </style>
 
 
