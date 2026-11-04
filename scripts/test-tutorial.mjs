@@ -1,17 +1,22 @@
 import assert from 'node:assert/strict'
 import {
   TUTORIAL_LANGUAGES,
-  TUTORIAL_SLIDE_MS,
+  TUTORIAL_VIDEO_CONFIG_URL,
+  isDirectVideoFile,
   preferredTutorialLanguage,
+  sanitizeVideos,
+  toEmbeddableUrl,
 } from '../src/data/tutorial.ts'
 
 /**
  * "How to use the app" tour (src/data/tutorial.ts + HowToUse.tsx).
  *
- * The product rule: the button asks for a language FIRST, then the tour plays in
- * that language, and the founder's introduction is always step one. These checks
- * keep every translation complete and speakable, so adding a language can never
- * ship a half-filled tour that reads English text with a Hindi voice.
+ * Product rules:
+ *   - the button asks for a language FIRST, then the tour plays in it;
+ *   - the founder's introduction is always step one;
+ *   - narration is a REAL recorded video per language — never a synthetic voice.
+ *     A language without a recording shows the written steps instead, so every
+ *     translation must be complete and readable on its own.
  */
 
 const EXPECTED = ['en', 'hi', 'te', 'ta', 'kn', 'ml', 'mr']
@@ -31,9 +36,9 @@ for (const lang of TUTORIAL_LANGUAGES) {
   assert.ok(!seenLabels.has(lang.label.toLowerCase()), `${lang.code}: label is not duplicated`)
   seenLabels.add(lang.label.toLowerCase())
 
-  // The speech engine receives this exact tag; a wrong tag means silence.
-  assert.match(lang.voice, /^[a-z]{2}-IN$/, `${lang.code}: voice tag is <lang>-IN`)
-  assert.equal(lang.voice.split('-')[0], lang.code, `${lang.code}: voice tag matches the code`)
+  // Used as the video's lang attribute (captions/translation prompts).
+  assert.match(lang.locale, /^[a-z]{2}-IN$/, `${lang.code}: locale is <lang>-IN`)
+  assert.equal(lang.locale.split('-')[0], lang.code, `${lang.code}: locale matches the code`)
 
   // Step 1 is the founder's introduction, then the five how-to steps.
   assert.equal(lang.slides.length, 6, `${lang.code}: founder intro + 5 steps`)
@@ -51,14 +56,23 @@ for (const lang of TUTORIAL_LANGUAGES) {
     bodies.add(body)
   }
 
-  // Optional recorded media must be an absolute site path so the WebView can
-  // load it from the bundled /public folder.
-  if (lang.videoUrl) assert.match(lang.videoUrl, /^\//, `${lang.code}: videoUrl starts with /`)
-  if (lang.audioUrl) assert.match(lang.audioUrl, /^\//, `${lang.code}: audioUrl starts with /`)
+  // A baked-in link is optional (links normally come from videos.json), but if
+  // present it must be a real http(s) URL or a bundled path.
+  if (lang.videoUrl) {
+    assert.match(lang.videoUrl, /^(https?:\/\/|\/)/, `${lang.code}: videoUrl is http(s) or bundled`)
+  }
 }
 
-// Slide pacing stays in a human range (8–15 s) — too fast is unreadable.
-assert.ok(TUTORIAL_SLIDE_MS >= 8000 && TUTORIAL_SLIDE_MS <= 15000, 'slide pacing is reasonable')
+// Where finished recordings are published; must stay on the app's own domain so
+// the APK never depends on a third-party host for its configuration.
+assert.match(TUTORIAL_VIDEO_CONFIG_URL, /^https:\/\/[^/]+\/tutorial\/videos\.json$/)
+
+// Direct files play in a <video>; everything else is embedded in an iframe.
+assert.equal(isDirectVideoFile('https://medrepconnect.in/tutorial/en.mp4'), true)
+assert.equal(isDirectVideoFile('https://medrepconnect.in/tutorial/te.mp4?t=3'), true)
+assert.equal(isDirectVideoFile('https://medrepconnect.in/tutorial/kn.WEBM'), true)
+assert.equal(isDirectVideoFile('https://go.screenpal.com/player/cOXflBnyS1e'), false)
+assert.equal(isDirectVideoFile('https://youtu.be/abc123'), false)
 
 // Device-language resolution: honour a known language, fall back to English.
 assert.equal(preferredTutorialLanguage('hi-IN').code, 'hi')
@@ -68,4 +82,30 @@ assert.equal(preferredTutorialLanguage('fr-FR').code, 'en', 'unknown device lang
 assert.equal(preferredTutorialLanguage('').code, 'en', 'empty locale → English')
 assert.equal(preferredTutorialLanguage(undefined).code, 'en', 'missing locale → English')
 
-console.log('tutorial tour: 7 languages, founder intro first, speakable pacing and language fallback passed')
+// videos.json is fetched at runtime, so it is treated as untrusted input.
+assert.deepEqual(sanitizeVideos(null), {}, 'null config → no videos')
+assert.deepEqual(sanitizeVideos('https://evil.example/x.mp4'), {}, 'string config → ignored')
+assert.deepEqual(
+  sanitizeVideos({ en: ' https://go.screenpal.com/watch/cOXflBnyS1e ', hi: 'javascript:alert(1)', xx: 'https://x.example/a.mp4' }),
+  { en: 'https://go.screenpal.com/watch/cOXflBnyS1e' },
+  'only http(s) links for shipped languages survive (javascript: and unknown codes dropped)',
+)
+
+// Shared links are normalised to something embeddable.
+assert.equal(
+  toEmbeddableUrl('https://go.screenpal.com/watch/cOXflBnyS1e'),
+  'https://go.screenpal.com/player/cOXflBnyS1e',
+  'ScreenPal watch link → player link',
+)
+assert.equal(toEmbeddableUrl('https://youtu.be/dQw4w9WgXcQ'), 'https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1')
+assert.equal(
+  toEmbeddableUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
+  'https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1',
+)
+assert.equal(
+  toEmbeddableUrl('https://medrepconnect.in/tutorial/en.mp4'),
+  'https://medrepconnect.in/tutorial/en.mp4',
+  'direct files are left alone',
+)
+
+console.log('tutorial tour: 7 languages, founder intro first, real-video links, link safety and language fallback passed')

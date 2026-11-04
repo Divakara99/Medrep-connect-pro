@@ -1,78 +1,98 @@
-# "How to use the app" tour — languages, voice and (future) video
+# "How to use the app" — recorded video tour, one per language
 
 The sign-in page has one button: **How to use the app**. It never autoplays. It
 opens a language picker, and only after the user picks a language does the tour
-play — starting with the founder's introduction, then the five usage steps.
+play — starting with the founder's introduction.
 
-Code:
+**Narration is a real recorded video, never a synthetic voice.** A language whose
+recording is not ready yet shows the written steps instead of computer speech.
+
+## How a language becomes "live"
+
+1. **Record** the walkthrough in that language (spec below) — a screen recording
+   with your own voice, like the ScreenPal reference
+   `https://go.screenpal.com/watch/cOXflBnyS1e` (1:39, screen + voice).
+2. **Upload** it anywhere embeddable: ScreenPal, unlisted YouTube, or as an MP4
+   on the website at `https://medrepconnect.in/tutorial/<code>.mp4`.
+3. **Publish the link** in `public/tutorial/videos.json` (live at
+   `https://medrepconnect.in/tutorial/videos.json`):
+
+```json
+{
+  "en": "https://go.screenpal.com/watch/cOXflBnyS1e",
+  "hi": "https://youtu.be/XXXXXXXXXXX",
+  "te": "https://medrepconnect.in/tutorial/te.mp4"
+}
+```
+
+Language codes: `en` English · `hi` Hindi · `te` Telugu · `ta` Tamil ·
+`kn` Kannada · `ml` Malayalam · `mr` Marathi.
+
+4. Commit that one file. Netlify redeploys in ~2 minutes, and **every installed
+   app picks it up with no Play release** — the app reads this file each time the
+   tour opens. Languages without a link keep showing the written steps.
+
+The picker shows a **Video** badge for languages that have a link, **Soon** for
+the rest. Links are validated: only `http(s)` URLs for the seven codes above are
+accepted; `javascript:` and unknown keys are dropped.
+
+An MP4/WebM/MOV link plays in the phone's own video player. ScreenPal, YouTube
+and Vimeo links are embedded in their player (share links like `youtu.be/ID` and
+`go.screenpal.com/watch/ID` are converted automatically).
+
+## Recording spec
+
+| Item | Value |
+|---|---|
+| Length | 60–120 s (the reference is 1:39) |
+| Orientation | **Portrait 1080×1920** if recorded on a phone; 1920×1080 is fine for a desktop screen recording |
+| Format | MP4 (H.264) or WebM; ScreenPal/YouTube links avoid file handling entirely |
+| Voice | **Your own voice**, in that language — no text-to-speech, no AI dubbing |
+| Audio | Phone-mic quality is enough; speak slowly, no background music |
+| Size | Under 100 MB if uploading an MP4 to the website |
+| Subtitles | Not required — the same words appear under the player as "Steps in this video" |
+
+If you upload MP4s to `public/tutorial/`, keep in mind they deploy with the
+website **and** would otherwise be bundled into the APK. Cap sync copies `dist/`,
+so before shipping an app build strip them (the app streams from the website
+instead):
+
+```bash
+rm -f android/app/src/main/assets/public/tutorial/*.mp4
+```
+
+## Shot list / script
+
+Each language has six scripted beats in `src/data/tutorial.ts`. Read them in
+order — they are also what the viewer sees under the player.
+
+1. **Founder introduction** — "Namaste, I am M Divakar Reddy, founder of MedRep
+   Pro…" (keep this framing identical in every language)
+2. **Create your free account** — name, email, password of 6+ characters
+3. **Find the vacancy** — Home, pinned urgent jobs first, search and filters
+4. **Unlock the company name free** — "Watch video to unlock company name", one
+   video, permanent, no daily limit
+5. **Plans and one-time passes** — manager name/email/phone for subscribers;
+   ₹19 for 1 day → ₹1799 for 1 year through Google Play; nothing auto-renews
+6. **Apply in one tap** — profile + resume once, then Apply by email or WhatsApp,
+   always review before sending
+
+## Code
 
 | File | What it holds |
 |---|---|
-| `src/data/tutorial.ts` | Languages, spoken text per slide, voice tags, optional media paths |
-| `src/components/HowToUse.tsx` | The button, language picker, player and narration |
-| `scripts/test-tutorial.mjs` | Guards completeness, pacing and language fallback |
-
-## Languages shipped today (7)
-
-English, हिन्दी (Hindi), తెలుగు (Telugu), தமிழ் (Tamil), ಕನ್ನಡ (Kannada),
-മലയാളം (Malayalam), मराठी (Marathi).
-
-Each language has 6 slides: founder introduction + create account, find a
-vacancy, unlock the company name free, subscribe for manager contacts, apply in
-one tap.
-
-### Adding a language
-
-1. Add one object to `TUTORIAL_LANGUAGES` in `src/data/tutorial.ts` with `code`,
-   `label` (native), `english`, `voice` (`<code>-IN`) and 6 slides.
-2. Add the code to `EXPECTED` in `scripts/test-tutorial.mjs`.
-3. `npm test` — the test fails if a slide is empty, duplicated, too long for
-   one slide, or if the voice tag does not match the language.
-
-The picker, narration and fallback all read from that list; nothing else changes.
-
-## How the voice works
-
-Narration uses the phone's own speech engine (`speechSynthesis`), so:
-
-- 0 bytes added to the APK, no network, works offline;
-- quality depends on the device's Google TTS voices;
-- if a device has no voice for the chosen language, the tour stays silent and
-  shows the written steps (with a short note saying so).
-
-That is the launch behaviour. Two upgrades exist without touching the player:
-
-### Upgrade 1 — recorded voice-over per language
-
-Record the slide text, save as MP3, drop it in `public/tutorial/<code>.mp3`,
-then set `audioUrl: '/tutorial/<code>.mp3'` on that language. The player prefers
-the recording and keeps the slides as captions.
-
-### Upgrade 2 — real video per language
-
-Export a 16:9 or 9:16 MP4 (≤ 20 MB is plenty), save it in
-`public/tutorial/<code>.mp4`, set `videoUrl: '/tutorial/<code>.mp4'`. The player
-then shows a normal `<video>` player with controls, and the slides are skipped
-for that language. Files in `public/` are bundled into the APK, so the video
-plays offline too.
-
-Recommended video structure (matches the slides):
-
-1. **0:00–0:12** Founder introduction — "Namaste, I am M Divakar Reddy, founder
-   of MedRep Pro…"
-2. **0:12–0:25** Create your free account (name, email, password 6+)
-3. **0:25–0:40** Find the vacancy (pinned first, search and filters)
-4. **0:40–0:55** Unlock the company name free by watching a video
-5. **0:55–1:15** Plans and a one-time pass (₹19 for a day → ₹1799 for a year)
-6. **1:15–1:30** Apply in one tap, and review before sending
-
-Keep the founder segment identical across languages (same framing, same order)
-so the tour feels like one app in every language.
+| `src/data/tutorial.ts` | Languages, script text, video link resolution and link safety |
+| `src/components/HowToUse.tsx` | Button, language picker, video/iframe player, written fallback |
+| `public/tutorial/videos.json` | The live link map (edit this to publish a recording) |
+| `scripts/test-tutorial.mjs` | Guards script completeness, link safety and language fallback |
 
 ## Rules that must not regress
 
-- The button **must not** play anything before a language is chosen.
-- The founder's introduction is **always** the first slide.
+- No synthetic voice anywhere in the tour — a missing video means written steps.
+- The button plays nothing before a language is chosen.
+- The founder's introduction is always the first thing in the video and the first
+  written step.
 - The tour appears on the **sign-in page only** — never on payment, admin or
   vacancy-team screens.
-- Closing the sheet always stops the narration.
+- A recording must be added to `videos.json`, not hard-coded, so fixing or
+  re-shooting a video never needs a Play release.

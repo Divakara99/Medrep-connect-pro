@@ -2,51 +2,30 @@ import { useEffect, useState } from 'react'
 import { Button, Modal } from './ui'
 import {
   TUTORIAL_LANGUAGES,
-  TUTORIAL_SLIDE_MS,
+  TUTORIAL_VIDEO_CONFIG_URL,
+  isDirectVideoFile,
   preferredTutorialLanguage,
+  sanitizeVideos,
+  toEmbeddableUrl,
   type TutorialLanguage,
+  type TutorialVideoMap,
 } from '../data/tutorial'
 
 /**
  * "How to use the app" — the guided tour behind the button on the sign-in page.
  *
- * Flow (deliberately, per the product decision):
- *   1. The button never plays anything by itself — it opens a language choice.
- *   2. After the user picks a language, the tour plays in that language,
- *      starting with the founder's introduction.
+ * Flow (product decision):
+ *   1. The button plays nothing by itself — it opens a language choice.
+ *   2. After a language is picked, the tour plays in that language, and the
+ *      founder's introduction is the first thing the viewer sees.
  *
- * Narration prefers, in order:
- *   a recorded video for that language (lang.videoUrl),
- *   a recorded voice-over (lang.audioUrl) or the device's speech engine,
- * and always shows the written steps so a silent device loses nothing.
+ * The narration is a REAL recorded video per language. There is no synthetic
+ * voice anywhere in this app: a language whose recording is not ready yet shows
+ * the written steps instead of computer speech.
+ *
+ * Video links are read from /tutorial/videos.json on the website every time the
+ * sheet opens, so a finished recording goes live without a Play release.
  */
-
-const speechAvailable = () =>
-  typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window
-
-function stopSpeaking() {
-  if (!speechAvailable()) return
-  try {
-    window.speechSynthesis.cancel()
-  } catch {
-    // A cancelled queue is not an error worth surfacing.
-  }
-}
-
-function speak(text: string, lang: string): boolean {
-  if (!speechAvailable()) return false
-  try {
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = lang
-    // Slightly slower than default: phone speakers + unfamiliar accents.
-    utterance.rate = 0.95
-    window.speechSynthesis.speak(utterance)
-    return true
-  } catch {
-    return false
-  }
-}
 
 function PlayIcon() {
   return (
@@ -59,61 +38,51 @@ function PlayIcon() {
 export function HowToUseVideoButton({ className = '' }: { className?: string }) {
   const [open, setOpen] = useState(false)
   const [language, setLanguage] = useState<TutorialLanguage | null>(null)
-  const [index, setIndex] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  // Capability of the device, not state to synchronise: read it once.
-  const [voiceReady] = useState(speechAvailable)
+  // Links published on the website win over anything baked into the app.
+  const [videos, setVideos] = useState<TutorialVideoMap>({})
+  const [loadingVideos, setLoadingVideos] = useState(false)
 
-  // Pick the device language as the highlighted suggestion, without deciding
-  // for the user: they still have to tap a language to start.
+  // Suggested from the phone's language, but the user still chooses: nothing
+  // plays until they tap a language.
   const suggested = preferredTutorialLanguage()
 
-  // Closing must always kill the narration queue, otherwise the voice keeps
-  // reading after the sheet is gone.
-  function closeTour() {
-    stopSpeaking()
-    setOpen(false)
-    setLanguage(null)
-    setIndex(0)
-    setPlaying(false)
+  useEffect(() => {
+    if (!open) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 4000)
+    fetch(TUTORIAL_VIDEO_CONFIG_URL, { signal: controller.signal, cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : {}))
+      .then((json) => setVideos(sanitizeVideos(json)))
+      .catch(() => {
+        // Offline or the file is missing: the app's own links still work.
+      })
+      .finally(() => {
+        window.clearTimeout(timer)
+        setLoadingVideos(false)
+      })
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [open])
+
+  function videoFor(lang: TutorialLanguage): string | undefined {
+    return videos[lang.code] ?? lang.videoUrl
   }
 
   function openTour() {
-    stopSpeaking()
     setLanguage(null)
-    setIndex(0)
-    setPlaying(false)
+    setLoadingVideos(true)
     setOpen(true)
   }
 
-  // Unmount (navigating away from sign-in) must stop the audio too.
-  useEffect(() => () => stopSpeaking(), [])
-
-  useEffect(() => {
-    if (!open || !language || !playing) return
-    // A recorded video brings its own audio and timing.
-    if (language.videoUrl) return
-    const slide = language.slides[index]
-    if (!slide) return
-    speak(slide.body, language.voice)
-    const timer = window.setTimeout(() => {
-      if (index + 1 < language.slides.length) setIndex(index + 1)
-      else setPlaying(false)
-    }, TUTORIAL_SLIDE_MS)
-    return () => {
-      window.clearTimeout(timer)
-      stopSpeaking()
-    }
-  }, [open, language, index, playing])
-
-  function chooseLanguage(next: TutorialLanguage) {
-    setLanguage(next)
-    setIndex(0)
-    setPlaying(true)
+  function closeTour() {
+    setOpen(false)
+    setLanguage(null)
   }
 
-  const slide = language?.slides[index]
-  const total = language?.slides.length ?? 0
+  const url = language ? videoFor(language) : undefined
+  const anyVideo = TUTORIAL_LANGUAGES.some((lang) => Boolean(videoFor(lang)))
 
   return (
     <>
@@ -125,125 +94,98 @@ export function HowToUseVideoButton({ className = '' }: { className?: string }) 
       <Modal open={open} onClose={closeTour} title={language ? 'How to use MedRep Pro' : 'Choose your language'}>
         {!language ? (
           <div className="space-y-3">
-            <p className="text-sm text-slate-700 leading-relaxed">
-              Watch a one-minute tour in your language. The founder explains the app, then you see each step on screen.
+            <p className="text-sm leading-relaxed text-slate-700">
+              Watch a short walkthrough in your language. The founder introduces the app, then you see every step on screen.
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {TUTORIAL_LANGUAGES.map((lang) => {
+                const ready = Boolean(videoFor(lang))
                 const isSuggested = lang.code === suggested.code
                 return (
                   <button
                     key={lang.code}
                     type="button"
-                    onClick={() => chooseLanguage(lang)}
-                    className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
-                      isSuggested
-                        ? 'border-brand-400 bg-brand-50 hover:bg-brand-100'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    onClick={() => setLanguage(lang)}
+                    className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                      isSuggested ? 'border-brand-400 bg-brand-50 hover:bg-brand-100' : 'border-slate-200 bg-white hover:bg-slate-50'
                     }`}
                   >
                     <span className="min-w-0">
                       <span className="block text-base font-bold text-slate-900">{lang.label}</span>
                       <span className="block text-xs font-medium text-slate-500">{lang.english}</span>
                     </span>
-                    <span aria-hidden="true" className="text-brand-600">
-                      ▸
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        ready ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {ready ? 'Video' : 'Soon'}
                     </span>
                   </button>
                 )
               })}
             </div>
-            <p className="text-xs text-slate-500">
-              Spoken aloud when your phone supports the language; the written steps are always shown.
-            </p>
+            {loadingVideos && <p className="text-xs text-slate-500">Checking for the latest videos…</p>}
+            {!anyVideo && !loadingVideos && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 ring-1 ring-amber-200">
+                Videos are being recorded in each language. For now the tour shows the written steps below.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
-            {language.videoUrl ? (
-              <video
-                key={language.videoUrl}
-                className="w-full rounded-xl bg-black"
-                src={language.videoUrl}
-                controls
-                autoPlay
-                playsInline
-              />
+            {url ? (
+              isDirectVideoFile(url) ? (
+                <video
+                  key={url}
+                  className="w-full rounded-xl bg-black"
+                  src={url}
+                  controls
+                  autoPlay
+                  playsInline
+                  lang={language.locale}
+                />
+              ) : (
+                <div className="aspect-video w-full overflow-hidden rounded-xl bg-black">
+                  <iframe
+                    key={url}
+                    src={toEmbeddableUrl(url)}
+                    title={`MedRep Pro — how to use the app (${language.english})`}
+                    className="h-full w-full border-0"
+                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )
             ) : (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="rounded-full bg-brand-600 px-2.5 py-0.5 text-xs font-bold text-white">
-                    {index === 0 ? 'Founder' : `Step ${index} of ${total - 1}`}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    {index + 1} / {total}
-                  </span>
-                </div>
-                <h4 className="mt-2 text-lg font-bold leading-snug text-slate-900">{slide?.title}</h4>
-                <p className="mt-2 text-sm leading-relaxed text-slate-700">{slide?.body}</p>
-                {language.audioUrl && (
-                  <audio key={`${language.code}-${index}`} src={language.audioUrl} autoPlay className="mt-3 w-full" controls />
-                )}
-                {!language.audioUrl && !voiceReady && (
-                  <p className="mt-3 text-xs font-medium text-amber-700">
-                    Voice is not available on this device — read the steps above.
-                  </p>
-                )}
+                <h4 className="text-base font-bold text-slate-900">The {language.english} video is being recorded</h4>
+                <p className="mt-1 text-sm leading-relaxed text-slate-700">
+                  Until it is ready, here is the same walkthrough in words — start with the founder's introduction.
+                </p>
               </div>
             )}
 
-            {!language.videoUrl && (
-              <>
-                <div className="flex items-center gap-1.5" aria-hidden="true">
-                  {language.slides.map((s, i) => (
-                    <span
-                      key={s.title}
-                      className={`h-1.5 flex-1 rounded-full ${i <= index ? 'bg-brand-600' : 'bg-slate-200'}`}
-                    />
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Button
-                    variant="secondary"
-                    disabled={index === 0}
-                    onClick={() => {
-                      setIndex(Math.max(0, index - 1))
-                      setPlaying(true)
-                    }}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    variant={playing ? 'secondary' : 'primary'}
-                    onClick={() => {
-                      if (!playing && index === total - 1) setIndex(0)
-                      setPlaying(!playing)
-                    }}
-                  >
-                    {playing ? 'Pause' : index === total - 1 ? 'Replay' : 'Play'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={index >= total - 1}
-                    onClick={() => {
-                      setIndex(Math.min(total - 1, index + 1))
-                      setPlaying(true)
-                    }}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </>
-            )}
+            <details className="rounded-xl border border-slate-200 bg-white" open={!url}>
+              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-slate-800">
+                Steps in this video
+              </summary>
+              <ol className="space-y-3 px-4 pb-4">
+                {language.slides.map((slide, i) => (
+                  <li key={slide.title}>
+                    <p className="text-sm font-bold text-slate-900">
+                      {i === 0 ? 'Founder' : i}. {slide.title}
+                    </p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-slate-600">{slide.body}</p>
+                  </li>
+                ))}
+              </ol>
+            </details>
 
             <button
               type="button"
               className="w-full text-center text-sm font-semibold text-brand-700 hover:text-brand-800"
-              onClick={() => {
-                stopSpeaking()
-                setPlaying(false)
-                setLanguage(null)
-                setIndex(0)
-              }}
+              onClick={closeTour}
             >
               Change language
             </button>

@@ -3,19 +3,25 @@
  *
  * Design notes
  * ------------
- * The tour is language-first: the user picks a language, then the tour plays in
- * that language (spoken aloud when the device can speak it) and the founder's
- * introduction is always the first step.
+ * The tour is a REAL recorded walkthrough (screen recording with a human voice),
+ * not a synthetic voice reading slides. Recording one per language is the only
+ * supported narration path; the written steps below are the recording script,
+ * the on-screen fallback while a language is still being recorded, and the
+ * accessibility text.
  *
- * Media upgrade path: if a language ever gets a real video file, set
- * `videoUrl` (e.g. '/tutorial/hi.mp4' served from /public) and the player shows
- * a normal <video> element instead of the narrated slides. Same for a recorded
- * voice-over: set `audioUrl`. Nothing else needs to change — no code edit, and
- * the slides stay as the captions underneath.
+ * Wiring a finished video — no app release needed:
+ *   1. Upload the recording (unlisted YouTube, ScreenPal, or an MP4 served from
+ *      https://medrepconnect.in/tutorial/<code>.mp4).
+ *   2. Put the link in https://medrepconnect.in/tutorial/videos.json, e.g.
+ *      { "en": "https://go.screenpal.com/player/abc123", "hi": "https://youtu.be/xyz" }
+ *      (the file lives at public/tutorial/videos.json in this repo and deploys
+ *      with the website).
+ *   3. The app reads that file when the tour opens and plays the matching video.
+ *      Language codes without a link show the written steps until their video
+ *      arrives.
  *
- * Narration uses the device's own speech engine (`speechSynthesis`), so every
- * language here costs zero bytes in the APK and needs no network. Devices
- * without a voice for a language simply show the text (see HowToUse.tsx).
+ * A link ending in .mp4/.webm plays in a native <video> player; anything else
+ * (YouTube, ScreenPal, Vimeo) is embedded in its own player. See TUTORIAL.md.
  */
 
 export type TutorialLanguageCode = 'en' | 'hi' | 'te' | 'ta' | 'kn' | 'ml' | 'mr'
@@ -33,17 +39,61 @@ export type TutorialLanguage = {
   label: string
   /** English name, shown under the native one. */
   english: string
-  /** BCP-47 tag handed to the speech engine. */
-  voice: string
-  /** Optional recorded tour (mp4) — served from /public, e.g. '/tutorial/hi.mp4'. */
+  /** BCP-47 tag, used for the video's lang attribute and captions. */
+  locale: string
+  /**
+   * Fallback video link baked into the app. Leave unset to rely on
+   * /tutorial/videos.json (the normal case: links are added there so no app
+   * release is needed when a recording finishes).
+   */
   videoUrl?: string
-  /** Optional recorded voice-over (mp3) used with the slides. */
-  audioUrl?: string
   slides: TutorialSlide[]
 }
 
-/** How long each slide stays on screen while it is being read. */
-export const TUTORIAL_SLIDE_MS = 11000
+/**
+ * Where the app looks for finished recordings when the tour opens. Lives on the
+ * website so a new language video goes live without shipping a new APK.
+ * Shape: { "en": "https://…", "hi": "https://…" }
+ */
+export const TUTORIAL_VIDEO_CONFIG_URL = 'https://medrepconnect.in/tutorial/videos.json'
+
+/** A language → link map, e.g. { en: 'https://…', hi: 'https://…' }. */
+export type TutorialVideoMap = Partial<Record<TutorialLanguageCode, string>>
+
+/**
+ * Accepts only real http(s) links and only for languages we ship, so a broken or
+ * hostile videos.json can never inject markup into the player.
+ */
+export function sanitizeVideos(value: unknown): TutorialVideoMap {
+  if (!value || typeof value !== 'object') return {}
+  const out: TutorialVideoMap = {}
+  for (const lang of TUTORIAL_LANGUAGES) {
+    const raw = (value as Record<string, unknown>)[lang.code]
+    if (typeof raw !== 'string') continue
+    const url = raw.trim()
+    if (/^https?:\/\//i.test(url)) out[lang.code] = url
+  }
+  return out
+}
+
+/**
+ * Turns a shared link into something a player can embed: youtu.be/ID and
+ * youtube.com/watch?v=ID become the /embed/ form, a ScreenPal watch page becomes
+ * its player page. Anything else is returned unchanged.
+ */
+export function toEmbeddableUrl(url: string): string {
+  const trimmed = url.trim()
+  const yt = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/i)
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0&playsinline=1`
+  const screenpal = trimmed.match(/^https?:\/\/go\.screenpal\.com\/watch\/([\w-]+)/i)
+  if (screenpal) return `https://go.screenpal.com/player/${screenpal[1]}`
+  return trimmed
+}
+
+/** True for links we can hand to a <video> element instead of an iframe. */
+export function isDirectVideoFile(url: string): boolean {
+  return /\.(mp4|webm|m4v|mov)(\?.*)?$/i.test(url.trim())
+}
 
 /**
  * Order matters: English first (safe fallback), then the languages the app is
@@ -55,7 +105,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'en',
     label: 'English',
     english: 'English',
-    voice: 'en-IN',
+    locale: 'en-IN',
     slides: [
       {
         title: 'Namaste, I am M Divakar Reddy',
@@ -87,7 +137,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'hi',
     label: 'हिन्दी',
     english: 'Hindi',
-    voice: 'hi-IN',
+    locale: 'hi-IN',
     slides: [
       {
         title: 'नमस्ते, मैं एम दिवाकर रेड्डी हूँ',
@@ -119,7 +169,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'te',
     label: 'తెలుగు',
     english: 'Telugu',
-    voice: 'te-IN',
+    locale: 'te-IN',
     slides: [
       {
         title: 'నమస్కారం, నేను ఎం దివాకర్ రెడ్డి',
@@ -151,7 +201,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'ta',
     label: 'தமிழ்',
     english: 'Tamil',
-    voice: 'ta-IN',
+    locale: 'ta-IN',
     slides: [
       {
         title: 'வணக்கம், நான் எம் திவாகர் ரெட்டி',
@@ -183,7 +233,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'kn',
     label: 'ಕನ್ನಡ',
     english: 'Kannada',
-    voice: 'kn-IN',
+    locale: 'kn-IN',
     slides: [
       {
         title: 'ನಮಸ್ಕಾರ, ನಾನು ಎಂ ದಿವಾಕರ್ ರೆಡ್ಡಿ',
@@ -215,7 +265,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'ml',
     label: 'മലയാളം',
     english: 'Malayalam',
-    voice: 'ml-IN',
+    locale: 'ml-IN',
     slides: [
       {
         title: 'നമസ്കാരം, ഞാൻ എം ദിവാകർ റെഡ്ഡി',
@@ -247,7 +297,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     code: 'mr',
     label: 'मराठी',
     english: 'Marathi',
-    voice: 'mr-IN',
+    locale: 'mr-IN',
     slides: [
       {
         title: 'नमस्कार, मी एम दिवाकर रेड्डी',
