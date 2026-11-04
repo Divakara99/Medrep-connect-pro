@@ -36,7 +36,8 @@
     "test:android": "node scripts/test-android-unlocks.mjs && node scripts/test-android-ads.mjs && node scripts/test-play-billing.mjs",
     "test:push": "node scripts/test-push-rules.mjs && node scripts/test-admin-access-rules.mjs && node scripts/test-webpush-crypto.mjs && node scripts/test-send-push-function.mjs && node scripts/test-admin-mfa-toggle.mjs && node scripts/test-push-subscriptions.mjs",
     "test:tutorial": "node scripts/test-tutorial.mjs",
-    "test:plan-state": "node scripts/test-plan-state.mjs"
+    "test:plan-state": "node scripts/test-plan-state.mjs",
+    "store:screenshots": "node scripts/check-store-screenshots.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.2.1",
