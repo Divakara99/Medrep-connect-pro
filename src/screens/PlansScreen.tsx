@@ -3,6 +3,7 @@ import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { readPlanState } from '../data/planState'
+import { accessLabel, daysLabel, periodLabel, planTitle } from '../data/planDisplay'
 import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
 import { CREATOR } from '../data/creator'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
@@ -360,15 +361,11 @@ export function PlansScreen({
               {!isActive && !isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
               {!isActive && !isExpired && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
               <div className="flex items-center justify-between gap-2">
-                <div className="font-bold text-slate-900">{plan.title}</div>
+                <div className="font-bold text-slate-900">{planTitle(plan.title)}</div>
                 <div className="text-2xl font-extrabold text-brand-800">{inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}</div>
               </div>
               <div className="text-sm font-semibold text-slate-700 mt-0.5">
-                {plan.days >= 365
-                  ? `${Math.round(plan.days / 365)} year`
-                  : plan.days >= 30
-                    ? `${Math.round(plan.days / 30)} month${plan.days >= 60 ? 's' : ''}`
-                    : plan.days === 1 ? '1 day' : `${plan.days} days`}
+                {periodLabel(plan.days)}
               </div>
               <div className="text-sm text-slate-800 mt-2">{plan.tagline}</div>
               {isActive && activeExpiry !== undefined && (
@@ -534,7 +531,7 @@ export function PlansScreen({
             <div className="text-5xl">✅</div>
             <h2 className="text-lg font-extrabold text-slate-900">Payment verified — plan active</h2>
             <p className="text-sm text-slate-700">
-              {selected.title} ({selected.days === 1 ? '1 day' : `${selected.days} days`}) is marked active on your Plans page.
+              {planTitle(selected.title)} ({daysLabel(selected.days)}) is marked active on your Plans page.
             </p>
             {confirmedUntil && (
               <p className="text-base font-extrabold text-emerald-700">Active until {confirmedUntil}</p>
@@ -558,9 +555,9 @@ export function PlansScreen({
             )}
             <div className="rounded-xl bg-indigo-50 p-4 ring-1 ring-indigo-200 flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-bold text-slate-900">{selected.title}</div>
+                <div className="text-sm font-bold text-slate-900">{planTitle(selected.title)}</div>
                 <div className="text-sm font-semibold text-slate-700">
-                  {selected.days === 1 ? '1 day' : `${selected.days} days`} of access
+                  {accessLabel(selected.days)}
                 </div>
               </div>
               <div className="text-2xl font-extrabold text-indigo-900">{inApp ? playPrices.get(selected.id) ?? `₹${selected.price}` : `₹${selected.price}`}</div>
@@ -608,14 +605,14 @@ export function PlansScreen({
                 <p>1. Check the plan and price, then tap Buy — Google Play shows its own secure payment sheet.</p>
                 <p>2. Approve the payment in Google Play. Never share your passwords or OTP with anyone, including support.</p>
                 <p>3. Return here and wait for confirmation. If charged but not activated, do not buy again; reopen the app and visit Plans, or contact support with your Google Play order ID (GPA…).</p>
-                <p>Access begins after Google confirms and our server verifies the purchase. Renewals add {selected.days === 1 ? '1 day' : `${selected.days} days`} to your existing expiry (or start now if expired).</p>
+                <p>Access begins after Google confirms and our server verifies the purchase. Renewals add {daysLabel(selected.days)} to your existing expiry (or start now if expired).</p>
               </div>
             ) : (
               <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
                 <p>1. Check the plan and amount, then open Razorpay Checkout.</p>
                 <p>2. In Razorpay choose a card, or UPI → PhonePe, Google Pay, another available app, or QR if offered. Approve payment only inside your bank/UPI app; never share your PIN or OTP here.</p>
                 <p>3. Return here and wait for server confirmation. If charged but not activated, do not pay again; use Check payment status or contact support with the payment ID.</p>
-                <p>Access begins after verified capture. Renewals add {selected.days === 1 ? '1 day' : `${selected.days} days`} to your existing expiry (or start now if expired).</p>
+                <p>Access begins after verified capture. Renewals add {daysLabel(selected.days)} to your existing expiry (or start now if expired).</p>
               </div>
             )}
           </div>
