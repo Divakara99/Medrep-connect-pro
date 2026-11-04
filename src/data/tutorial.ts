@@ -129,6 +129,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'English',
     english: 'English',
     locale: 'en-IN',
+    videoUrl: '/tutorial/en.mp4',
     slides: [
       {
         title: 'Namaste, I am M Divakar Reddy',
@@ -161,6 +162,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'हिन्दी',
     english: 'Hindi',
     locale: 'hi-IN',
+    videoUrl: '/tutorial/hi.mp4',
     slides: [
       {
         title: 'नमस्ते, मैं एम दिवाकर रेड्डी हूँ',
@@ -193,6 +195,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
     label: 'తెలుగు',
     english: 'Telugu',
     locale: 'te-IN',
+    videoUrl: '/tutorial/te.mp4',
     slides: [
       {
         title: 'నమస్కారం, నేను ఎం దివాకర్ రెడ్డి',
