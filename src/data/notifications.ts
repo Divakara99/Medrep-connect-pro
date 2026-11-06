@@ -1,7 +1,7 @@
 import { CREATOR } from './creator'
 import { mirror, supabase } from './supabase'
 import { read, write } from './storage'
-import { announcementBody, nextWatermark, notificationsToAlert, shouldChime } from './pushRules'
+import { announcementBody, nextWatermark, notificationsToAlert } from './pushRules'
 import { publishToEveryone } from './push'
 import {
   isBroadcastNotification,
@@ -64,10 +64,6 @@ const SOUND_KEY = 'mrc_notif_sound_v1'
 /** Sound is on unless the user switched it off on this device. */
 export function soundEnabled(): boolean {
   return read<boolean>(SOUND_KEY, true) !== false
-}
-
-export function setSoundEnabled(enabled: boolean): void {
-  write(SOUND_KEY, enabled !== false)
 }
 
 let audioCtx: AudioContext | null = null
@@ -438,8 +434,4 @@ export async function refreshNotificationsAndAlert(email: string): Promise<Notif
 }
 
 /** True when a new visible notification deserves a sound on this device. */
-export function shouldChimeForAlert(alerted: Notification[]): boolean {
-  return shouldChime(soundEnabled(), alerted.length)
-}
-
 export { announcementBody }

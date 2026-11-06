@@ -216,21 +216,6 @@ export async function enablePush(): Promise<PushOutcome> {
 }
 
 /** Turn notifications off for this device and forget it on the server. */
-export async function disablePush(): Promise<PushOutcome> {
-  if (!pushSupported()) return { ok: true }
-  try {
-    const registration = await navigator.serviceWorker.getRegistration()
-    const subscription = await registration?.pushManager.getSubscription()
-    if (subscription) {
-      await supabase.rpc('delete_push_subscription', { p_endpoint: subscription.endpoint }).then(() => undefined, () => undefined)
-      await subscription.unsubscribe()
-    }
-    return { ok: true }
-  } catch (cause) {
-    return { ok: false, error: cause instanceof Error ? cause.message : 'Notifications could not be switched off on this device.' }
-  }
-}
-
 /**
  * Re-register this device after a sign-in: the endpoint is shared by the
  * browser, so it must follow the account that is currently using the app.
@@ -247,17 +232,6 @@ export async function syncPushSubscription(): Promise<void> {
 }
 
 /** One test notification to the caller's own devices. */
-export async function sendTestPush(): Promise<PushOutcome> {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-push', { body: { action: 'test' } })
-    if (error) return { ok: false, error: await functionError(error, 'The test notification could not be sent.') }
-    if (!data?.ok) return { ok: false, error: String(data?.error || 'No device is registered for notifications yet.') }
-    return { ok: true }
-  } catch (cause) {
-    return { ok: false, error: cause instanceof Error ? cause.message : 'The test notification could not be sent.' }
-  }
-}
-
 /**
  * Notify every subscribed device about a broadcast that already exists on the
  * server (an announcement, or the notice created for a vacancy).
@@ -338,15 +312,6 @@ export async function pushReach(): Promise<PushReach | null> {
 }
 
 /** The caller's own notification devices (no endpoints returned). */
-export async function myPushDevices(): Promise<{ label: string; createdAt: string }[]> {
-  const { data, error } = await supabase.rpc('my_push_subscriptions')
-  if (error || !Array.isArray(data)) return []
-  return (data as Record<string, unknown>[]).map((row) => ({
-    label: String(row.label ?? 'This device'),
-    createdAt: String(row.createdAt ?? ''),
-  }))
-}
-
 /**
  * Publish a notification and push it to the audience stored on its server row.
  *

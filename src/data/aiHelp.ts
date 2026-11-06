@@ -223,15 +223,3 @@ export function answer(q: string, subscribed: boolean): Answer {
 export function safeReply(text: string): string {
   return sanitizeSecrets(text)
 }
-
-export const TICKET_ASK = {
-  yes: 'Yes, create ticket',
-  no: 'No, thanks',
-}
-
-export function ticketCreatedMsg(kind: 'support' | 'refund', id: string): string {
-  const num = id.slice(-5).toUpperCase()
-  return kind === 'refund'
-    ? `✅ Refund request #${num} is open. We sent the reason, your payment details and your account details to the administrator. Track it under Account → My requests.`
-    : `✅ Support request #${num} is open. The administrator will reply in Account → My requests.`
-}

@@ -22,8 +22,6 @@ import type { Plan } from './plans'
  * acknowledged before the server has verified the token.
  */
 
-export type PlayProductPrice = { productId: string; price: string }
-
 type NativePurchasesPlugin = typeof import('@capgo/native-purchases').NativePurchases
 
 let pluginPromise: Promise<NativePurchasesPlugin | null> | null = null

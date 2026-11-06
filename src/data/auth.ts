@@ -206,11 +206,6 @@ export async function refreshAdminUsers(): Promise<User[]> {
   return users
 }
 
-export function findUserByEmail(email: string): User | undefined {
-  const normalizedEmail = email.trim().toLowerCase()
-  return getUsers().find((user) => user.email.toLowerCase() === normalizedEmail)
-}
-
 function authErrorMessage(message: string, hasPhone = false): string {
   if (/user already registered|already been registered|email.*already|duplicate key.*email/i.test(message)) {
     return 'An account with this email already exists. Sign in instead.'
