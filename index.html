@@ -5,7 +5,10 @@
     <!-- All icons below are generated from src/assets/logo.svg (npm run icons). -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="alternate icon" type="image/png" sizes="192x192" href="./icon-192.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- interactive-widget=resizes-content: when the soft keyboard opens, resize the
+         layout viewport instead of scrolling the page under it. Without this the
+         sign-in screen jumped upward as soon as an input was focused. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#1b4efb" />
     <meta name="description" content="India's 1st pharma-job network." />
     <link rel="manifest" href="./manifest.json" />
