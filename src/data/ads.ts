@@ -14,6 +14,19 @@ import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } 
 const REWARDED_LOAD_TIMEOUT_MS = 12_000
 
 /**
+ * How long a prepared ad gets to actually appear.
+ *
+ * `showRewardVideoAd()` does not settle until the ad is dismissed, and when the
+ * ad never opens it does not settle at all — the caller then sat on its 3-minute
+ * backstop and reported "The video did not start or finish in time". A prepared
+ * ad opens within a second or two, so 20 s means "it is not coming".
+ */
+const REWARDED_SHOW_TIMEOUT_MS = 20_000
+
+/** The plugin's "rewarded ad opened" event, by value so no SDK code is bundled. */
+const REWARDED_SHOWED_EVENT = 'onRewardedVideoAdShowed'
+
+/**
  * AdMob wrapper (Android app only).
  *
  * The plugin is imported lazily so the website bundle never loads — let
@@ -304,6 +317,53 @@ export function preloadRewardedUnlock(userId: string, jobId: string): void {
   })
 }
 
+/**
+ * Play the ad that is already prepared.
+ *
+ * Two things are watched: whether the ad actually opened (the plugin's Shown
+ * event) and how long we are willing to wait for it. Only one of them can tell
+ * "the video never started" apart from "the user is watching a 30-second video".
+ */
+async function playPreparedReward(AdMob: AdMobPlugin): Promise<RewardedOutcome> {
+  const on = AdMob.addListener as unknown as (
+    eventName: string,
+    listenerFunc: () => void,
+  ) => Promise<{ remove: () => Promise<void> } | void>
+
+  let opened = false
+  let handle: { remove: () => Promise<void> } | void = undefined
+  try {
+    handle = await on(REWARDED_SHOWED_EVENT, () => { opened = true })
+  } catch {
+    // Diagnostics only: without the listener the timeout still bounds the wait.
+  }
+
+  try {
+    const dismissed = AdMob.showRewardVideoAd()
+    const verdict = await Promise.race([
+      dismissed.then(() => 'dismissed' as const),
+      new Promise<'stalled'>((resolve) => {
+        window.setTimeout(() => resolve('stalled'), REWARDED_SHOW_TIMEOUT_MS)
+      }),
+    ])
+    if (verdict === 'stalled' && !opened) {
+      lastRewardedError = 'rewarded ad never opened'
+      console.warn('[ads]', lastRewardedError)
+      return { ok: false, error: 'The video did not open. Please check your connection and try again.' }
+    }
+    // It opened: let the viewer finish it. Resolves on dismissal either way;
+    // completion is confirmed by AdMob SSV, never here.
+    await dismissed
+    return { ok: true }
+  } catch (cause) {
+    lastRewardedError = describe(cause)
+    console.warn('[ads] rewarded show failed:', lastRewardedError)
+    return { ok: false, error: rewardedErrorMessage(cause).message }
+  } finally {
+    void handle?.remove?.()
+  }
+}
+
 export type RewardedOutcome =
   | { ok: true }
   | { ok: false; error: string }
@@ -334,14 +394,9 @@ export async function showRewardedUnlock(
   if (cached && (await within(cached.ok, 4_000)) === true) {
     preloaded = null
     onStage?.('watching')
-    try {
-      await AdMob.showRewardVideoAd()
-    } catch (cause) {
-      lastRewardedError = describe(cause)
-      return { ok: false, error: rewardedErrorMessage(cause).message }
-    }
-    onStage?.('verifying')
-    return { ok: true }
+    const played = await playPreparedReward(AdMob)
+    if (played.ok) onStage?.('verifying')
+    return played
   }
   preloaded = null
 
@@ -371,16 +426,7 @@ export async function showRewardedUnlock(
   }
 
   onStage?.('watching')
-  try {
-    // Resolves when the video is dismissed — completed or not. Completion is
-    // confirmed by AdMob SSV, never here.
-    await AdMob.showRewardVideoAd()
-  } catch (cause) {
-    lastRewardedError = describe(cause)
-    console.warn('[ads] rewarded show failed:', lastRewardedError)
-    return { ok: false, error: rewardedErrorMessage(cause).message }
-  }
-
-  onStage?.('verifying')
-  return { ok: true }
+  const played = await playPreparedReward(AdMob)
+  if (played.ok) onStage?.('verifying')
+  return played
 }
