@@ -61,6 +61,9 @@ assert.equal(rewardedUnlockOffered({ isAndroidApp: false, subscribed: false, com
  * loading — and when there was no ad to load, it showed that for a minute with
  * nothing happening at all.
  */
+// Loading is the slow part, so the ad is fetched when the job is opened and the
+// tap only waits for the remainder. The load cap is short enough to give up
+// visibly rather than keep the user staring at a spinner.
 assert.equal(unlockButtonLabel(null), '▶ Watch video to unlock company name', 'idle: offers the video')
 assert.equal(unlockButtonLabel('loading'), '⏳ Loading video…', 'loading is not "checking"')
 assert.match(unlockButtonLabel('watching'), /watch to the end/, 'watching tells the user the reward needs the whole video')

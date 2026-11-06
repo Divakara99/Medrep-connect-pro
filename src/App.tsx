@@ -29,7 +29,7 @@ import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
 import { bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
-import { adsDiagnostics, initAds, showRewardedUnlock, type RewardedOutcome } from './data/ads'
+import { adsDiagnostics, initAds, preloadRewardedUnlock, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
@@ -332,6 +332,9 @@ export default function App() {
 
   function openJob(j: Job) {
     setSelectedJob(j)
+    // Start fetching the unlock video now, so tapping the button plays instead of
+    // waiting. Free Android users only — subscribers have no video to watch.
+    if (user && isAndroidApp() && !unlocked) preloadRewardedUnlock(user.id, j.id)
   }
 
   /**
