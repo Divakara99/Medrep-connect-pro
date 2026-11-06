@@ -10,6 +10,7 @@ import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
 import { APP_VERSION_LABEL } from '../data/version'
+import { adsDiagnostics, showBanner } from '../data/ads'
 
 export function AccountScreen({
   user,
@@ -31,6 +32,33 @@ export function AccountScreen({
   // "My applications" opens as its own page over this one, so the phone's back
   // button (and its Back button) return here.
   const [applicationsOpen, setApplicationsOpen] = useState(false)
+  /**
+   * Hidden ad diagnostics (Android only), opened by tapping the version badge
+   * five times.
+   *
+   * Ads fail silently by design, so "no ads" arrives with no cause attached and
+   * no way to read it on a phone without a USB cable and chrome://inspect. This
+   * surfaces AdMob's own answer — no fill, missing app id, not initialised —
+   * right on the device. A manual request button makes it testable on the spot.
+   */
+  const versionTaps = useRef({ count: 0, timer: 0 })
+  const [adsDebugOpen, setAdsDebugOpen] = useState(false)
+  const [adsState, setAdsState] = useState<ReturnType<typeof adsDiagnostics> | null>(null)
+  const [adsBusy, setAdsBusy] = useState(false)
+
+  function onVersionTap() {
+    if (!isAndroidApp()) return
+    const taps = versionTaps.current
+    taps.count += 1
+    window.clearTimeout(taps.timer)
+    if (taps.count >= 5) {
+      taps.count = 0
+      setAdsDebugOpen(true)
+      setAdsState(adsDiagnostics())
+      return
+    }
+    taps.timer = window.setTimeout(() => { taps.count = 0 }, 1500)
+  }
 
   if (applicationsOpen) {
     return (
@@ -116,9 +144,51 @@ export function AccountScreen({
               </a>
             </div>
           </div>
-          <Badge color="brand">{APP_VERSION_LABEL}</Badge>
+          <button type="button" onClick={onVersionTap} aria-label="App version" className="shrink-0">
+            <Badge color="brand">{APP_VERSION_LABEL}</Badge>
+          </button>
         </div>
       </Card>
+
+      {isAndroidApp() && adsDebugOpen && (
+        <Card className="p-4 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-bold text-slate-900">Ad diagnostics</div>
+            <button
+              type="button"
+              onClick={() => setAdsDebugOpen(false)}
+              className="text-xs font-semibold text-slate-500 underline"
+            >
+              Hide
+            </button>
+          </div>
+          <div className="text-[11px] font-mono leading-relaxed text-slate-700 break-words">
+            <div>banner wanted: {String(adsState?.bannerWanted)}</div>
+            <div>banner visible: {String(adsState?.bannerVisible)}</div>
+            <div>last banner error: {adsState?.lastBannerError || '—'}</div>
+            <div>last video error: {adsState?.lastRewardedError || '—'}</div>
+          </div>
+          <Button
+            variant="secondary"
+            disabled={adsBusy}
+            onClick={async () => {
+              setAdsBusy(true)
+              await showBanner(0)
+              // Give the SDK a moment to answer before reading the result.
+              window.setTimeout(() => {
+                setAdsState(adsDiagnostics())
+                setAdsBusy(false)
+              }, 3000)
+            }}
+          >
+            {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
+          </Button>
+          <div className="text-[11px] text-slate-500">
+            Tap the version badge 5× to reopen. “No fill” means AdMob had nothing to serve;
+            any other message is a build or network problem.
+          </div>
+        </Card>
+      )}
 
       {/* Unified frozen (sticky) action bar: Save primary, Logout secondary.
           Both buttons are anchored together so users don't accidentally hit Logout
