@@ -25,10 +25,6 @@ export function isAndroidApp(): boolean {
   }
 }
 
-/** Ads and Play Billing ship on Android only (no iOS build in this release). */
-export const adsEnabled = isAndroidApp
-export const playBillingEnabled = isAndroidApp
-
 /**
  * Password-reset links opened from an email must land on a real web origin:
  * inside the app `window.location.origin` is `https://localhost`, which

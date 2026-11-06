@@ -110,15 +110,6 @@ export async function isMfaVerifiedSession(): Promise<boolean> {
 }
 
 /** Does the account already have a verified authenticator to sign in with? */
-export async function hasVerifiedTotpFactor(): Promise<boolean> {
-  try {
-    const factors = await listTotpFactors()
-    return factors.some((factor) => factor.status === 'verified')
-  } catch {
-    return false
-  }
-}
-
 export type AdminSecurityState = {
   mfaRequired: boolean
   mfaVerified: boolean

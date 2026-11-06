@@ -66,7 +66,7 @@ export function NotificationsPanel({
   }, [open, email])
 
   return (
-    <Modal open={open} onClose={onClose} title={`Notifications${count > 0 ? ` (${count} new)` : ''}`}>
+    <Modal open={open} onClose={onClose} onBack={onClose} title={`Notifications${count > 0 ? ` (${count} new)` : ''}`}>
       <div className="space-y-3 -mx-1">
         <div className="flex items-center justify-between px-1">
           <div className="text-xs text-slate-500">AI-generated updates from Mr. Divakar Reddy & the MedRep team</div>

@@ -26,8 +26,3 @@ export function findConfidentialContact(description: string): string | null {
   }
   return null
 }
-
-/** True when the description is safe to publish to free users. */
-export function isDescriptionPublicSafe(description: string): boolean {
-  return findConfidentialContact(description) === null
-}

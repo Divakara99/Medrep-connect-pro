@@ -1,6 +1,4 @@
 import { remove } from './storage'
-import { broadcast, publish } from './notifications'
-import { privateNotificationTarget } from './notificationPrivacy'
 import { supabase } from './supabase'
 
 export type PaymentRecord = {
@@ -111,50 +109,6 @@ export async function refreshPayments(): Promise<PaymentRecord[]> {
 
 export function getPaymentsByUser(userId: string): PaymentRecord[] {
   return getPayments().filter((payment) => payment.userId === userId)
-}
-
-export async function resolveRefund(
-  paymentId: string,
-  options: { approve: boolean; refundRef?: string; refundMethod?: PaymentRecord['refundMethod'] },
-): Promise<PaymentRecord | null> {
-  const payments = getPayments()
-  const index = payments.findIndex((payment) => payment.id === paymentId)
-  if (index < 0) return null
-  const updated: PaymentRecord = {
-    ...payments[index],
-    refundStatus: options.approve ? 'approved' : 'rejected',
-    refundRef: options.approve ? options.refundRef?.trim() || payments[index].refundRef : payments[index].refundRef,
-    refundMethod: options.approve ? options.refundMethod ?? 'Razorpay' : payments[index].refundMethod,
-    refundAt: options.approve ? Date.now() : payments[index].refundAt,
-  }
-  payments[index] = updated
-  paymentCache = payments
-  if (options.approve) {
-    // Resolve the payment owner from the server-backed account table, never
-    // infer the recipient from the administrator's current session or a form.
-    const { data: account, error } = await supabase
-      .from('user_accounts')
-      .select('email')
-      .eq('user_id', updated.userId)
-      .maybeSingle()
-    const target = !error && account?.email ? privateNotificationTarget(account.email) : null
-    if (target) {
-      const notification = broadcast({
-        kind: 'refund-processed',
-        amount: updated.amount,
-        refundRef: updated.refundRef ?? '',
-        method: updated.refundMethod ?? 'Razorpay',
-      }, {
-        type: 'payment',
-        target,
-        meta: { event: 'refund-processed', paymentId: updated.id, txRef: updated.txRef },
-      })
-      // publish() persists the audience first, then the edge function filters
-      // phone devices by that single recipient email.
-      await publish(notification)
-    }
-  }
-  return updated
 }
 
 export async function reviewManualUpiPayment(paymentRecordId: string, approve: boolean): Promise<void> {

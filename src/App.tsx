@@ -5,7 +5,7 @@ import { AdminMfaScreen } from './screens/AdminMfaScreen'
 import { VacancyLoginScreen } from './screens/VacancyLoginScreen'
 import { VacancyPortal } from './screens/VacancyPortal'
 import { AdminScreen } from './screens/AdminScreen'
-import type { UserTab } from './components/BottomNav'
+import type { UserTab } from './data/tabs'
 import { TopBar, Button, Modal } from './components/ui'
 import { NotificationsPanel } from './components/NotificationsPanel'
 import { HomeScreen } from './screens/HomeScreen'
@@ -502,7 +502,20 @@ export default function App() {
     <div className="min-h-[100dvh] bg-slate-50">
       <TopBar
         left={
-          <span className="inline-flex min-w-0">
+          <span className="inline-flex min-w-0 items-center gap-2">
+            {nav.stack.length > 0 && (
+              <button
+                type="button"
+                onClick={goBackInApp}
+                aria-label="Back"
+                title="Back"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+            )}
             <Wordmark size="text-sm" />
           </span>
         }
