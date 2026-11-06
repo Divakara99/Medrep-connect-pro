@@ -135,4 +135,15 @@ for (const pkg of packages) {
   assert.ok(isKept(pkg), `proguard keeps the ${pkg} plugin class by name`)
 }
 
-console.log('android ads: real units, content-only banner, free-only rewarded unlock, honest unlock-button stages, Play pass mapping, app-ads.txt, plugin keep rules — passed')
+/**
+ * The version badge in Account comes from package.json (vite injects it), while
+ * Play reads versionName from android/app/build.gradle. They drifted: a 1.0.2
+ * build still showed "v1.0.1" in the app, which makes every on-device report
+ * ambiguous.
+ */
+const pkgVersion = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
+const gradleFile = await readFile(new URL('../android/app/build.gradle', import.meta.url), 'utf8')
+const androidVersionName = gradleFile.match(/versionName\s+"([^"]+)"/)?.[1]
+assert.equal(pkgVersion, androidVersionName, 'the in-app version badge matches the Android versionName')
+
+console.log('android ads: real units, content-only banner, free-only rewarded unlock, honest unlock-button stages, Play pass mapping, app-ads.txt, plugin keep rules, version parity — passed')

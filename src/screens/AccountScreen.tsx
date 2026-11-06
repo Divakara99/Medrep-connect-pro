@@ -163,8 +163,10 @@ export function AccountScreen({
             </button>
           </div>
           <div className="text-[11px] font-mono leading-relaxed text-slate-700 break-words">
+            <div>plugin loaded: {String(adsState?.pluginLoaded)}</div>
             <div>banner wanted: {String(adsState?.bannerWanted)}</div>
             <div>banner visible: {String(adsState?.bannerVisible)}</div>
+            <div>init error: {adsState?.lastInitError || '—'}</div>
             <div>last banner error: {adsState?.lastBannerError || '—'}</div>
             <div>last video error: {adsState?.lastRewardedError || '—'}</div>
           </div>
