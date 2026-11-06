@@ -59,6 +59,15 @@ function describe(cause: unknown): string {
   }
 }
 
+/** Resolve with `null` if the promise has not settled within `ms`. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: number | undefined
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => { timer = window.setTimeout(() => resolve(null), ms) }),
+  ]).finally(() => { if (timer !== undefined) window.clearTimeout(timer) })
+}
+
 async function loadPlugin(): Promise<AdMobPlugin | null> {
   if (!isAndroidApp()) return null
   pluginPromise ??= import('@capacitor-community/admob')
@@ -264,11 +273,22 @@ export function preloadRewardedUnlock(userId: string, jobId: string): void {
       if (!AdMob) return false
       await initAds()
       try {
-        await AdMob.prepareRewardVideoAd({
-          adId: ADMOB_REWARDED_AD_UNIT_ID,
-          isTesting: false,
-          ssv: { userId, customData: jobId },
-        })
+        // Bounded: an unanswered prepare used to leave `ok` pending forever, and
+        // every later tap awaited it until the caller's 3-minute backstop fired
+        // with "The video did not start or finish in time".
+        const loaded = await within(
+          AdMob.prepareRewardVideoAd({
+            adId: ADMOB_REWARDED_AD_UNIT_ID,
+            isTesting: false,
+            ssv: { userId, customData: jobId },
+          }),
+          REWARDED_LOAD_TIMEOUT_MS,
+        )
+        if (loaded === null) {
+          lastRewardedError = 'preload did not answer in time'
+          console.warn('[ads]', lastRewardedError)
+          return false
+        }
         return true
       } catch (cause) {
         lastRewardedError = describe(cause)
@@ -309,7 +329,9 @@ export async function showRewardedUnlock(
 
   // Play the ad that was prepared when this job was opened, when it is ready.
   const cached = preloaded && preloaded.userId === userId && preloaded.jobId === jobId ? preloaded : null
-  if (cached && (await cached.ok)) {
+  // Never wait on an unsettled preload for the whole flow: give it a few
+  // seconds, then load the ad the normal way.
+  if (cached && (await within(cached.ok, 4_000)) === true) {
     preloaded = null
     onStage?.('watching')
     try {
