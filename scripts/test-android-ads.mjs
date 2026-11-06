@@ -75,4 +75,27 @@ const plans = [
 ]
 assert.deepEqual(playPurchasablePlans(plans).map((p) => p.id), ['p5'], 'only mapped plans are Play-purchasable')
 
-console.log('android ads: real units, content-only banner, free-only rewarded unlock, honest unlock-button stages, Play pass mapping, app-ads.txt — passed')
+/**
+ * Every Capacitor plugin is instantiated by CLASS NAME (`Class.forName`) from
+ * android/app/src/main/assets/capacitor.plugins.json. If R8 renames or strips
+ * that class, the plugin silently reports "not implemented" in the release
+ * build only — exactly the failure mode that is impossible to reproduce in
+ * debug. The AdMob keep rule named a package that does not exist for months, so
+ * this now cross-checks the rules against the plugin list itself.
+ */
+const pluginsJson = JSON.parse(
+  await readFile(new URL('../android/app/src/main/assets/capacitor.plugins.json', import.meta.url), 'utf8'),
+)
+const proguard = await readFile(new URL('../android/app/proguard-rules.pro', import.meta.url), 'utf8')
+const keepTargets = [...proguard.matchAll(/^-keep\s+class\s+([^\s{]+)/gm)].map((match) => match[1])
+const isKept = (pkg) =>
+  keepTargets.some((target) => {
+    const clean = target.replace(/\.\*\*$/, '')
+    return pkg === clean || pkg.startsWith(`${clean}.`)
+  })
+for (const plugin of pluginsJson) {
+  const pkg = plugin.classpath.split('.').slice(0, -1).join('.')
+  assert.ok(isKept(pkg), `proguard keeps ${plugin.pkg} (${pkg}) by name`)
+}
+
+console.log('android ads: real units, content-only banner, free-only rewarded unlock, honest unlock-button stages, Play pass mapping, app-ads.txt, plugin keep rules — passed')
