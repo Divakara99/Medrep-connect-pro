@@ -86,7 +86,13 @@ async function settleWithin<T>(promise: Promise<T>, ms: number, what: string): P
     return await Promise.race([
       promise,
       new Promise<null>((resolve) => {
-        timer = window.setTimeout(() => resolve(null), ms)
+        timer = window.setTimeout(() => {
+          // Silence was the problem: a step that never answers looked exactly
+          // like a step that succeeded.
+          lastInitError = `${what} did not answer within ${ms / 1000}s`
+          console.warn('[ads]', lastInitError)
+          resolve(null)
+        }, ms)
       }),
     ])
   } catch (cause) {
@@ -137,15 +143,23 @@ async function showBannerOnce(margin: number): Promise<boolean> {
   }
   await initAds()
   try {
-    await AdMob.showBanner({
-      adId: ADMOB_BANNER_AD_UNIT_ID,
-      adSize: 'ADAPTIVE_BANNER' as BannerSize,
-      position: 'BOTTOM_CENTER' as BannerPosition,
-      // Bottom margin lifts the native banner above a screen's own fixed
-      // bottom bar (Account's Save/Logout bar) instead of covering it.
-      margin,
-      isTesting: false,
-    })
+    const shown = await settleWithin(
+      AdMob.showBanner({
+        adId: ADMOB_BANNER_AD_UNIT_ID,
+        adSize: 'ADAPTIVE_BANNER' as BannerSize,
+        position: 'BOTTOM_CENTER' as BannerPosition,
+        // Bottom margin lifts the native banner above a screen's own fixed
+        // bottom bar (Account's Save/Logout bar) instead of covering it.
+        margin,
+        isTesting: false,
+      }),
+      15_000,
+      'showBanner',
+    )
+    if (shown === null) {
+      lastBannerError = lastInitError || 'showBanner did not answer within 15s'
+      return false
+    }
     bannerVisible = true
     lastBannerError = ''
     return true
@@ -189,6 +203,22 @@ export async function hideBanner(): Promise<void> {
   } catch {
     // Already gone.
   }
+}
+
+/**
+ * One banner request, no retries, for the diagnostics card.
+ *
+ * showBanner() retries for up to 90 seconds, which is right for a user waiting
+ * for an ad but wrong for a test: the card sat on "Requesting…" and showed
+ * nothing. This performs a single bounded attempt and reports what happened.
+ */
+export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> {
+  bannerWanted = true
+  const shown = await showBannerOnce(0)
+  if (!shown && !lastBannerError) {
+    lastBannerError = 'banner request finished without a banner and without an error'
+  }
+  return adsDiagnostics()
 }
 
 /**

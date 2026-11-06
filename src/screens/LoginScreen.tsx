@@ -113,7 +113,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
      * focused field would otherwise be covered. Wider screens (tablet, desktop)
      * keep the centred look, where a keyboard is not in play.
      */
-    <main data-login-shell className="min-h-[100dvh] bg-gradient-to-b from-brand-50 via-white to-white flex flex-col overflow-y-auto overscroll-contain">
+    <main data-login-shell className="min-h-full bg-gradient-to-b from-brand-50 via-white to-white flex flex-col">
       <div className="flex-1 flex items-start sm:items-center justify-center px-4 pt-6 pb-8">
         <div className="w-full max-w-md">
           <header className="flex flex-col items-center mb-6">

@@ -10,7 +10,7 @@ import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
 import { APP_VERSION_LABEL } from '../data/version'
-import { adsDiagnostics, showBanner } from '../data/ads'
+import { adsDiagnostics, probeBanner } from '../data/ads'
 
 export function AccountScreen({
   user,
@@ -175,12 +175,13 @@ export function AccountScreen({
             disabled={adsBusy}
             onClick={async () => {
               setAdsBusy(true)
-              await showBanner(0)
-              // Give the SDK a moment to answer before reading the result.
-              window.setTimeout(() => {
-                setAdsState(adsDiagnostics())
+              // One bounded attempt — no retry loop, so the card always shows a
+              // result instead of sitting on "Requesting…".
+              try {
+                setAdsState(await probeBanner())
+              } finally {
                 setAdsBusy(false)
-              }, 3000)
+              }
             }}
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
