@@ -4,10 +4,14 @@ import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } 
 
 /**
  * How long the rewarded ad may spend loading before the user is told it is not
- * coming. Without this the button sat on "Checking your unlock…" until the
- * caller's overall timeout — a minute of nothing, which reads as a frozen app.
+ * coming.
+ *
+ * Loading is usually the slow part, so the app no longer starts it on tap: a
+ * preload begins when the job is opened (see preloadRewardedUnlock), and the tap
+ * only waits for what is left. When there is nothing to preload — no fill — the
+ * wait is now 12 seconds rather than 20 before saying so.
  */
-const REWARDED_LOAD_TIMEOUT_MS = 20_000
+const REWARDED_LOAD_TIMEOUT_MS = 12_000
 
 /**
  * AdMob wrapper (Android app only).
@@ -239,6 +243,47 @@ export function adsDiagnostics() {
   }
 }
 
+/**
+ * A rewarded ad prepared ahead of the tap, for one user + one job.
+ *
+ * AdMob ties the SSV payload to the request, so the ad can only be reused for
+ * the same job. `ok` settles when the plugin has finished loading (or failed):
+ * a tap then plays immediately instead of sitting on "Loading video…".
+ */
+let preloaded: { userId: string; jobId: string; ok: Promise<boolean> } | null = null
+
+/** Start loading the rewarded video for a job the user just opened. */
+export function preloadRewardedUnlock(userId: string, jobId: string): void {
+  if (!isAndroidApp()) return
+  if (preloaded?.userId === userId && preloaded.jobId === jobId) return
+  const entry = {
+    userId,
+    jobId,
+    ok: (async () => {
+      const AdMob = await loadPlugin()
+      if (!AdMob) return false
+      await initAds()
+      try {
+        await AdMob.prepareRewardVideoAd({
+          adId: ADMOB_REWARDED_AD_UNIT_ID,
+          isTesting: false,
+          ssv: { userId, customData: jobId },
+        })
+        return true
+      } catch (cause) {
+        lastRewardedError = describe(cause)
+        console.warn('[ads] rewarded preload failed:', lastRewardedError)
+        return false
+      }
+    })(),
+  }
+  preloaded = entry
+  // A newer preload must win: discard the entry if another job was opened.
+  void entry.ok.then(() => {
+    if (preloaded === entry && !entry.ok) preloaded = null
+  })
+}
+
 export type RewardedOutcome =
   | { ok: true }
   | { ok: false; error: string }
@@ -261,6 +306,23 @@ export async function showRewardedUnlock(
   await initAds()
 
   onStage?.('loading')
+
+  // Play the ad that was prepared when this job was opened, when it is ready.
+  const cached = preloaded && preloaded.userId === userId && preloaded.jobId === jobId ? preloaded : null
+  if (cached && (await cached.ok)) {
+    preloaded = null
+    onStage?.('watching')
+    try {
+      await AdMob.showRewardVideoAd()
+    } catch (cause) {
+      lastRewardedError = describe(cause)
+      return { ok: false, error: rewardedErrorMessage(cause).message }
+    }
+    onStage?.('verifying')
+    return { ok: true }
+  }
+  preloaded = null
+
   let loadTimer: number | undefined
   try {
     await Promise.race([

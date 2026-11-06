@@ -25,7 +25,15 @@
     </style>
 
 
+    <!--
+      The launch theme MUST hand over to a NoActionBar theme. Without this the
+      activity keeps Theme.SplashScreen after the splash finishes, and
+      AppCompatActivity falls back to decorating the window with the app's own
+      label as a title bar — the strip reading "MedRep Pro" that appeared above
+      the web header.
+    -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>
