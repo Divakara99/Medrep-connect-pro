@@ -119,3 +119,16 @@ input, select, textarea { font-size: 1rem; }
   50% { opacity: 0.35; }
 }
 .pulse-dot { animation: pulseDot 1.4s ease-in-out infinite; }
+
+/*
+ * Soft keyboard: keep the focused field clear of the keyboard's top edge.
+ *
+ * With adjustResize + interactive-widget=resizes-content the viewport shrinks
+ * around the keyboard, and Chrome scrolls the focused input into view. Without a
+ * margin it lands flush against the keyboard, which reads as the page jumping.
+ */
+input,
+textarea,
+select {
+  scroll-margin-block: 88px;
+}

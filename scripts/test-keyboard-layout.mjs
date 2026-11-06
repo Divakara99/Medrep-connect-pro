@@ -52,4 +52,14 @@ assert.doesNotMatch(
   'the sign-in card must not be centred on a phone, where the keyboard shrinks the viewport',
 )
 
+// 4. A 100dvh floor keeps the page at full height while the keyboard shrinks the
+//    visible area, so scrolling reveals a blank screen and the card slides away.
+//    min-h-full follows the resized layout viewport instead.
+assert.match(login, /min-h-full/, 'the sign-in shell fills the current viewport, not the pre-keyboard one')
+assert.doesNotMatch(login, /min-h-\[100dvh\]/, 'a dvh floor leaves a blank page behind the keyboard')
+assert.doesNotMatch(login, /overflow-y-auto/, 'one scroll container only — the document, not a nested div')
+
+const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
+assert.match(css, /scroll-margin-block:\s*88px/, 'focused fields keep clear of the keyboard')
+
 console.log('keyboard layout: adjustResize, resizes-content viewport, top-aligned sign-in — passed')
