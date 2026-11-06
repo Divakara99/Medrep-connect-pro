@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { UnlockStage } from '../data/adConfig'
 import { Badge, Button, Card, Input, Select } from '../components/ui'
 import { CreatorCredit } from '../components/CreatorCredit'
 import { JobCard } from '../components/JobCard'
@@ -16,12 +17,14 @@ export function HomeScreen({
   onOpenJob,
   onWatchUnlock,
   unlockingJobId,
+  unlockStage,
 }: {
   user: User
   jobs: Job[]
   onOpenJob: (j: Job) => void
   onWatchUnlock?: (j: Job) => void
   unlockingJobId?: string | null
+  unlockStage?: UnlockStage | null
 }) {
   const [query, setQuery] = useState('')
   const [location, setLocation] = useState('')
@@ -181,7 +184,7 @@ export function HomeScreen({
             </div>
           </Card>
         ) : (
-          list.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockBusy={unlockingJobId === j.id} />)
+          list.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockStage={unlockingJobId === j.id ? unlockStage : null} />)
         )}
       </div>
 

@@ -1,6 +1,13 @@
 import { rewardedErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
-import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID } from './adConfig'
+import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
+
+/**
+ * How long the rewarded ad may spend loading before the user is told it is not
+ * coming. Without this the button sat on "Checking your unlock…" until the
+ * caller's overall timeout — a minute of nothing, which reads as a frozen app.
+ */
+const REWARDED_LOAD_TIMEOUT_MS = 20_000
 
 /**
  * AdMob wrapper (Android app only).
@@ -99,21 +106,48 @@ export type RewardedOutcome =
  * resolving `ok` here only means the video completed on-device. The caller
  * must poll the server (see companyUnlocks.ts) — never unlock locally.
  */
-export async function showRewardedUnlock(userId: string, jobId: string): Promise<RewardedOutcome> {
+export async function showRewardedUnlock(
+  userId: string,
+  jobId: string,
+  onStage?: (stage: UnlockStage) => void,
+): Promise<RewardedOutcome> {
   const AdMob = await loadPlugin()
   if (!AdMob) return { ok: false, error: 'Video ads are available in the Android app only.' }
   await initAds()
+
+  onStage?.('loading')
+  let loadTimer: number | undefined
   try {
-    await AdMob.prepareRewardVideoAd({
-      adId: ADMOB_REWARDED_AD_UNIT_ID,
-      isTesting: false,
-      ssv: { userId, customData: jobId },
-    })
-    await AdMob.showRewardVideoAd()
-    return { ok: true }
+    await Promise.race([
+      AdMob.prepareRewardVideoAd({
+        adId: ADMOB_REWARDED_AD_UNIT_ID,
+        isTesting: false,
+        ssv: { userId, customData: jobId },
+      }),
+      new Promise<never>((_, reject) => {
+        loadTimer = window.setTimeout(() => reject(new Error('REWARDED_LOAD_TIMEOUT')), REWARDED_LOAD_TIMEOUT_MS)
+      }),
+    ])
   } catch (cause) {
+    if (cause instanceof Error && cause.message === 'REWARDED_LOAD_TIMEOUT') {
+      return { ok: false, error: 'The video is taking too long to load. Please try again in a moment.' }
+    }
     // AdMob's "no fill" until the app is reviewed is not a connection problem;
     // storeMessages.ts words it so the user knows the unlock is still free.
     return { ok: false, error: rewardedErrorMessage(cause).message }
+  } finally {
+    if (loadTimer !== undefined) window.clearTimeout(loadTimer)
   }
+
+  onStage?.('watching')
+  try {
+    // Resolves when the video is dismissed — completed or not. Completion is
+    // confirmed by AdMob SSV, never here.
+    await AdMob.showRewardVideoAd()
+  } catch (cause) {
+    return { ok: false, error: rewardedErrorMessage(cause).message }
+  }
+
+  onStage?.('verifying')
+  return { ok: true }
 }

@@ -5,6 +5,7 @@ import {
   ADMOB_REWARDED_AD_UNIT_ID,
   bannerAllowedOnTab,
   rewardedUnlockOffered,
+  unlockButtonLabel,
 } from '../src/data/adConfig.ts'
 import { defaultPlayProductId, playPurchasablePlans } from '../src/data/playProducts.ts'
 import { readFile } from 'node:fs/promises'
@@ -54,6 +55,17 @@ assert.equal(rewardedUnlockOffered({ isAndroidApp: true, subscribed: true, compa
 assert.equal(rewardedUnlockOffered({ isAndroidApp: true, subscribed: false, companyUnlocked: true }), false, 'no second video once unlocked')
 assert.equal(rewardedUnlockOffered({ isAndroidApp: false, subscribed: false, companyUnlocked: false }), false, 'website never shows rewarded videos')
 
+/**
+ * The unlock button's text must match what is actually happening. Reported from
+ * the phone: tapping it showed "Checking your unlock…" while the ad was still
+ * loading — and when there was no ad to load, it showed that for a minute with
+ * nothing happening at all.
+ */
+assert.equal(unlockButtonLabel(null), '▶ Watch video to unlock company name', 'idle: offers the video')
+assert.equal(unlockButtonLabel('loading'), '⏳ Loading video…', 'loading is not "checking"')
+assert.match(unlockButtonLabel('watching'), /watch to the end/, 'watching tells the user the reward needs the whole video')
+assert.equal(unlockButtonLabel('verifying'), '⏳ Checking your unlock…', 'only the server-confirmation stage checks')
+
 assert.equal(defaultPlayProductId('p5'), 'medrep_pass_5d')
 assert.equal(defaultPlayProductId('p365'), 'medrep_pass_365d')
 assert.equal(defaultPlayProductId('nope'), undefined)
@@ -63,4 +75,4 @@ const plans = [
 ]
 assert.deepEqual(playPurchasablePlans(plans).map((p) => p.id), ['p5'], 'only mapped plans are Play-purchasable')
 
-console.log('android ads: real units, content-only banner, free-only rewarded unlock, Play pass mapping, app-ads.txt — passed')
+console.log('android ads: real units, content-only banner, free-only rewarded unlock, honest unlock-button stages, Play pass mapping, app-ads.txt — passed')

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { Button, Badge, Modal } from './ui'
 import { descriptionPoints, type Job } from '../data/jobs'
 import { normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
@@ -84,7 +85,7 @@ export function JobDetail({
   onSubscribe,
   onApply,
   onWatchUnlock,
-  unlockBusy = false,
+  unlockStage = null,
 }: {
   job: Job | null
   /** Subscription flag ONLY — a company unlock must never set this. */
@@ -94,7 +95,7 @@ export function JobDetail({
   onApply: (j: Job) => void
   /** Android app, free users only: rewarded video for the company name. */
   onWatchUnlock?: (job: Job) => void
-  unlockBusy?: boolean
+  unlockStage?: UnlockStage | null
 }) {
   // Per-job company unlock (rewarded video), separate from subscription.
   const companyUnlocked = Boolean(job && (unlocked || job.companyUnlocked))
@@ -205,8 +206,8 @@ export function JobDetail({
           {!unlocked ? (
             <>
               {!companyUnlocked && onWatchUnlock && (
-                <Button className="w-full" variant="secondary" disabled={unlockBusy} onClick={() => onWatchUnlock(job)}>
-                  {unlockBusy ? '⏳ Checking your unlock…' : '▶ Watch video to unlock company name'}
+                <Button className="w-full" variant="secondary" disabled={unlockStage !== null} onClick={() => onWatchUnlock(job)}>
+                  {unlockButtonLabel(unlockStage)}
                 </Button>
               )}
               <Button className="w-full" variant="accent" onClick={onSubscribe}>

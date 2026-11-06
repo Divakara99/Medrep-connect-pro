@@ -1,4 +1,5 @@
 import { Badge, Card } from './ui'
+import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { descriptionPoints, type Job } from '../data/jobs'
 import { normalizeIndianMobile } from '../data/vacancyRules'
 
@@ -21,7 +22,7 @@ export function JobCard({
   unlocked,
   onClick,
   onWatchUnlock,
-  unlockBusy = false,
+  unlockStage = null,
 }: {
   job: Job
   /** Subscription flag ONLY — never set this from a company unlock. */
@@ -33,7 +34,7 @@ export function JobCard({
    * company is unlocked — the button never renders there.
    */
   onWatchUnlock?: (job: Job) => void
-  unlockBusy?: boolean
+  unlockStage?: UnlockStage | null
 }) {
   // Per-job company unlock, kept separate from `unlocked`: it reveals the
   // company name only, never the four contact fields or Apply.
@@ -140,11 +141,11 @@ export function JobCard({
       {showUnlockButton && (
         <button
           type="button"
-          disabled={unlockBusy}
+          disabled={unlockStage !== null}
           onClick={() => onWatchUnlock?.(job)}
           className="mt-3 w-full rounded-xl bg-brand-600 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700 active:scale-[0.99] disabled:opacity-60"
         >
-          {unlockBusy ? '⏳ Checking your unlock…' : '▶ Watch video to unlock company name'}
+          {unlockButtonLabel(unlockStage)}
         </button>
       )}
     </Card>

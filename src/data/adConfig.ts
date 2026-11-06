@@ -41,3 +41,30 @@ export function rewardedUnlockOffered(input: {
 }): boolean {
   return input.isAndroidApp && !input.subscribed && !input.companyUnlocked
 }
+
+/**
+ * Where the "watch a video" flow has got to. The button used to show
+ * "Checking your unlock…" from the instant it was tapped, which was wrong twice
+ * over: nothing is being checked while the ad is still loading, and when there
+ * is no inventory the ad never loads at all, so the label sat there as if
+ * something were happening.
+ *
+ *   loading   — preparing the rewarded ad (can take a few seconds, can fail)
+ *   watching  — the video is on screen; the reward is only granted to
+ *               completion, and the unlock itself still comes from AdMob SSV
+ *   verifying — video finished, waiting for the server to confirm the unlock
+ */
+export type UnlockStage = 'loading' | 'watching' | 'verifying'
+
+export function unlockButtonLabel(stage: UnlockStage | null | undefined): string {
+  switch (stage) {
+    case 'loading':
+      return '⏳ Loading video…'
+    case 'watching':
+      return '▶ Playing video — watch to the end to unlock'
+    case 'verifying':
+      return '⏳ Checking your unlock…'
+    default:
+      return '▶ Watch video to unlock company name'
+  }
+}
