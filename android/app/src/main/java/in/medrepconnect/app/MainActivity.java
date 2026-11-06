@@ -1,5 +1,6 @@
 package in.medrepconnect.app;
 
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -7,6 +8,8 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 
+import androidx.activity.EdgeToEdge;
+import androidx.activity.SystemBarStyle;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -18,11 +21,17 @@ import com.getcapacitor.BridgeActivity;
  *
  * Android 15+ (API 35, mandatory from 36) draws apps edge-to-edge, so the
  * WebView starts underneath the status bar — testers saw the clock sitting on
- * top of the header, and Play Console reports "Edge-to-edge may not display for
- * all users". Instead of trying to opt out (Android 16 ignores the opt-out for
- * apps targeting 36), pad the content view by the real system-bar / cutout
- * insets. The top inset clears the status bar, the side insets handle camera
- * cutouts in landscape.
+ * top of the header. Play Console additionally reported "Edge-to-edge may not
+ * display for all users", which it raises for apps that never opt in and only
+ * inherit the platform default. So:
+ *
+ *   1. EdgeToEdge.enable() opts in explicitly on EVERY API level (24+), with
+ *      transparent bars and dark icons to match the white app background.
+ *   2. The content view is padded by the real system-bar / cutout insets, so the
+ *      WebView never sits under the clock or a camera hole.
+ *
+ * Opting out is not an option: Android 16 ignores the opt-out for apps targeting
+ * 36. The bottom inset is left alone (see below).
  *
  * The BOTTOM inset is intentionally left at 0: the web app already reserves it
  * (BottomNav / AccountScreen use env(safe-area-inset-bottom)), and padding both
@@ -39,6 +48,9 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Must run before super.onCreate(): BridgeActivity inflates its content
+        // view there, and the window flags have to be in place first.
+        enableEdgeToEdge();
         super.onCreate(savedInstanceState);
         applyEdgeToEdgeInsets();
         applySystemBarAppearance();
@@ -50,6 +62,22 @@ public class MainActivity extends BridgeActivity {
         // Re-assert once the activity is actually on screen: the startup path
         // resets the appearance flags after onCreate.
         applySystemBarAppearance();
+    }
+
+    /**
+     * Opt in to edge-to-edge with transparent bars and dark icons.
+     *
+     * SystemBarStyle.light() means "light background, therefore dark icons" —
+     * the naming is the opposite way round from what it reads like. Passing the
+     * same style for both bars keeps the status and navigation bars consistent;
+     * the transparent scrim leaves our own white window background visible
+     * behind them.
+     */
+    private void enableEdgeToEdge() {
+        EdgeToEdge.enable(
+                this,
+                SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT));
     }
 
     /**
