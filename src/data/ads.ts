@@ -28,8 +28,29 @@ type BannerSize = import('@capacitor-community/admob').BannerAdSize
 type BannerPosition = import('@capacitor-community/admob').BannerAdPosition
 
 let pluginPromise: Promise<AdMobPlugin | null> | null = null
-let initialised = false
+let initPromise: Promise<void> | null = null
 let bannerVisible = false
+let bannerWanted = false
+
+/**
+ * Last failure from each ad type, kept for on-device diagnosis. Ads fail
+ * silently by design — a missing banner or a video that never appears must not
+ * interrupt the app — but "no ads" is then invisible, and the only way to tell
+ * "our request never reached AdMob" from "AdMob had nothing to fill" is to
+ * read this. Exposed through adsDiagnostics().
+ */
+let lastBannerError = ''
+let lastRewardedError = ''
+
+function describe(cause: unknown): string {
+  if (cause instanceof Error) return cause.message
+  if (typeof cause === 'string') return cause
+  try {
+    return JSON.stringify(cause)
+  } catch {
+    return String(cause)
+  }
+}
 
 async function loadPlugin(): Promise<AdMobPlugin | null> {
   if (!isAndroidApp()) return null
@@ -40,10 +61,17 @@ async function loadPlugin(): Promise<AdMobPlugin | null> {
 }
 
 /** UMP consent, then SDK init. Safe to call repeatedly; runs once. */
-export async function initAds(): Promise<void> {
+export function initAds(): Promise<void> {
+  // One shared promise, not a boolean: callers used to see "already started"
+  // and run straight into showBanner() while initialize() was still in flight,
+  // which the SDK answers with a failure we swallow.
+  initPromise ??= initialiseAds()
+  return initPromise
+}
+
+async function initialiseAds(): Promise<void> {
   const AdMob = await loadPlugin()
-  if (!AdMob || initialised) return
-  initialised = true
+  if (!AdMob) return
   try {
     // AdMob UMP consent flow. In India this typically resolves to
     // NOT_REQUIRED / OBTAINED without a form; where a form exists it must be
@@ -62,9 +90,9 @@ export async function initAds(): Promise<void> {
   }
 }
 
-export async function showBanner(margin = 0): Promise<void> {
+async function showBannerOnce(margin: number): Promise<boolean> {
   const AdMob = await loadPlugin()
-  if (!AdMob) return
+  if (!AdMob) return false
   await initAds()
   try {
     await AdMob.showBanner({
@@ -77,12 +105,39 @@ export async function showBanner(margin = 0): Promise<void> {
       isTesting: false,
     })
     bannerVisible = true
-  } catch {
+    lastBannerError = ''
+    return true
+  } catch (cause) {
     bannerVisible = false
+    lastBannerError = describe(cause)
+    console.warn('[ads] banner failed:', lastBannerError)
+    return false
+  }
+}
+
+/**
+ * Show the adaptive banner, retrying a few times while the screen still wants
+ * it.
+ *
+ * A brand-new app often has no banner inventory for the first hours — AdMob
+ * answers the first requests with no-fill — and a single failed request used to
+ * mean no banner until the next screen change. Three attempts over ~90 seconds
+ * costs nothing and is the difference between "ads are broken" and an ad
+ * appearing a minute later.
+ */
+export async function showBanner(margin = 0): Promise<void> {
+  bannerWanted = true
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (!bannerWanted) return
+    if (await showBannerOnce(margin)) return
+    if (attempt < 2) {
+      await new Promise((resolve) => window.setTimeout(resolve, 15_000 * (attempt + 1)))
+    }
   }
 }
 
 export async function hideBanner(): Promise<void> {
+  bannerWanted = false
   if (!bannerVisible) return
   const AdMob = await loadPlugin()
   if (!AdMob) return
@@ -91,6 +146,22 @@ export async function hideBanner(): Promise<void> {
     await AdMob.hideBanner()
   } catch {
     // Already gone.
+  }
+}
+
+/**
+ * Why the last ad request failed, for on-device checks. Empty strings mean the
+ * request has not failed (or has not been made yet).
+ *
+ * Reachable from the WebView console inside the app:
+ *   await window.__medrepAds?.()
+ */
+export function adsDiagnostics() {
+  return {
+    bannerVisible,
+    bannerWanted,
+    lastBannerError,
+    lastRewardedError,
   }
 }
 
@@ -129,6 +200,8 @@ export async function showRewardedUnlock(
       }),
     ])
   } catch (cause) {
+    lastRewardedError = describe(cause)
+    console.warn('[ads] rewarded failed:', lastRewardedError)
     if (cause instanceof Error && cause.message === 'REWARDED_LOAD_TIMEOUT') {
       return { ok: false, error: 'The video is taking too long to load. Please try again in a moment.' }
     }
@@ -145,6 +218,8 @@ export async function showRewardedUnlock(
     // confirmed by AdMob SSV, never here.
     await AdMob.showRewardVideoAd()
   } catch (cause) {
+    lastRewardedError = describe(cause)
+    console.warn('[ads] rewarded show failed:', lastRewardedError)
     return { ok: false, error: rewardedErrorMessage(cause).message }
   }
 

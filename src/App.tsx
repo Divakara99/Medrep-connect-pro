@@ -29,7 +29,7 @@ import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
 import { bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
-import { showRewardedUnlock, type RewardedOutcome } from './data/ads'
+import { adsDiagnostics, initAds, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
@@ -145,6 +145,21 @@ export default function App() {
   // the signed-in page stack answer the back gesture. Sheets and the
   // applications page register above this one, so they close first.
   useEffect(() => { installBackGuard() }, [])
+
+  /**
+   * Warm the ad SDK as soon as the app starts, and leave a small diagnostics
+   * hook on window. Ads fail silently on purpose, so "no ads" has no visible
+   * cause; opening chrome://inspect on the phone and running
+   * `await __medrepAds()` now reports whether the request was even attempted
+   * and what AdMob answered.
+   *
+   * Android only — the website never loads the advertising SDK.
+   */
+  useEffect(() => {
+    if (!isAndroidApp()) return
+    void initAds()
+    ;(window as unknown as { __medrepAds?: typeof adsDiagnostics }).__medrepAds = adsDiagnostics
+  }, [])
   useBackHandler(view === 'user', goBackInApp)
   useBackHandler(view === 'user' && menuOpen, () => setMenuOpen(false))
 
