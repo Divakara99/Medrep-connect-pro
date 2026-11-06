@@ -103,8 +103,18 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
   }
 
   return (
-    <main className="min-h-[100dvh] bg-gradient-to-b from-brand-50 via-white to-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center px-4 py-8">
+    /*
+     * The form is top-aligned, not vertically centred.
+     *
+     * Centring made the screen lurch upward the moment an input was focused: the
+     * soft keyboard shrinks the viewport, the card re-centres inside the shorter
+     * box, and everything moves while the user is trying to type. Anchored to the
+     * top, the card stays exactly where it is and the page scrolls only if the
+     * focused field would otherwise be covered. Wider screens (tablet, desktop)
+     * keep the centred look, where a keyboard is not in play.
+     */
+    <main data-login-shell className="min-h-[100dvh] bg-gradient-to-b from-brand-50 via-white to-white flex flex-col overflow-y-auto overscroll-contain">
+      <div className="flex-1 flex items-start sm:items-center justify-center px-4 pt-6 pb-8">
         <div className="w-full max-w-md">
           <header className="flex flex-col items-center mb-6">
             <button type="button" aria-label="MedRep Connect Pro" onClick={openRestrictedPortal} className="rounded-full focus-visible:outline-2 focus-visible:outline-brand-700"><Logo size={64} /></button>
@@ -120,7 +130,7 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
             <div className="mt-4"><CreatorCredit variant="solid" /></div>
           </header>
 
-          <Card className="p-5">
+          <Card className="p-5 scroll-mt-4">
             <p className="text-base font-semibold text-slate-700 mb-4">Sign in to browse openings. New here? Create an account first.</p>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">
