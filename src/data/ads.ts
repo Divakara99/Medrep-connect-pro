@@ -41,6 +41,9 @@ let bannerWanted = false
  */
 let lastBannerError = ''
 let lastRewardedError = ''
+let lastInitError = ''
+/** null = not attempted yet, false = the plugin module never loaded. */
+let pluginLoaded: boolean | null = null
 
 function describe(cause: unknown): string {
   if (cause instanceof Error) return cause.message
@@ -55,9 +58,44 @@ function describe(cause: unknown): string {
 async function loadPlugin(): Promise<AdMobPlugin | null> {
   if (!isAndroidApp()) return null
   pluginPromise ??= import('@capacitor-community/admob')
-    .then((module) => module.AdMob)
-    .catch(() => null)
+    .then((module) => {
+      pluginLoaded = true
+      return module.AdMob
+    })
+    .catch((cause: unknown) => {
+      pluginLoaded = false
+      lastInitError = `plugin import failed: ${describe(cause)}`
+      console.warn('[ads]', lastInitError)
+      return null
+    })
   return pluginPromise
+}
+
+/**
+ * Resolve with the promise's value, or null if it takes too long.
+ *
+ * AdMob's initialisation steps talk to Google's servers. If one of them never
+ * answers, every caller behind it waits forever: ads requested, nothing shown,
+ * and — crucially — no error recorded, because a hang is not an exception. That
+ * is exactly what the on-device diagnostics showed (banner wanted: true,
+ * banner visible: false, last banner error: empty).
+ */
+async function settleWithin<T>(promise: Promise<T>, ms: number, what: string): Promise<T | null> {
+  let timer: number | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = window.setTimeout(() => resolve(null), ms)
+      }),
+    ])
+  } catch (cause) {
+    lastInitError = `${what}: ${describe(cause)}`
+    console.warn('[ads]', lastInitError)
+    return null
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer)
+  }
 }
 
 /** UMP consent, then SDK init. Safe to call repeatedly; runs once. */
@@ -72,27 +110,31 @@ export function initAds(): Promise<void> {
 async function initialiseAds(): Promise<void> {
   const AdMob = await loadPlugin()
   if (!AdMob) return
-  try {
-    // AdMob UMP consent flow. In India this typically resolves to
-    // NOT_REQUIRED / OBTAINED without a form; where a form exists it must be
-    // completed before ads are requested.
-    const consent = await AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: false })
-    if (consent.isConsentFormAvailable && consent.status === 'REQUIRED') {
-      await AdMob.showConsentForm()
-    }
-  } catch {
-    // Consent problems must never block the app; ads simply may not load.
-  }
-  try {
-    await AdMob.initialize({ initializeForTesting: false })
-  } catch {
-    // Ad load failures are non-fatal by design.
+
+  // SDK first (local, quick), consent second. The old order ran UMP first, so a
+  // consent call that never answered stopped the SDK from ever starting — and
+  // nothing was requested from AdMob.
+  await settleWithin(AdMob.initialize({ initializeForTesting: false }), 10_000, 'initialize')
+
+  const consent = await settleWithin(
+    AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: false }),
+    10_000,
+    'requestConsentInfo',
+  )
+  if (consent && consent.isConsentFormAvailable && consent.status === 'REQUIRED') {
+    await settleWithin(AdMob.showConsentForm(), 60_000, 'showConsentForm')
   }
 }
 
 async function showBannerOnce(margin: number): Promise<boolean> {
   const AdMob = await loadPlugin()
-  if (!AdMob) return false
+  if (!AdMob) {
+    // Previously silent: the button reported "wanted" forever with no error.
+    lastBannerError = pluginLoaded === false
+      ? 'AdMob plugin unavailable in this build'
+      : 'Ads are available in the Android app only'
+    return false
+  }
   await initAds()
   try {
     await AdMob.showBanner({
@@ -158,8 +200,10 @@ export async function hideBanner(): Promise<void> {
  */
 export function adsDiagnostics() {
   return {
+    pluginLoaded,
     bannerVisible,
     bannerWanted,
+    lastInitError,
     lastBannerError,
     lastRewardedError,
   }
