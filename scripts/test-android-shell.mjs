@@ -50,4 +50,29 @@ assert.match(
 // 3. And the activity hides one anyway if a future theme hands it out.
 assert.match(activity, /getSupportActionBar\(\) != null/, 'MainActivity hides an action bar if one exists')
 
-console.log('android shell: no action bar above the WebView — passed')
+// 4. The launch splash is drawn from our own mark. It shipped as the stock
+//    Capacitor artwork (white with two blue slashes) for the life of the app,
+//    and that image is what showed above the WebView while it started.
+import { readdir, stat } from 'node:fs/promises'
+
+const resRoot = new URL('../android/app/src/main/res/', import.meta.url)
+const splashDirs = (await readdir(resRoot, { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory() && /^drawable/.test(entry.name))
+  .map((entry) => entry.name)
+let checked = 0
+for (const dirName of splashDirs) {
+  const files = await readdir(new URL(`${dirName}/`, resRoot))
+  if (!files.includes('splash.png')) continue
+  const file = new URL(`${dirName}/splash.png`, resRoot)
+  const size = (await stat(file)).size
+  // The stock splash is a mostly-white image with a small blue glyph and
+  // compresses to a few KB; ours carries the brand tile and is larger.
+  assert.ok(size > 4000, `${dirName}/splash.png looks like the stock blank splash (${size} bytes)`)
+  checked += 1
+}
+assert.ok(checked >= 10, 'every orientation/density splash is regenerated from our logo')
+
+const generator = await readFile(new URL('../scripts/generate-android-icons.mjs', import.meta.url), 'utf8')
+assert.match(generator, /mrc-tile/, 'the splash generator paints the brand tile behind the glyph')
+
+console.log('android shell: no action bar above the WebView, branded splash — passed')
