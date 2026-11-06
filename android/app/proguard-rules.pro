@@ -29,8 +29,12 @@
 -keep class com.getcapacitor.BridgeWebViewClient { *; }
 
 # ------------------------------------------------------------ Capacitor plugins ---
-# AdMob (banner + rewarded + UMP consent), instantiates SDK classes reflectively.
--keep class ee.forgr.capacitor.admob.** { *; }
+# AdMob (banner + rewarded + UMP consent). The class Capacitor looks up by name
+# in capacitor.plugins.json is com.getcapacitor.community.admob.AdMob — the rule
+# here used to name ee.forgr.capacitor.admob, a package that does not exist, so
+# the plugin was only protected by the generic "extends com.getcapacitor.Plugin"
+# rule below. Kept by its real name now.
+-keep class com.getcapacitor.community.admob.** { *; }
 # Native Purchases (Google Play Billing wrapper).
 -keep class ee.forgr.** { *; }
 # App plugin (back button / app state).

@@ -27,9 +27,9 @@ import { clearPaymentCache } from './data/payments'
 import { installBackGuard } from './data/backstack'
 import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
-import { bannerAllowedOnTab, rewardedUnlockOffered } from './data/adConfig'
+import { bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
-import { showRewardedUnlock, type RewardedOutcome } from './data/ads'
+import { adsDiagnostics, initAds, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
@@ -74,6 +74,7 @@ export default function App() {
   const [recoveryMode, setRecoveryMode] = useState(false)
   // Job whose company name a rewarded video is unlocking (Android app only).
   const [unlockingJobId, setUnlockingJobId] = useState<string | null>(null)
+  const [unlockStage, setUnlockStage] = useState<UnlockStage | null>(null)
   void notifTick
 
   const applyAuthSnapshot = useCallback((snapshot: AuthSnapshot, resetTab = false) => {
@@ -144,6 +145,21 @@ export default function App() {
   // the signed-in page stack answer the back gesture. Sheets and the
   // applications page register above this one, so they close first.
   useEffect(() => { installBackGuard() }, [])
+
+  /**
+   * Warm the ad SDK as soon as the app starts, and leave a small diagnostics
+   * hook on window. Ads fail silently on purpose, so "no ads" has no visible
+   * cause; opening chrome://inspect on the phone and running
+   * `await __medrepAds()` now reports whether the request was even attempted
+   * and what AdMob answered.
+   *
+   * Android only — the website never loads the advertising SDK.
+   */
+  useEffect(() => {
+    if (!isAndroidApp()) return
+    void initAds()
+    ;(window as unknown as { __medrepAds?: typeof adsDiagnostics }).__medrepAds = adsDiagnostics
+  }, [])
   useBackHandler(view === 'user', goBackInApp)
   useBackHandler(view === 'user' && menuOpen, () => setMenuOpen(false))
 
@@ -328,18 +344,21 @@ export default function App() {
     if (!user || unlockingJobId) return
     if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: job.companyUnlocked === true })) return
     setUnlockingJobId(job.id)
+    setUnlockStage('loading')
     try {
-      // The Play/AdMob video UI can be dismissed without ever calling back, and
-      // a rewarded unit with no inventory can stall while it loads. Either way
-      // the button must not stay on "Checking your unlock…" — after a minute the
-      // attempt is abandoned with a message the user can act on.
+      // The Play/AdMob video UI can be dismissed without ever calling back.
+      // showRewardedUnlock reports its own progress (loading → watching →
+      // verifying) and gives up on a stalled LOAD after 20 seconds, so the
+      // button never sits on "Checking your unlock…" while nothing is happening.
+      // This race is only the last-resort backstop for a show() that never
+      // resolves; it is long enough for a full video plus confirmation.
       const outcome = await Promise.race<RewardedOutcome>([
-        showRewardedUnlock(user.id, job.id),
+        showRewardedUnlock(user.id, job.id, setUnlockStage),
         new Promise<RewardedOutcome>((resolve) => {
           window.setTimeout(() => resolve({
             ok: false,
             error: 'The video did not start or finish in time. Please try again.',
-          }), 60_000)
+          }), 180_000)
         }),
       ])
       if (!outcome.ok) {
@@ -359,6 +378,7 @@ export default function App() {
         : 'Video complete — your unlock is being confirmed and will appear shortly.')
     } finally {
       setUnlockingJobId(null)
+      setUnlockStage(null)
     }
     // showToast is intentionally not a dependency; it only sets state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,10 +541,11 @@ export default function App() {
           onOpenJob={openJob}
           onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
           unlockingJobId={unlockingJobId}
+          unlockStage={unlockStage}
         />
       )}
       {tab === 'priority' && user && (
-        <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined} unlockingJobId={unlockingJobId} />
+        <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined} unlockingJobId={unlockingJobId} unlockStage={unlockStage} />
       )}
       {tab === 'plans' && user && (
         <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />
@@ -636,7 +657,7 @@ export default function App() {
         onSubscribe={() => { setSelectedJob(null); navigate('plans') }}
         onApply={requestApplication}
         onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
-        unlockBusy={Boolean(selectedJob && unlockingJobId === selectedJob.id)}
+        unlockStage={selectedJob && unlockingJobId === selectedJob.id ? unlockStage : null}
       />
       <Modal
         open={profileGateOpen}
