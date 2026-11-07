@@ -336,34 +336,6 @@ export default function App() {
   const { pull, refreshing } = usePullToRefresh(refreshFromServer, Boolean(userId) && !menuOpen)
 
   /**
-   * Height of Account's fixed Save/Logout bar, in CSS pixels.
-   *
-   * The banner is a native overlay pinned to the bottom of the WebView, so the
-   * only way to keep it off that bar is a bottom margin in device pixels. A
-   * hard-coded 76 was a guess: on a phone with a gesture bar the real bar is
-   * taller (the padding adds env(safe-area-inset-bottom)), and the banner came
-   * back down over the Logout button. Measured instead of assumed.
-   */
-  const [accountBarPx, setAccountBarPx] = useState(76)
-  useEffect(() => {
-    if (nav.tab !== 'account') return
-    const measure = () => {
-      const bar = document.querySelector('[data-account-action-bar]')
-      if (!bar) return
-      const height = Math.ceil(bar.getBoundingClientRect().height)
-      if (height > 0) setAccountBarPx((current) => (current === height ? current : height))
-    }
-    measure()
-    // Fonts and insets settle after the first paint, so measure once more.
-    const settle = window.setTimeout(measure, 250)
-    window.addEventListener('resize', measure)
-    return () => {
-      window.clearTimeout(settle)
-      window.removeEventListener('resize', measure)
-    }
-  }, [nav.tab])
-
-  /**
    * Publish the strip of screen the native banner owns as `--ad-reserve`.
    *
    * Any overlay anchored to the bottom of the screen (the menu's footer, a
@@ -659,11 +631,11 @@ export default function App() {
 
       {/* AdMob adaptive banner: content screens only, Android app only.
           Plans is the payment screen and login/sign-up never reach this
-          shell, so no ads ever appear there. On Account the banner floats
-          above the fixed Save/Logout bar; everywhere else the overlays that
-          reach the bottom edge pad themselves by --ad-reserve, so no button
-          can end up underneath the banner. */}
-      <AdBanner enabled={bannerAllowedOnTab(tab)} bottomMargin={tab === 'account' ? accountBarPx : 0} />
+          shell, so no ads ever appear there. The banner owns the very bottom
+          edge of the screen on every tab; anything else that wants to be near
+          that edge (Account's Save/Logout bar, a bottom sheet, the menu list)
+          offsets itself by --ad-reserve instead. */}
+      <AdBanner enabled={bannerAllowedOnTab(tab)} />
 
       {menuOpen && (
         <div
@@ -696,7 +668,13 @@ export default function App() {
               </button>
             </div>
 
-            <nav aria-label="App sections" className="flex-1 space-y-2 overflow-y-auto p-4">
+            {/* The list keeps a bottom reserve the size of the native banner,
+                so its last row can always be scrolled clear of it. */}
+            <nav
+              aria-label="App sections"
+              className="flex-1 space-y-2 overflow-y-auto p-4"
+              style={{ paddingBottom: 'calc(1rem + var(--ad-reserve, 0px))' }}
+            >
               {USER_MENU_ITEMS.map((item) => (
                 <Button
                   key={item.id}
@@ -728,28 +706,25 @@ export default function App() {
                   </span>
                 )}
               </Button>
+              {/* Log out lives in the list, not in a footer pinned to the bottom
+                  edge: the native ads banner always owns that edge, and a footer
+                  there could only be reached if the banner moved away. As a list
+                  item it scrolls into view with a clear gap above it. */}
+              <div className="pt-3 mt-3 border-t border-slate-200">
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    void onLogout()
+                  }}
+                >
+                  <span aria-hidden="true">🚪</span>
+                  <span>Log out</span>
+                </Button>
+              </div>
             </nav>
-
-            {/* Padded by --ad-reserve: the native banner covers the bottom of
-                the screen whatever the web layer does, and this footer used to
-                sit right underneath it — the Log out button could not be
-                tapped. The reserve keeps the button above the banner. */}
-            <div
-              className="border-t border-slate-200 p-4"
-              style={{ paddingBottom: 'calc(1rem + var(--ad-reserve, 0px))' }}
-            >
-              <Button
-                type="button"
-                variant="danger"
-                className="w-full"
-                onClick={() => {
-                  setMenuOpen(false)
-                  void onLogout()
-                }}
-              >
-                🚪 Log out
-              </Button>
-            </div>
           </aside>
         </div>
       )}
