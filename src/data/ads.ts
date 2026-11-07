@@ -131,32 +131,46 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   ]).finally(() => { if (timer !== undefined) window.clearTimeout(timer) })
 }
 
-async function loadPlugin(): Promise<AdMobPlugin | null> {
+/**
+ * The Capacitor plugin object is a Proxy: EVERY property access returns a
+ * method, including `then`. Returning it from an async function therefore makes
+ * the promise machinery treat it as a thenable, call `then(resolve, reject)`, and
+ * reject with:
+ *
+ *     "AdMob.then()" is not implemented on android (code UNIMPLEMENTED)
+ *
+ * That single line — caught by the unhandled-rejection hook — is why no ad ever
+ * loaded: every caller awaited a promise that had been poisoned by its own
+ * resolved value. The plugin is now kept in a module variable and the helpers
+ * resolve with a boolean, so nothing ever resolves *with* the Proxy.
+ */
+let pluginInstance: AdMobPlugin | null = null
+
+async function ensurePlugin(): Promise<boolean> {
   if (!isAndroidApp()) {
-    mark('loadPlugin: not the Android app')
-    return null
+    mark('plugin: not the Android app')
+    return false
   }
-  // Deliberately NOT memoised. A cached promise that never settles is a trap:
-  // every later caller awaits it forever and nothing records why. `import()` is
-  // served from the module cache anyway, so this costs nothing.
+  if (pluginInstance) return true
   try {
-    // Bounded as well: an import that never settles must become an error the
-    // card can show, never a silent wait.
+    // Bounded: an import that never settles must become an error the card can
+    // show, never a silent wait.
     const module = await within(import('@capacitor-community/admob'), 10_000)
     if (!module) {
       pluginLoaded = false
       lastInitError = 'plugin import did not settle in 10s'
-      mark('loadPlugin: import did not settle in 10s')
-      return null
+      mark('plugin: import did not settle in 10s')
+      return false
     }
+    pluginInstance = module.AdMob
     pluginLoaded = true
-    mark('loadPlugin: imported')
-    return module.AdMob
+    mark('plugin: imported')
+    return true
   } catch (cause) {
     pluginLoaded = false
     lastInitError = `plugin import failed: ${describe(cause)}`
-    mark(`loadPlugin: failed ${describe(cause)}`)
-    return null
+    mark(`plugin: failed ${describe(cause)}`)
+    return false
   }
 }
 
@@ -228,9 +242,10 @@ export function initAds(): Promise<void> {
 
 async function initialiseAds(): Promise<void> {
   mark('init: start')
-  const AdMob = await loadPlugin()
-  mark(`init: plugin ${AdMob ? 'ready' : 'missing'}`)
-  if (!AdMob) {
+  const ready = await ensurePlugin()
+  mark(`init: plugin ${ready ? 'ready' : 'missing'}`)
+  const AdMob = pluginInstance
+  if (!ready || !AdMob) {
     initStage = 'no-plugin'
     return
   }
@@ -263,9 +278,10 @@ async function initialiseAds(): Promise<void> {
 
 async function showBannerOnce(margin: number): Promise<boolean> {
   mark('banner: start')
-  const AdMob = await loadPlugin()
-  mark(`banner: plugin ${AdMob ? 'ready' : 'missing'}`)
-  if (!AdMob) {
+  const ready = await ensurePlugin()
+  mark(`banner: plugin ${ready ? 'ready' : 'missing'}`)
+  const AdMob = pluginInstance
+  if (!ready || !AdMob) {
     // Previously silent: the button reported "wanted" forever with no error.
     lastBannerError = pluginLoaded === false
       ? 'AdMob plugin unavailable in this build'
@@ -335,8 +351,8 @@ export async function showBanner(margin = 0): Promise<void> {
 export async function hideBanner(): Promise<void> {
   bannerWanted = false
   if (!bannerVisible) return
-  const AdMob = await loadPlugin()
-  if (!AdMob) return
+  if (!(await ensurePlugin()) || !pluginInstance) return
+  const AdMob = pluginInstance
   bannerVisible = false
   try {
     await AdMob.hideBanner()
@@ -479,7 +495,7 @@ export async function pingAdSdk(): Promise<string> {
   const plugin = imported.AdMob
   if (!plugin) return 'plugin module has no AdMob export'
   const initialized = await within(plugin.initialize({ initializeForTesting: false }), 8_000)
-  if (initialized === null && !trace.includes('ping: initialize resolved')) {
+  if (initialized === null) {
     mark('ping: initialize hung')
     return 'initialize() did not answer in 8s'
   }
@@ -524,8 +540,8 @@ export function preloadRewardedUnlock(userId: string, jobId: string): void {
     userId,
     jobId,
     ok: (async () => {
-      const AdMob = await loadPlugin()
-      if (!AdMob) return false
+      if (!(await ensurePlugin()) || !pluginInstance) return false
+      const AdMob = pluginInstance
       await initAds()
       try {
         // Bounded: an unanswered prepare used to leave `ok` pending forever, and
@@ -623,8 +639,10 @@ export async function showRewardedUnlock(
   jobId: string,
   onStage?: (stage: UnlockStage) => void,
 ): Promise<RewardedOutcome> {
-  const AdMob = await loadPlugin()
-  if (!AdMob) return { ok: false, error: 'Video ads are available in the Android app only.' }
+  if (!(await ensurePlugin()) || !pluginInstance) {
+    return { ok: false, error: 'Video ads are available in the Android app only.' }
+  }
+  const AdMob = pluginInstance
   await initAds()
 
   onStage?.('loading')

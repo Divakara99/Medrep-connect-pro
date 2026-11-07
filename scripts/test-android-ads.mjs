@@ -150,3 +150,28 @@ const androidVersionName = gradleFile.match(/versionName\s+"([^"]+)"/)?.[1]
 assert.equal(pkgVersion, androidVersionName, 'the in-app version badge matches the Android versionName')
 
 console.log('android ads: real units, content-only banner, free-only rewarded unlock, honest unlock-button stages, Play pass mapping, app-ads.txt, plugin keep rules, version parity — passed')
+
+// The Capacitor plugin object is a Proxy whose every property — including
+// `then` — returns a method. An async function that RESOLVES with it makes the
+// promise machinery call `then(resolve, reject)` and reject with
+// "AdMob.then() is not implemented on android". That poisoned every ad call for
+// two days: the plugin is only ever held in a module variable now.
+const adsSource = await readFile(new URL('../src/data/ads.ts', import.meta.url), 'utf8')
+assert.doesNotMatch(
+  adsSource,
+  /return\s+(module\.)?AdMob\b/,
+  'never resolve a promise with the Capacitor plugin proxy',
+)
+assert.doesNotMatch(
+  adsSource,
+  /Promise<AdMobPlugin \| null>/,
+  'the plugin is handed out through pluginInstance, not through a promise',
+)
+assert.match(
+  adsSource,
+  /let pluginInstance: AdMobPlugin \| null = null/,
+  'the plugin is held in a module variable',
+)
+assert.match(adsSource, /async function ensurePlugin/, 'plugin access goes through ensurePlugin()')
+
+console.log('admob plugin is never resolved as a promise value — passed')
