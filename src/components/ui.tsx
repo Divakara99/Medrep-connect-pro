@@ -103,7 +103,15 @@ export function Modal({ open, onClose, children, title, onBack }: { open: boolea
   useBackHandler(open, onClose)
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4 animate-fade-in" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4 animate-fade-in"
+      // Sheets rise from the bottom edge, which is exactly where the native
+      // ads banner sits. --ad-reserve lifts the panel above it so the last row
+      // of buttons (Watch video, Apply, Cancel) stays tappable. Zero on the
+      // website and on tabs where no banner is shown.
+      style={{ paddingBottom: 'var(--ad-reserve, 0px)' }}
+      onClick={onClose}
+    >
       <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {title && (
           <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 sticky top-0 bg-white">

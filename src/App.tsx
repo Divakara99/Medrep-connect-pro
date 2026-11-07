@@ -30,7 +30,7 @@ import { clearPaymentCache } from './data/payments'
 import { installBackGuard } from './data/backstack'
 import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
-import { bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
+import { adaptiveBannerHeightPx, bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
 import { adsDiagnostics, initAds, preloadRewardedUnlock, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
@@ -363,6 +363,31 @@ export default function App() {
     }
   }, [nav.tab])
 
+  /**
+   * Publish the strip of screen the native banner owns as `--ad-reserve`.
+   *
+   * Any overlay anchored to the bottom of the screen (the menu's footer, a
+   * sheet) pads itself by that amount, so its buttons sit ABOVE the banner
+   * instead of underneath it. This is a layout reserve, not a native call:
+   * hiding and re-showing the banner on every menu tap made the SDK answer
+   * with 15-second timeouts (see the trace in the ad card), and the banner
+   * then took seconds to come back.
+   */
+  useEffect(() => {
+    const apply = () => {
+      const reserve = isAndroidApp() && bannerAllowedOnTab(nav.tab)
+        ? adaptiveBannerHeightPx(window.innerWidth)
+        : 0
+      document.documentElement.style.setProperty('--ad-reserve', `${reserve}px`)
+    }
+    apply()
+    window.addEventListener('resize', apply)
+    return () => {
+      window.removeEventListener('resize', apply)
+      document.documentElement.style.setProperty('--ad-reserve', '0px')
+    }
+  }, [nav.tab])
+
   function onAuthed() {
     setRecoveryMode(false)
     // SIGNED_IN/USER_UPDATED restores the authenticated view after the
@@ -550,10 +575,6 @@ export default function App() {
     return <VacancyPortal onExit={onLogout} />
   }
 
-  // A native banner sits above every WebView layer, so any overlay that owns
-  // the bottom of the screen wins only if the banner is taken away.
-  const adsCoveredByOverlay = menuOpen || notifOpen || selectedJob !== null
-
   // User app
   return (
     <div className="min-h-[100dvh] bg-slate-50">
@@ -639,15 +660,10 @@ export default function App() {
       {/* AdMob adaptive banner: content screens only, Android app only.
           Plans is the payment screen and login/sign-up never reach this
           shell, so no ads ever appear there. On Account the banner floats
-          above the fixed Save/Logout bar, and it is withdrawn entirely while
-          the menu, notifications or a job sheet is open — a native banner
-          always paints above the WebView, so anything anchored to the bottom
-          of an overlay (the menu's Log out, for one) sat underneath it and
-          could not be tapped. */}
-      <AdBanner
-        enabled={bannerAllowedOnTab(tab) && !adsCoveredByOverlay}
-        bottomMargin={tab === 'account' ? accountBarPx : 0}
-      />
+          above the fixed Save/Logout bar; everywhere else the overlays that
+          reach the bottom edge pad themselves by --ad-reserve, so no button
+          can end up underneath the banner. */}
+      <AdBanner enabled={bannerAllowedOnTab(tab)} bottomMargin={tab === 'account' ? accountBarPx : 0} />
 
       {menuOpen && (
         <div
@@ -714,7 +730,14 @@ export default function App() {
               </Button>
             </nav>
 
-            <div className="border-t border-slate-200 p-4">
+            {/* Padded by --ad-reserve: the native banner covers the bottom of
+                the screen whatever the web layer does, and this footer used to
+                sit right underneath it — the Log out button could not be
+                tapped. The reserve keeps the button above the banner. */}
+            <div
+              className="border-t border-slate-200 p-4"
+              style={{ paddingBottom: 'calc(1rem + var(--ad-reserve, 0px))' }}
+            >
               <Button
                 type="button"
                 variant="danger"
