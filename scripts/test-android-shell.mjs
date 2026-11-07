@@ -50,29 +50,46 @@ assert.match(
 // 3. And the activity hides one anyway if a future theme hands it out.
 assert.match(activity, /getSupportActionBar\(\) != null/, 'MainActivity hides an action bar if one exists')
 
-// 4. The launch splash is drawn from our own mark. It shipped as the stock
-//    Capacitor artwork (white with two blue slashes) for the life of the app,
-//    and that image is what showed above the WebView while it started.
-import { readdir, stat } from 'node:fs/promises'
+// 4. THE ACTUAL CAUSE. postSplashScreenTheme is applied by
+//    SplashScreen.installSplashScreen(), and MainActivity never called it — so
+//    the activity ran on Theme.SplashScreen for its whole life, that theme
+//    allows a title bar, and the bar painted `android:background` (the splash
+//    drawable) behind the app label. That is the strip: "MedRep Pro" on a
+//    background of splash artwork, which is why it looked different after the
+//    artwork was regenerated.
+assert.match(
+  activity,
+  /SplashScreen\.installSplashScreen\(this\)/,
+  'MainActivity installs the splash screen, which is what applies postSplashScreenTheme',
+)
+assert.match(
+  styles,
+  /<style name="AppTheme\.NoActionBarLaunch"[\s\S]*?<item name="android:windowNoTitle">true<\/item>/,
+  'the splash theme forbids a title bar itself, in case the handover is skipped',
+)
+assert.doesNotMatch(
+  styles,
+  /<item name="android:background">@drawable\/splash<\/item>/,
+  'the theme never paints splash artwork behind window chrome',
+)
+
+// 5. The stock Capacitor splash PNGs are gone: the launch screen is the
+//    standard Android 12+ splash (brand icon on white) back-ported to API 24.
+import { readdir } from 'node:fs/promises'
 
 const resRoot = new URL('../android/app/src/main/res/', import.meta.url)
-const splashDirs = (await readdir(resRoot, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory() && /^drawable/.test(entry.name))
-  .map((entry) => entry.name)
-let checked = 0
-for (const dirName of splashDirs) {
-  const files = await readdir(new URL(`${dirName}/`, resRoot))
-  if (!files.includes('splash.png')) continue
-  const file = new URL(`${dirName}/splash.png`, resRoot)
-  const size = (await stat(file)).size
-  // The stock splash is a mostly-white image with a small blue glyph and
-  // compresses to a few KB; ours carries the brand tile and is larger.
-  assert.ok(size > 4000, `${dirName}/splash.png looks like the stock blank splash (${size} bytes)`)
-  checked += 1
+const leftovers = []
+for (const entry of await readdir(resRoot, { withFileTypes: true })) {
+  if (!entry.isDirectory() || !/^drawable/.test(entry.name)) continue
+  if ((await readdir(new URL(`${entry.name}/`, resRoot))).includes('splash.png')) {
+    leftovers.push(entry.name)
+  }
 }
-assert.ok(checked >= 10, 'every orientation/density splash is regenerated from our logo')
+assert.deepEqual(leftovers, [], `stock splash artwork still shipped in: ${leftovers.join(', ')}`)
+assert.match(
+  styles,
+  /<item name="windowSplashScreenAnimatedIcon">@mipmap\/ic_launcher<\/item>/,
+  'the launch icon is our own launcher mark',
+)
 
-const generator = await readFile(new URL('../scripts/generate-android-icons.mjs', import.meta.url), 'utf8')
-assert.match(generator, /mrc-tile/, 'the splash generator paints the brand tile behind the glyph')
-
-console.log('android shell: no action bar above the WebView, branded splash — passed')
+console.log('android shell: no title bar, no stock splash — passed')

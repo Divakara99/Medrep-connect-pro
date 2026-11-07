@@ -9,6 +9,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 
 import androidx.activity.EdgeToEdge;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.activity.SystemBarStyle;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -48,6 +49,11 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Hand the activity over from the splash theme to the NoActionBar theme.
+        // Without this call postSplashScreenTheme is never applied: the activity
+        // keeps Theme.SplashScreen, which allows a title bar, and Android draws
+        // the app label ("MedRep Pro") above the web header.
+        SplashScreen.installSplashScreen(this);
         // Must run before super.onCreate(): BridgeActivity inflates its content
         // view there, and the window flags have to be in place first.
         enableEdgeToEdge();

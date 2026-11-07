@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Base application theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
-        <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="colorAccent">@color/colorAccent</item>
-    </style>
-
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
@@ -26,14 +18,21 @@
 
 
     <!--
-      The launch theme MUST hand over to a NoActionBar theme. Without this the
-      activity keeps Theme.SplashScreen after the splash finishes, and
-      AppCompatActivity falls back to decorating the window with the app's own
-      label as a title bar — the strip reading "MedRep Pro" that appeared above
-      the web header.
+      The launch theme was the last place a title bar could come from. It painted
+      the app label ("MedRep Pro") on top of `android:background`, which was the
+      splash drawable — that is why the strip above the web header was filled
+      with splash artwork. It now forbids a title bar outright, uses the standard
+      Android 12+ splash (brand icon on white, back-ported by core-splashscreen
+      to API 24) and hands over to the NoActionBar theme.
     -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
+
 </resources>
