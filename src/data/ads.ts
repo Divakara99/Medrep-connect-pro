@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core'
 import { rewardedErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
 import { ADMOB_APP_ID, ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
+import { APP_BUILD_LABEL, APP_VERSION_LABEL } from './version'
 
 /**
  * How long the rewarded ad may spend loading before the user is told it is not
@@ -565,6 +566,12 @@ export async function pingAdSdk(): Promise<string> {
 export function adsDiagnosticsText(): string {
   const state = adsDiagnostics()
   return [
+    `build: ${APP_VERSION_LABEL} ${APP_BUILD_LABEL}`,
+    // Printed every time so a pasted card settles the question "is this build
+    // asking for test ads?" without another round trip. Nothing in this app
+    // can: both units are real and every request passes isTesting: false. Test
+    // creatives are chosen by Google, not by the client.
+    'test mode: OFF — real units, isTesting: false, initializeForTesting: false',
     `app id: ${state.appId}`,
     `banner unit: ${state.bannerUnit}`,
     `rewarded unit: ${state.rewardedUnit}`,

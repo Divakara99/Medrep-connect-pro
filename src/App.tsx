@@ -16,6 +16,7 @@ import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
 import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
 import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
+import { unlockActive } from './data/unlockWindow'
 import { PullToRefreshIndicator } from './components/PullToRefresh'
 import { usePullToRefresh } from './components/usePullToRefresh'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
@@ -29,7 +30,7 @@ import { clearPaymentCache } from './data/payments'
 import { installBackGuard } from './data/backstack'
 import { useBackHandler } from './components/useBackHandler'
 import { AdBanner } from './components/AdBanner'
-import { bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
+import { adaptiveBannerHeightPx, bannerAllowedOnTab, rewardedUnlockOffered, type UnlockStage } from './data/adConfig'
 import { isAndroidApp } from './data/platform'
 import { adsDiagnostics, initAds, preloadRewardedUnlock, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
@@ -334,6 +335,31 @@ export default function App() {
 
   const { pull, refreshing } = usePullToRefresh(refreshFromServer, Boolean(userId) && !menuOpen)
 
+  /**
+   * Publish the strip of screen the native banner owns as `--ad-reserve`.
+   *
+   * Any overlay anchored to the bottom of the screen (the menu's footer, a
+   * sheet) pads itself by that amount, so its buttons sit ABOVE the banner
+   * instead of underneath it. This is a layout reserve, not a native call:
+   * hiding and re-showing the banner on every menu tap made the SDK answer
+   * with 15-second timeouts (see the trace in the ad card), and the banner
+   * then took seconds to come back.
+   */
+  useEffect(() => {
+    const apply = () => {
+      const reserve = isAndroidApp() && bannerAllowedOnTab(nav.tab)
+        ? adaptiveBannerHeightPx(window.innerWidth)
+        : 0
+      document.documentElement.style.setProperty('--ad-reserve', `${reserve}px`)
+    }
+    apply()
+    window.addEventListener('resize', apply)
+    return () => {
+      window.removeEventListener('resize', apply)
+      document.documentElement.style.setProperty('--ad-reserve', '0px')
+    }
+  }, [nav.tab])
+
   function onAuthed() {
     setRecoveryMode(false)
     // SIGNED_IN/USER_UPDATED restores the authenticated view after the
@@ -369,7 +395,7 @@ export default function App() {
    */
   const watchToUnlockCompany = useCallback(async (job: Job) => {
     if (!user || unlockingJobId) return
-    if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: job.companyUnlocked === true })) return
+    if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: unlockActive(job) })) return
     setUnlockingJobId(job.id)
     setUnlockStage('loading')
     try {
@@ -605,9 +631,11 @@ export default function App() {
 
       {/* AdMob adaptive banner: content screens only, Android app only.
           Plans is the payment screen and login/sign-up never reach this
-          shell, so no ads ever appear there. On Account the banner floats
-          above the fixed Save/Logout bar. */}
-      <AdBanner enabled={bannerAllowedOnTab(tab)} bottomMargin={tab === 'account' ? 76 : 0} />
+          shell, so no ads ever appear there. The banner owns the very bottom
+          edge of the screen on every tab; anything else that wants to be near
+          that edge (Account's Save/Logout bar, a bottom sheet, the menu list)
+          offsets itself by --ad-reserve instead. */}
+      <AdBanner enabled={bannerAllowedOnTab(tab)} />
 
       {menuOpen && (
         <div
@@ -640,7 +668,13 @@ export default function App() {
               </button>
             </div>
 
-            <nav aria-label="App sections" className="flex-1 space-y-2 overflow-y-auto p-4">
+            {/* The list keeps a bottom reserve the size of the native banner,
+                so its last row can always be scrolled clear of it. */}
+            <nav
+              aria-label="App sections"
+              className="flex-1 space-y-2 overflow-y-auto p-4"
+              style={{ paddingBottom: 'calc(1rem + var(--ad-reserve, 0px))' }}
+            >
               {USER_MENU_ITEMS.map((item) => (
                 <Button
                   key={item.id}
@@ -672,21 +706,25 @@ export default function App() {
                   </span>
                 )}
               </Button>
+              {/* Log out lives in the list, not in a footer pinned to the bottom
+                  edge: the native ads banner always owns that edge, and a footer
+                  there could only be reached if the banner moved away. As a list
+                  item it scrolls into view with a clear gap above it. */}
+              <div className="pt-3 mt-3 border-t border-slate-200">
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    void onLogout()
+                  }}
+                >
+                  <span aria-hidden="true">🚪</span>
+                  <span>Log out</span>
+                </Button>
+              </div>
             </nav>
-
-            <div className="border-t border-slate-200 p-4">
-              <Button
-                type="button"
-                variant="danger"
-                className="w-full"
-                onClick={() => {
-                  setMenuOpen(false)
-                  void onLogout()
-                }}
-              >
-                🚪 Log out
-              </Button>
-            </div>
           </aside>
         </div>
       )}

@@ -7,32 +7,28 @@ Plain text is rejected with:
 > Release notes provided for 0 of 2 languages.
 
 The listing carries two languages, so paste one block per language. Each block
-must be under 500 characters — the text below is ~420.
+must be under 500 characters — the text below is ~400.
 
-## 1.0.1 — English (India)
+## 1.0.3 — English (India)
 
 ```
 <en-IN>
-• "How to use the app" now plays in all 7 languages — English, हिन्दी, తెలుగు, தமிழ், ಕನ್ನಡ, മലയാളം, मराठी — with voice, opening with the founder's introduction.
-• Starter plan is now ₹19 for 1 day.
-• Every screen has a back button, and the top bar no longer overlaps the phone's status bar.
-• An expired pass now clearly shows Expired, with one-tap renewal.
-• Clearer messages when Google Play or ads are unavailable.
+• A company name you unlock with a video now stays visible for 10 minutes only. After that it blurs again — watch another video to reopen it.
+• The ads banner no longer covers the Logout button, in the menu and on the Account screen.
+• "How to use the app" plays in all 7 languages with voice.
 </en-IN>
 ```
 
-## 1.0.1 — the second language
+## 1.0.3 — the second language
 
 Use `<en-US>` with the same text if the second language is English (United
 States), or the block below for Hindi:
 
 ```
 <hi-IN>
-• "How to use the app" अब सात भाषाओं में — English, हिन्दी, తెలుగు, தமிழ், ಕನ್ನಡ, മലയാളം, मराठी — आवाज़ के साथ, शुरुआत में ऐप बनाने वाले का परिचय।
-• सबसे छोटा प्लान अब ₹19 में 1 दिन।
-• हर स्क्रीन पर बैक बटन, और ऊपरी पट्टी अब फ़ोन के स्टेटस बार को नहीं ढकती।
-• समय खत्म हो चुके पास अब साफ़ "Expired" दिखाते हैं, एक टैप में रिन्यू।
-• Google Play या ऐड उपलब्ध न होने पर साफ़ संदेश।
+• वीडियो से खुला कंपनी का नाम अब सिर्फ़ 10 मिनट दिखता है। उसके बाद वह फिर धुँधला हो जाता है — दोबारा खोलने के लिए एक और वीडियो देखें।
+• ऐड बैनर अब लॉगआउट बटन को नहीं ढकता — मेन्यू और अकाउंट स्क्रीन, दोनों में।
+• "How to use the app" सातों भाषाओं में आवाज़ के साथ।
 </hi-IN>
 ```
 

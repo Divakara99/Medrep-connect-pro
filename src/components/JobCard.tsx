@@ -2,6 +2,7 @@ import { Badge, Card } from './ui'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { descriptionPoints, type Job } from '../data/jobs'
 import { normalizeIndianMobile } from '../data/vacancyRules'
+import { useUnlockWindow } from './useUnlockWindow'
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -37,9 +38,11 @@ export function JobCard({
   unlockStage?: UnlockStage | null
 }) {
   // Per-job company unlock, kept separate from `unlocked`: it reveals the
-  // company name only, never the four contact fields or Apply.
-  const companyUnlocked = unlocked || job.companyUnlocked === true
-  const showUnlockButton = !unlocked && job.companyUnlocked !== true && Boolean(onWatchUnlock)
+  // company name only, never the four contact fields or Apply. It is also
+  // time-limited, so the card re-reads the window on a short clock.
+  const unlockWindow = useUnlockWindow(job)
+  const companyUnlocked = unlocked || unlockWindow.active
+  const showUnlockButton = !unlocked && !unlockWindow.active && Boolean(onWatchUnlock)
   const categoryColor: Record<string, 'brand' | 'amber' | 'green' | 'purple' | 'red' | 'slate'> = {
     MR: 'brand',
     ABM: 'purple',
@@ -118,7 +121,7 @@ export function JobCard({
                 </div>
               ) : companyUnlocked ? (
                 <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full ring-1 ring-emerald-200">
-                  ✓ Company unlocked · subscribe for contacts
+                  ✓ Company unlocked · {unlockWindow.label} left
                 </div>
               ) : (
                 <div className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-full ring-1 ring-amber-200">

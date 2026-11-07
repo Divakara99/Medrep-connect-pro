@@ -302,8 +302,14 @@ export function AccountScreen({
           Both buttons are anchored together so users don't accidentally hit Logout
           when trying to save, and they can't miss either action. */}
       <div
-        className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 pt-2.5"
-        style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}
+        className="fixed inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 pt-2.5"
+        // The native banner always sits at the very bottom of the screen, so
+        // the bar is lifted by --ad-reserve instead of the banner being pushed
+        // up: Save and Logout are never underneath an ad.
+        style={{
+          bottom: 'var(--ad-reserve, 0px)',
+          paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))',
+        }}
       >
         <div className="max-w-3xl mx-auto flex items-center gap-2">
           <Button

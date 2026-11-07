@@ -56,6 +56,37 @@ try {
     'a replayed transaction_id must be de-duplicated',
   )
 
+  // The unlock is a WINDOW, not a permanent grant: a row whose expiry has
+  // passed must stop revealing the company.
+  await db.exec(`RESET ROLE`)
+  await db.exec(`INSERT INTO public.company_unlocks (user_id, job_id, transaction_id, ad_unit_id, expires_at)
+                 VALUES ('${freeId}', 'job_1', 'tx-expired', 'unit-1', now() - interval '1 minute')`)
+  await db.exec(`SET ROLE authenticated; SET request.jwt.claim.sub = '${freeId}'`)
+  ;({ rows } = await db.query('SELECT * FROM public.list_visible_jobs()'))
+  job = rows[0].list_visible_jobs
+  assert.equal(job.companyUnlocked, true, 'the still-running window keeps the name visible')
+  const liveExpiry = job.unlockExpiresAt
+  assert.ok(typeof liveExpiry === 'string' && Date.parse(liveExpiry) > Date.now(), 'the projection carries the live expiry')
+
+  // Only an expired row: the name must go back to hidden.
+  await db.exec(`RESET ROLE`)
+  await db.exec(`DELETE FROM public.company_unlocks WHERE user_id = '${freeId}' AND job_id = 'job_1'`)
+  await db.exec(`INSERT INTO public.company_unlocks (user_id, job_id, transaction_id, ad_unit_id, expires_at)
+                 VALUES ('${freeId}', 'job_1', 'tx-old', 'unit-1', now() - interval '1 minute')`)
+  await db.exec(`SET ROLE authenticated; SET request.jwt.claim.sub = '${freeId}'`)
+  ;({ rows } = await db.query('SELECT * FROM public.list_visible_jobs()'))
+  job = rows[0].list_visible_jobs
+  assert.equal(job.companyUnlocked, false, 'an expired window locks the company again')
+  assert.equal(Object.hasOwn(job, 'company'), false, 'an expired window must not send the company name')
+  assert.equal(job.unlockExpiresAt, null, 'no live expiry is reported')
+
+  // Watching again later is allowed: two rows for the same job, each its own
+  // transaction. The old "one unlock per job, forever" constraint is gone.
+  await db.exec(`RESET ROLE`)
+  await db.exec(`INSERT INTO public.company_unlocks (user_id, job_id, transaction_id, ad_unit_id)
+                 VALUES ('${freeId}', 'job_1', 'tx-again', 'unit-1')`)
+  await db.exec(`SET ROLE authenticated; SET request.jwt.claim.sub = '${freeId}'`)
+
   // Now the free user sees ONLY the company name back.
   await db.exec(`SET ROLE authenticated; SET request.jwt.claim.sub = '${freeId}'`)
   ;({ rows } = await db.query('SELECT * FROM public.list_visible_jobs()'))
@@ -68,7 +99,7 @@ try {
 
   // Own-row reads only: the other user's unlock list is empty.
   const { rows: mine } = await db.query('SELECT job_id FROM public.company_unlocks')
-  assert.equal(mine.length, 1)
+  assert.equal(mine.length, 2, 'the expired row and the new one are both mine')
   await db.exec(`SET request.jwt.claim.sub = '${paidId}'`)
   const { rows: theirs } = await db.query('SELECT job_id FROM public.company_unlocks')
   assert.equal(theirs.length, 0, 'users read only their own unlocks')
@@ -80,7 +111,7 @@ try {
   assert.equal(job.manager, 'Private Manager')
   assert.equal(job.companyUnlocked, false, 'subscription must not masquerade as a per-job unlock')
 
-  console.log('android unlocks: SSV-only writes, own-row reads, company-only projection, tx de-duplication — passed')
+  console.log('android unlocks: SSV-only writes, own-row reads, timed window, company-only projection, tx de-duplication — passed')
 } finally {
   await db.close()
 }

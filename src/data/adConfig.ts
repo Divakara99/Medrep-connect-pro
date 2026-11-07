@@ -29,6 +29,21 @@ export function bannerAllowedOnTab(tab: string): boolean {
 }
 
 /**
+ * How tall an adaptive banner is, in CSS pixels, for a given viewport width.
+ *
+ * The banner is a native view drawn ON TOP of the WebView, so web layout cannot
+ * push it aside — the only way to keep a button out of its way is to reserve
+ * the same strip of space the banner covers. Google's inline adaptive banner is
+ * 50 dp tall per 320 dp of width, clamped to 32–90 dp, and in the Capacitor
+ * WebView one CSS pixel is one dp, so this number can be used directly as a
+ * layout reserve.
+ */
+export function adaptiveBannerHeightPx(viewportWidth: number): number {
+  const scaled = (Math.max(0, viewportWidth) / 320) * 50
+  return Math.max(32, Math.min(90, Math.round(scaled)))
+}
+
+/**
  * Rewarded "unlock the company name" is offered only to free users, only in
  * the Android app, and only for a job whose company is not already unlocked.
  * Subscribers never see rewarded videos; a company unlocked once (by ad or
