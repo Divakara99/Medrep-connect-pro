@@ -347,8 +347,9 @@ export default function App() {
    */
   useEffect(() => {
     const apply = () => {
+      // +8 px of breathing room, so a page's last line never touches the ad.
       const reserve = isAndroidApp() && bannerAllowedOnTab(nav.tab)
-        ? adaptiveBannerHeightPx(window.innerWidth)
+        ? adaptiveBannerHeightPx(window.innerWidth) + 8
         : 0
       document.documentElement.style.setProperty('--ad-reserve', `${reserve}px`)
     }
@@ -549,7 +550,13 @@ export default function App() {
 
   // User app
   return (
-    <div className="min-h-[100dvh] bg-slate-50">
+    <div
+      className="min-h-[100dvh] bg-slate-50"
+      // The banner is a native view over the bottom of the WebView, so the app
+      // itself gives that strip away: every screen — and every footer inside
+      // it — ends above the ad instead of scrolling under it.
+      style={{ paddingBottom: 'var(--ad-reserve, 0px)' }}
+    >
       <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
       <TopBar
         left={
