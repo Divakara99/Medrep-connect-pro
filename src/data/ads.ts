@@ -23,6 +23,13 @@ const REWARDED_LOAD_TIMEOUT_MS = 12_000
  */
 const REWARDED_SHOW_TIMEOUT_MS = 20_000
 
+/**
+ * Nothing here may wait longer than this. Initialisation gets 12 s and the
+ * banner request 15 s, so a probe that is still running after 30 s is stuck, and
+ * saying so beats spinning.
+ */
+const PROBE_DEADLINE_MS = 30_000
+
 /** The plugin's "rewarded ad opened" event, by value so no SDK code is bundled. */
 const REWARDED_SHOWED_EVENT = 'onRewardedVideoAdShowed'
 
@@ -294,8 +301,17 @@ export async function hideBanner(): Promise<void> {
  */
 export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> {
   bannerWanted = true
-  const shown = await showBannerOnce(0)
-  if (!shown && !lastBannerError) {
+  // A deadline around the WHOLE probe, not just its parts. Each step is bounded
+  // on its own, but a step that hangs before its timer is armed (the SDK call
+  // itself, for instance) would still leave the button on "Requesting…"
+  // forever — which is exactly what the tablet showed.
+  const shown = await within(showBannerOnce(0), PROBE_DEADLINE_MS)
+  if (shown === null) {
+    lastBannerError =
+      `no answer from the ad SDK within ${PROBE_DEADLINE_MS / 1000}s` +
+      ` (init stage: ${initStage}${bannerPending ? ', request still in flight' : ''})`
+    console.warn('[ads]', lastBannerError)
+  } else if (!shown && !lastBannerError) {
     lastBannerError = 'banner request finished without a banner and without an error'
   }
   return adsDiagnostics()

@@ -9,7 +9,7 @@ import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
-import { APP_VERSION_LABEL } from '../data/version'
+import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
 import { adsDiagnostics, adsDiagnosticsText, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
 
 export function AccountScreen({
@@ -150,8 +150,9 @@ export function AccountScreen({
               </a>
             </div>
           </div>
-          <button type="button" onClick={onVersionTap} aria-label="App version" className="shrink-0">
+          <button type="button" onClick={onVersionTap} aria-label="App version" className="shrink-0 text-right">
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
+            <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
         </div>
       </Card>
@@ -159,7 +160,10 @@ export function AccountScreen({
       {isAndroidApp() && adsDebugOpen && (
         <Card className="p-4 space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="font-bold text-slate-900">Ad diagnostics</div>
+            <div className="font-bold text-slate-900">
+              Ad diagnostics
+              <div className="text-[10px] font-mono font-normal text-slate-400">{APP_BUILD_LABEL}</div>
+            </div>
             <button
               type="button"
               onClick={() => setAdsDebugOpen(false)}
@@ -175,6 +179,8 @@ export function AccountScreen({
             <div>plugin loaded: {String(adsState?.pluginLoaded)}</div>
             <div>banner wanted: {String(adsState?.bannerWanted)}</div>
             <div>banner visible: {String(adsState?.bannerVisible)}</div>
+            <div>banner attempts: {String(adsState?.bannerAttempts)}{adsState?.bannerPending ? ' (one in flight)' : ''}</div>
+            <div>init stage: {adsState?.initStage}</div>
             <div>init error: {adsState?.lastInitError || '—'}</div>
             <div>last banner error: {adsState?.lastBannerError || '—'}</div>
             <div>last video error: {adsState?.lastRewardedError || '—'}</div>

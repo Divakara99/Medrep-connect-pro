@@ -13,6 +13,15 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 }
 const projectRoot = fileURLToPath(new URL('.', import.meta.url))
 
+// Every build of 1.0.2 looks identical in the UI, so "did you install the new
+// one?" has cost us several rounds: the version badge cannot tell two APKs
+// apart. The commit and build time go into the bundle, and the app shows them,
+// so a screenshot answers the question on its own.
+const buildStamp = `${(process.env.GITHUB_SHA ?? 'local').slice(0, 7)} · ${new Date()
+  .toISOString()
+  .slice(0, 16)
+  .replace('T', ' ')}Z`
+
 const OCR_ASSETS = [
   { fileName: 'ocr/worker.min.js', source: 'node_modules/tesseract.js/dist/worker.min.js', contentType: 'text/javascript; charset=utf-8' },
   { fileName: 'ocr/tesseract-core-lstm.js', source: 'node_modules/tesseract.js-core/tesseract-core-lstm.js', contentType: 'text/javascript; charset=utf-8' },
@@ -60,6 +69,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), localOcrRuntimeAssets()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_STAMP__: JSON.stringify(buildStamp),
   },
   server: {
     host: '0.0.0.0',

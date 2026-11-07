@@ -7,6 +7,13 @@
 declare const __APP_VERSION__: string
 
 /**
+ * Compile-time build stamp (short commit + build time), injected by
+ * vite.config.ts. Two APKs of the same version are otherwise indistinguishable
+ * from inside the app.
+ */
+declare const __BUILD_STAMP__: string
+
+/**
  * Notification keys. Optional: the public VAPID key normally comes from the
  * send-push function (`config` action), so a deployed project needs nothing here.
  * Set it only to test locally before the function is deployed.
