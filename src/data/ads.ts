@@ -1,6 +1,6 @@
 import { rewardedErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
-import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
+import { ADMOB_APP_ID, ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
 
 /**
  * How long the rewarded ad may spend loading before the user is told it is not
@@ -63,7 +63,15 @@ let lastInitError = ''
 let pluginLoaded: boolean | null = null
 
 function describe(cause: unknown): string {
-  if (cause instanceof Error) return cause.message
+  if (cause instanceof Error) {
+    // AdMob errors carry a numeric code and the message is often just the
+    // generic one; "No fill" is code 3 and means something very different from
+    // a network failure, so the code is part of the diagnosis.
+    const code = (cause as Error & { code?: unknown }).code
+    return code === undefined || code === null
+      ? cause.message
+      : `${cause.message} (code ${String(code)})`
+  }
   if (typeof cause === 'string') return cause
   try {
     return JSON.stringify(cause)
@@ -248,6 +256,58 @@ export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> 
 }
 
 /**
+ * Can this device reach Google's ad servers at all?
+ *
+ * "No fill" and "the request was blocked before it left the phone" look
+ * identical from inside the app: both end with no ad. They need opposite
+ * responses, so this asks the two domains every mobile ad request goes through.
+ *
+ * no-cors is deliberate — an opaque response still proves DNS and TCP worked,
+ * and a rejected fetch means the request never got there. Reading the body would
+ * be blocked by CORS and prove nothing extra.
+ */
+export type NetworkProbe = { url: string; reachable: boolean; ms: number; detail: string }
+
+const AD_NETWORK_PROBES = [
+  'https://googleads.g.doubleclick.net/pagead/id',
+  'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js',
+]
+
+export async function probeAdNetwork(): Promise<NetworkProbe[]> {
+  const results: NetworkProbe[] = []
+  for (const url of AD_NETWORK_PROBES) {
+    const started = Date.now()
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+    let timer: number | undefined
+    try {
+      const attempt = fetch(url, {
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: controller?.signal,
+      })
+      const settled = await Promise.race([
+        attempt.then(() => 'reachable' as const).catch((cause: unknown) => describe(cause)),
+        new Promise<'timeout'>((resolve) => {
+          timer = window.setTimeout(() => {
+            controller?.abort()
+            resolve('timeout')
+          }, 8_000)
+        }),
+      ])
+      results.push({
+        url,
+        reachable: settled === 'reachable',
+        ms: Date.now() - started,
+        detail: settled === 'reachable' ? 'ok' : settled === 'timeout' ? 'no answer in 8s' : settled,
+      })
+    } finally {
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }
+  return results
+}
+
+/**
  * Why the last ad request failed, for on-device checks. Empty strings mean the
  * request has not failed (or has not been made yet).
  *
@@ -256,6 +316,9 @@ export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> 
  */
 export function adsDiagnostics() {
   return {
+    appId: ADMOB_APP_ID,
+    bannerUnit: ADMOB_BANNER_AD_UNIT_ID,
+    rewardedUnit: ADMOB_REWARDED_AD_UNIT_ID,
     pluginLoaded,
     bannerVisible,
     bannerWanted,
@@ -263,6 +326,22 @@ export function adsDiagnostics() {
     lastBannerError,
     lastRewardedError,
   }
+}
+
+/** Everything the diagnostics card shows, as copyable text. */
+export function adsDiagnosticsText(): string {
+  const state = adsDiagnostics()
+  return [
+    `app id: ${state.appId}`,
+    `banner unit: ${state.bannerUnit}`,
+    `rewarded unit: ${state.rewardedUnit}`,
+    `plugin loaded: ${String(state.pluginLoaded)}`,
+    `banner wanted: ${String(state.bannerWanted)}`,
+    `banner visible: ${String(state.bannerVisible)}`,
+    `init error: ${state.lastInitError || '—'}`,
+    `last banner error: ${state.lastBannerError || '—'}`,
+    `last video error: ${state.lastRewardedError || '—'}`,
+  ].join('\n')
 }
 
 /**

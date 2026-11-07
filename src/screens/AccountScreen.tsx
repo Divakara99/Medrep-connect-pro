@@ -10,7 +10,7 @@ import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
 import { APP_VERSION_LABEL } from '../data/version'
-import { adsDiagnostics, probeBanner } from '../data/ads'
+import { adsDiagnostics, adsDiagnosticsText, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
 
 export function AccountScreen({
   user,
@@ -45,6 +45,12 @@ export function AccountScreen({
   const [adsDebugOpen, setAdsDebugOpen] = useState(false)
   const [adsState, setAdsState] = useState<ReturnType<typeof adsDiagnostics> | null>(null)
   const [adsBusy, setAdsBusy] = useState(false)
+  const [copyNote, setCopyNote] = useState('')
+  const [netBusy, setNetBusy] = useState(false)
+  const [netResults, setNetResults] = useState<NetworkProbe[] | null>(null)
+
+  /** The card as plain text, so it can be pasted instead of photographed. */
+  const diagnosticsText = adsState ? adsDiagnosticsText() : ''
 
   function onVersionTap() {
     if (!isAndroidApp()) return
@@ -163,6 +169,9 @@ export function AccountScreen({
             </button>
           </div>
           <div className="text-[11px] font-mono leading-relaxed text-slate-700 break-words">
+            <div className="text-slate-500">{adsState?.appId}</div>
+            <div className="text-slate-500">banner {adsState?.bannerUnit}</div>
+            <div className="text-slate-500">rewarded {adsState?.rewardedUnit}</div>
             <div>plugin loaded: {String(adsState?.pluginLoaded)}</div>
             <div>banner wanted: {String(adsState?.bannerWanted)}</div>
             <div>banner visible: {String(adsState?.bannerVisible)}</div>
@@ -186,6 +195,45 @@ export function AccountScreen({
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
           </Button>
+          <Button
+            variant="secondary"
+            disabled={netBusy}
+            onClick={async () => {
+              setNetBusy(true)
+              try {
+                setNetResults(await probeAdNetwork())
+              } finally {
+                setNetBusy(false)
+              }
+            }}
+          >
+            {netBusy ? 'Testing…' : 'Test ad network'}
+          </Button>
+          {netResults && (
+            <div className="text-[11px] font-mono leading-relaxed break-words">
+              {netResults.map((result) => (
+                <div key={result.url} className={result.reachable ? 'text-emerald-700' : 'text-red-700'}>
+                  {result.reachable ? 'reachable' : 'BLOCKED'} · {result.ms} ms · {result.detail}
+                  <div className="text-slate-500">{result.url}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            className="text-xs font-semibold text-brand-600 underline"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(diagnosticsText)
+                setCopyNote('Copied — paste it into the chat')
+              } catch {
+                setCopyNote('Copy blocked — read the lines above instead')
+              }
+            }}
+          >
+            Copy diagnostics
+          </button>
+          {copyNote && <div className="text-[11px] text-slate-500">{copyNote}</div>}
           <div className="text-[11px] text-slate-500">
             Tap the version badge 5× to reopen. “No fill” means AdMob had nothing to serve;
             any other message is a build or network problem.
