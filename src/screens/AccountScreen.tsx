@@ -11,6 +11,7 @@ import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
 import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
 import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
+import { loadMyUnlocks } from '../data/companyUnlocks'
 
 export function AccountScreen({
   user,
@@ -50,6 +51,8 @@ export function AccountScreen({
   const [netResults, setNetResults] = useState<NetworkProbe[] | null>(null)
   const [pingNote, setPingNote] = useState('')
   const [pingBusy, setPingBusy] = useState(false)
+  const [unlockNote, setUnlockNote] = useState('')
+  const [unlockBusy, setUnlockBusy] = useState(false)
 
   /** The card as plain text, so it can be pasted instead of photographed. */
   const diagnosticsText = adsState ? adsDiagnosticsText() : ''
@@ -204,6 +207,27 @@ export function AccountScreen({
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
           </Button>
+          <Button
+            variant="secondary"
+            disabled={unlockBusy}
+            onClick={async () => {
+              setUnlockBusy(true)
+              setUnlockNote('Reading your unlocks…')
+              try {
+                const rows = await loadMyUnlocks()
+                setUnlockNote(rows.length === 0
+                  ? 'No unlock rows for this account — the reward was never recorded.'
+                  : `${rows.length} unlock row(s): ${rows.map((row) => row.jobId.slice(0, 8)).join(', ')}`)
+              } catch (cause) {
+                setUnlockNote(cause instanceof Error ? cause.message : 'Could not read your unlocks.')
+              } finally {
+                setUnlockBusy(false)
+              }
+            }}
+          >
+            {unlockBusy ? 'Checking…' : 'Check my unlocks'}
+          </Button>
+          {unlockNote && <div className="text-[11px] font-mono text-slate-700 break-words">{unlockNote}</div>}
           <Button
             variant="secondary"
             disabled={pingBusy}
