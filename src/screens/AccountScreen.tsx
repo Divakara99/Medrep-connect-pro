@@ -45,6 +45,22 @@ export function AccountScreen({
   const [adsDebugOpen, setAdsDebugOpen] = useState(false)
   const [adsState, setAdsState] = useState<ReturnType<typeof adsDiagnostics> | null>(null)
   const [adsBusy, setAdsBusy] = useState(false)
+  const [copyNote, setCopyNote] = useState('')
+
+  /** The card as plain text, so it can be pasted instead of photographed. */
+  const diagnosticsText = adsState
+    ? [
+        `app id: ${adsState.appId}`,
+        `banner unit: ${adsState.bannerUnit}`,
+        `rewarded unit: ${adsState.rewardedUnit}`,
+        `plugin loaded: ${String(adsState.pluginLoaded)}`,
+        `banner wanted: ${String(adsState.bannerWanted)}`,
+        `banner visible: ${String(adsState.bannerVisible)}`,
+        `init error: ${adsState.lastInitError || '—'}`,
+        `last banner error: ${adsState.lastBannerError || '—'}`,
+        `last video error: ${adsState.lastRewardedError || '—'}`,
+      ].join('\n')
+    : ''
 
   function onVersionTap() {
     if (!isAndroidApp()) return
@@ -163,6 +179,9 @@ export function AccountScreen({
             </button>
           </div>
           <div className="text-[11px] font-mono leading-relaxed text-slate-700 break-words">
+            <div className="text-slate-500">{adsState?.appId}</div>
+            <div className="text-slate-500">banner {adsState?.bannerUnit}</div>
+            <div className="text-slate-500">rewarded {adsState?.rewardedUnit}</div>
             <div>plugin loaded: {String(adsState?.pluginLoaded)}</div>
             <div>banner wanted: {String(adsState?.bannerWanted)}</div>
             <div>banner visible: {String(adsState?.bannerVisible)}</div>
@@ -186,6 +205,21 @@ export function AccountScreen({
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
           </Button>
+          <button
+            type="button"
+            className="text-xs font-semibold text-brand-600 underline"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(diagnosticsText)
+                setCopyNote('Copied — paste it into the chat')
+              } catch {
+                setCopyNote('Copy blocked — read the lines above instead')
+              }
+            }}
+          >
+            Copy diagnostics
+          </button>
+          {copyNote && <div className="text-[11px] text-slate-500">{copyNote}</div>}
           <div className="text-[11px] text-slate-500">
             Tap the version badge 5× to reopen. “No fill” means AdMob had nothing to serve;
             any other message is a build or network problem.

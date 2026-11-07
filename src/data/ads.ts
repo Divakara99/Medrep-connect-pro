@@ -1,6 +1,6 @@
 import { rewardedErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
-import { ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
+import { ADMOB_APP_ID, ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
 
 /**
  * How long the rewarded ad may spend loading before the user is told it is not
@@ -63,7 +63,15 @@ let lastInitError = ''
 let pluginLoaded: boolean | null = null
 
 function describe(cause: unknown): string {
-  if (cause instanceof Error) return cause.message
+  if (cause instanceof Error) {
+    // AdMob errors carry a numeric code and the message is often just the
+    // generic one; "No fill" is code 3 and means something very different from
+    // a network failure, so the code is part of the diagnosis.
+    const code = (cause as Error & { code?: unknown }).code
+    return code === undefined || code === null
+      ? cause.message
+      : `${cause.message} (code ${String(code)})`
+  }
   if (typeof cause === 'string') return cause
   try {
     return JSON.stringify(cause)
@@ -256,6 +264,9 @@ export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> 
  */
 export function adsDiagnostics() {
   return {
+    appId: ADMOB_APP_ID,
+    bannerUnit: ADMOB_BANNER_AD_UNIT_ID,
+    rewardedUnit: ADMOB_REWARDED_AD_UNIT_ID,
     pluginLoaded,
     bannerVisible,
     bannerWanted,
