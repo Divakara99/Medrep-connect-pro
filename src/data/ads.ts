@@ -354,6 +354,18 @@ export async function showBanner(margin = 0): Promise<void> {
   // already visible.
   if (bannerVisible && bannerMargin === margin) return
   if (bannerLoop) return bannerLoop
+  // Different margin means a different position: clear the old one first, or
+  // the SDK is asked to move a banner that is already attached.
+  if (bannerVisible && pluginInstance) {
+    mark('banner: repositioning')
+    bannerVisible = false
+    bannerMargin = null
+    try {
+      await pluginInstance.removeBanner()
+    } catch {
+      // Nothing attached; carry on.
+    }
+  }
   bannerLoop = runBannerLoop(margin).finally(() => { bannerLoop = null })
   return bannerLoop
 }
@@ -374,14 +386,23 @@ async function runBannerLoop(margin: number): Promise<void> {
 export async function hideBanner(): Promise<void> {
   bannerWanted = false
   if (!bannerVisible) return
+  bannerVisible = false
   bannerMargin = null
   if (!(await ensurePlugin()) || !pluginInstance) return
   const AdMob = pluginInstance
-  bannerVisible = false
+  // removeBanner, not hideBanner: hiding keeps the native view alive, and a
+  // later show on top of a hidden-but-present banner is exactly the state where
+  // the native call stopped answering (15 s timeouts on the tablet).
   try {
-    await AdMob.hideBanner()
+    await AdMob.removeBanner()
+    mark('banner: removed')
   } catch {
-    // Already gone.
+    try {
+      await AdMob.hideBanner()
+      mark('banner: hidden')
+    } catch {
+      mark('banner: already gone')
+    }
   }
 }
 
