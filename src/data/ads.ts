@@ -256,6 +256,58 @@ export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> 
 }
 
 /**
+ * Can this device reach Google's ad servers at all?
+ *
+ * "No fill" and "the request was blocked before it left the phone" look
+ * identical from inside the app: both end with no ad. They need opposite
+ * responses, so this asks the two domains every mobile ad request goes through.
+ *
+ * no-cors is deliberate — an opaque response still proves DNS and TCP worked,
+ * and a rejected fetch means the request never got there. Reading the body would
+ * be blocked by CORS and prove nothing extra.
+ */
+export type NetworkProbe = { url: string; reachable: boolean; ms: number; detail: string }
+
+const AD_NETWORK_PROBES = [
+  'https://googleads.g.doubleclick.net/pagead/id',
+  'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js',
+]
+
+export async function probeAdNetwork(): Promise<NetworkProbe[]> {
+  const results: NetworkProbe[] = []
+  for (const url of AD_NETWORK_PROBES) {
+    const started = Date.now()
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+    let timer: number | undefined
+    try {
+      const attempt = fetch(url, {
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: controller?.signal,
+      })
+      const settled = await Promise.race([
+        attempt.then(() => 'reachable' as const).catch((cause: unknown) => describe(cause)),
+        new Promise<'timeout'>((resolve) => {
+          timer = window.setTimeout(() => {
+            controller?.abort()
+            resolve('timeout')
+          }, 8_000)
+        }),
+      ])
+      results.push({
+        url,
+        reachable: settled === 'reachable',
+        ms: Date.now() - started,
+        detail: settled === 'reachable' ? 'ok' : settled === 'timeout' ? 'no answer in 8s' : settled,
+      })
+    } finally {
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }
+  return results
+}
+
+/**
  * Why the last ad request failed, for on-device checks. Empty strings mean the
  * request has not failed (or has not been made yet).
  *
@@ -274,6 +326,22 @@ export function adsDiagnostics() {
     lastBannerError,
     lastRewardedError,
   }
+}
+
+/** Everything the diagnostics card shows, as copyable text. */
+export function adsDiagnosticsText(): string {
+  const state = adsDiagnostics()
+  return [
+    `app id: ${state.appId}`,
+    `banner unit: ${state.bannerUnit}`,
+    `rewarded unit: ${state.rewardedUnit}`,
+    `plugin loaded: ${String(state.pluginLoaded)}`,
+    `banner wanted: ${String(state.bannerWanted)}`,
+    `banner visible: ${String(state.bannerVisible)}`,
+    `init error: ${state.lastInitError || '—'}`,
+    `last banner error: ${state.lastBannerError || '—'}`,
+    `last video error: ${state.lastRewardedError || '—'}`,
+  ].join('\n')
 }
 
 /**

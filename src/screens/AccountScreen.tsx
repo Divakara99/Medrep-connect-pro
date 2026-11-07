@@ -10,7 +10,7 @@ import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
 import { APP_VERSION_LABEL } from '../data/version'
-import { adsDiagnostics, probeBanner } from '../data/ads'
+import { adsDiagnostics, adsDiagnosticsText, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
 
 export function AccountScreen({
   user,
@@ -46,21 +46,11 @@ export function AccountScreen({
   const [adsState, setAdsState] = useState<ReturnType<typeof adsDiagnostics> | null>(null)
   const [adsBusy, setAdsBusy] = useState(false)
   const [copyNote, setCopyNote] = useState('')
+  const [netBusy, setNetBusy] = useState(false)
+  const [netResults, setNetResults] = useState<NetworkProbe[] | null>(null)
 
   /** The card as plain text, so it can be pasted instead of photographed. */
-  const diagnosticsText = adsState
-    ? [
-        `app id: ${adsState.appId}`,
-        `banner unit: ${adsState.bannerUnit}`,
-        `rewarded unit: ${adsState.rewardedUnit}`,
-        `plugin loaded: ${String(adsState.pluginLoaded)}`,
-        `banner wanted: ${String(adsState.bannerWanted)}`,
-        `banner visible: ${String(adsState.bannerVisible)}`,
-        `init error: ${adsState.lastInitError || '—'}`,
-        `last banner error: ${adsState.lastBannerError || '—'}`,
-        `last video error: ${adsState.lastRewardedError || '—'}`,
-      ].join('\n')
-    : ''
+  const diagnosticsText = adsState ? adsDiagnosticsText() : ''
 
   function onVersionTap() {
     if (!isAndroidApp()) return
@@ -205,6 +195,30 @@ export function AccountScreen({
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
           </Button>
+          <Button
+            variant="secondary"
+            disabled={netBusy}
+            onClick={async () => {
+              setNetBusy(true)
+              try {
+                setNetResults(await probeAdNetwork())
+              } finally {
+                setNetBusy(false)
+              }
+            }}
+          >
+            {netBusy ? 'Testing…' : 'Test ad network'}
+          </Button>
+          {netResults && (
+            <div className="text-[11px] font-mono leading-relaxed break-words">
+              {netResults.map((result) => (
+                <div key={result.url} className={result.reachable ? 'text-emerald-700' : 'text-red-700'}>
+                  {result.reachable ? 'reachable' : 'BLOCKED'} · {result.ms} ms · {result.detail}
+                  <div className="text-slate-500">{result.url}</div>
+                </div>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             className="text-xs font-semibold text-brand-600 underline"
