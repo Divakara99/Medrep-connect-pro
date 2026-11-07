@@ -319,6 +319,16 @@ async function showBannerOnce(margin: number): Promise<boolean> {
     )
     if (shown === null) {
       if (!lastBannerError) lastBannerError = 'showBanner did not answer within 15s'
+      // A request that never answers leaves the SDK holding a banner the app
+      // thinks is not showing. Detach it, or every later attempt queues behind
+      // the same dead view — which is what six timeouts looked like on the
+      // tablet once the user started switching tabs.
+      try {
+        await AdMob.removeBanner()
+        mark('banner: reset after timeout')
+      } catch {
+        // Nothing attached to remove.
+      }
       return false
     }
     mark('banner: shown')
@@ -371,14 +381,17 @@ export async function showBanner(margin = 0): Promise<void> {
 }
 
 async function runBannerLoop(margin: number): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // Two attempts, eight seconds apart. A brand-new app has no inventory for the
+  // first hours, and AdMob answers those with nothing at all; three attempts
+  // spread over 90 seconds only filled the trace with timeouts.
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (!bannerWanted) return
     if (await showBannerOnce(margin)) {
       bannerMargin = margin
       return
     }
-    if (attempt < 2) {
-      await new Promise((resolve) => window.setTimeout(resolve, 15_000 * (attempt + 1)))
+    if (attempt === 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, 8_000))
     }
   }
 }
