@@ -13,9 +13,21 @@ const hook = await readFile(new URL('../src/components/usePullToRefresh.ts', imp
 const indicator = await readFile(new URL('../src/components/PullToRefresh.tsx', import.meta.url), 'utf8')
 const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 
-// 1. The gesture must not fight ordinary scrolling: it only engages at the top.
-assert.match(hook, /window\.scrollY \|\| document\.documentElement\.scrollTop/, 'only engages at the top of the page')
+// 1. The gesture must not fight ordinary scrolling: it only arms at the top.
+//    window.scrollY alone is not trustworthy here — this document makes html and
+//    body overflow-x hidden with height 100%, so the scrolling element is not
+//    always the window, and scrollY can read 0 while the user is halfway down.
+//    Trusting it hijacked every downward drag.
+assert.match(hook, /function scrollOffset/, 'scroll position comes from one helper')
+for (const source of ['window.scrollY', 'document.scrollingElement', 'document.body.scrollTop', 'scrollHeight > element.clientHeight']) {
+  assert.ok(hook.includes(source), `scroll position considers ${source}`)
+}
+assert.match(hook, /scrollOffset\(event\.target\) > 0/, 'the gesture only arms at the top, using the real scroller')
 assert.match(hook, /touches\.length !== 1/, 'one finger only')
+
+// 1b. A deadzone: a small downward nudge must scroll, not freeze the page.
+assert.match(hook, /travel < DEADZONE\b/, 'nothing is hijacked inside the deadzone')
+assert.match(hook, /if \(!armed\.current && travel < DEADZONE\) return/, 'the deadzone returns without preventDefault')
 
 // 2. The move handler must be able to hold the page still, which requires a
 //    non-passive listener; a passive one silently ignores preventDefault.
@@ -23,7 +35,7 @@ assert.match(hook, /'touchmove', onMove, \{ passive: false \}/, 'touchmove is no
 assert.match(hook, /event\.preventDefault\(\)/, 'the page is held while the indicator is dragged out')
 
 // 3. Release below the threshold cancels, above it refreshes.
-assert.match(hook, /if \(travelled < THRESHOLD\)/, 'a short pull cancels')
+assert.match(hook, /travelled < THRESHOLD/, 'a short pull cancels')
 assert.match(hook, /void run\(\)/, 'a real pull refreshes')
 
 // 4. The indicator says what it is doing, and disappears when idle.
