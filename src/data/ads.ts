@@ -158,6 +158,16 @@ async function settleWithin<T>(
   }
 }
 
+/**
+ * How far initialisation has got.
+ *
+ * The card showed "Requesting…" with an empty error for over a minute: a step
+ * was still pending, and nothing said which. Naming the stage makes that visible
+ * without a USB cable.
+ */
+export type InitStage = 'idle' | 'sdk' | 'consent' | 'consent-form' | 'ready' | 'no-plugin'
+let initStage: InitStage = 'idle'
+
 /** UMP consent, then SDK init. Safe to call repeatedly; runs once. */
 export function initAds(): Promise<void> {
   // One shared promise, not a boolean: callers used to see "already started"
@@ -169,21 +179,31 @@ export function initAds(): Promise<void> {
 
 async function initialiseAds(): Promise<void> {
   const AdMob = await loadPlugin()
-  if (!AdMob) return
+  if (!AdMob) {
+    initStage = 'no-plugin'
+    return
+  }
 
   // SDK first (local, quick), consent second. The old order ran UMP first, so a
   // consent call that never answered stopped the SDK from ever starting — and
   // nothing was requested from AdMob.
+  initStage = 'sdk'
   await settleWithin(AdMob.initialize({ initializeForTesting: false }), 10_000, 'initialize')
 
+  initStage = 'consent'
   const consent = await settleWithin(
     AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: false }),
-    10_000,
+    6_000,
     'requestConsentInfo',
   )
   if (consent && consent.isConsentFormAvailable && consent.status === 'REQUIRED') {
-    await settleWithin(AdMob.showConsentForm(), 60_000, 'showConsentForm')
+    initStage = 'consent-form'
+    // Deliberately not awaited. The consent form is a native overlay; blocking
+    // the ad pipeline on it — 60 s, and a form that never closes blocks it for
+    // good — is what left the diagnostics button on "Requesting…" indefinitely.
+    void settleWithin(AdMob.showConsentForm(), 120_000, 'showConsentForm')
   }
+  initStage = 'ready'
 }
 
 async function showBannerOnce(margin: number): Promise<boolean> {
@@ -195,7 +215,8 @@ async function showBannerOnce(margin: number): Promise<boolean> {
       : 'Ads are available in the Android app only'
     return false
   }
-  await initAds()
+  // Never let a stuck initialisation swallow the request itself.
+  await within(initAds(), 12_000)
   bannerAttempts += 1
   bannerPending = true
   try {
@@ -349,6 +370,7 @@ export function adsDiagnostics() {
     bannerWanted,
     bannerAttempts,
     bannerPending,
+    initStage,
     lastInitError,
     lastBannerError,
     lastRewardedError,
@@ -366,6 +388,7 @@ export function adsDiagnosticsText(): string {
     `banner wanted: ${String(state.bannerWanted)}`,
     `banner visible: ${String(state.bannerVisible)}`,
     `banner attempts: ${state.bannerAttempts}${state.bannerPending ? ' (one in flight)' : ''}`,
+    `init stage: ${state.initStage}`,
     `init error: ${state.lastInitError || '—'}`,
     `last banner error: ${state.lastBannerError || '—'}`,
     `last video error: ${state.lastRewardedError || '—'}`,
