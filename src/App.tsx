@@ -16,6 +16,8 @@ import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
 import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
 import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
+import { PullToRefreshIndicator } from './components/PullToRefresh'
+import { usePullToRefresh } from './components/usePullToRefresh'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { clearMyApplicationCache, openApplication } from './data/apply'
 import { getProfile, profileCompletionIssues, type Profile } from './data/profile'
@@ -310,6 +312,28 @@ export default function App() {
     if (u) setUser({ ...u })
   }
 
+  /**
+   * Swipe-down refresh: re-read the server projection and the account.
+   *
+   * The job list is the only place the per-job `companyUnlocked` flag lives, and
+   * until now nothing could re-read it without leaving the screen — so a company
+   * unlocked by a video could still look locked after a restart.
+   */
+  const refreshFromServer = useCallback(async () => {
+    if (!userId) return
+    setJobsError(null)
+    try {
+      const fresh = await loadVisibleJobs()
+      setJobs(fresh)
+      setSelectedJob((current) => (current ? fresh.find((job) => job.id === current.id) ?? current : current))
+      refreshUser()
+    } catch (cause) {
+      setJobsError(cause instanceof Error ? cause.message : 'Jobs are unavailable.')
+    }
+  }, [userId])
+
+  const { pull, refreshing } = usePullToRefresh(refreshFromServer, Boolean(userId) && !menuOpen)
+
   function onAuthed() {
     setRecoveryMode(false)
     // SIGNED_IN/USER_UPDATED restores the authenticated view after the
@@ -500,6 +524,7 @@ export default function App() {
   // User app
   return (
     <div className="min-h-[100dvh] bg-slate-50">
+      <PullToRefreshIndicator pull={pull} refreshing={refreshing} />
       <TopBar
         left={
           <span className="inline-flex min-w-0 items-center gap-2">

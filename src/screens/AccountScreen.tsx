@@ -9,8 +9,9 @@ import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
-import { APP_VERSION_LABEL } from '../data/version'
-import { adsDiagnostics, adsDiagnosticsText, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
+import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
+import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
+import { loadMyUnlocks } from '../data/companyUnlocks'
 
 export function AccountScreen({
   user,
@@ -48,6 +49,10 @@ export function AccountScreen({
   const [copyNote, setCopyNote] = useState('')
   const [netBusy, setNetBusy] = useState(false)
   const [netResults, setNetResults] = useState<NetworkProbe[] | null>(null)
+  const [pingNote, setPingNote] = useState('')
+  const [pingBusy, setPingBusy] = useState(false)
+  const [unlockNote, setUnlockNote] = useState('')
+  const [unlockBusy, setUnlockBusy] = useState(false)
 
   /** The card as plain text, so it can be pasted instead of photographed. */
   const diagnosticsText = adsState ? adsDiagnosticsText() : ''
@@ -150,8 +155,9 @@ export function AccountScreen({
               </a>
             </div>
           </div>
-          <button type="button" onClick={onVersionTap} aria-label="App version" className="shrink-0">
+          <button type="button" onClick={onVersionTap} aria-label="App version" className="shrink-0 text-right">
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
+            <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
         </div>
       </Card>
@@ -159,7 +165,10 @@ export function AccountScreen({
       {isAndroidApp() && adsDebugOpen && (
         <Card className="p-4 space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="font-bold text-slate-900">Ad diagnostics</div>
+            <div className="font-bold text-slate-900">
+              Ad diagnostics
+              <div className="text-[10px] font-mono font-normal text-slate-400">{APP_BUILD_LABEL}</div>
+            </div>
             <button
               type="button"
               onClick={() => setAdsDebugOpen(false)}
@@ -175,6 +184,9 @@ export function AccountScreen({
             <div>plugin loaded: {String(adsState?.pluginLoaded)}</div>
             <div>banner wanted: {String(adsState?.bannerWanted)}</div>
             <div>banner visible: {String(adsState?.bannerVisible)}</div>
+            <div>banner attempts: {String(adsState?.bannerAttempts)}{adsState?.bannerPending ? ' (one in flight)' : ''}</div>
+            <div>init stage: {adsState?.initStage}</div>
+            <div>plugin available: {String(adsState?.pluginAvailable)}</div>
             <div>init error: {adsState?.lastInitError || '—'}</div>
             <div>last banner error: {adsState?.lastBannerError || '—'}</div>
             <div>last video error: {adsState?.lastRewardedError || '—'}</div>
@@ -195,6 +207,51 @@ export function AccountScreen({
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
           </Button>
+          <Button
+            variant="secondary"
+            disabled={unlockBusy}
+            onClick={async () => {
+              setUnlockBusy(true)
+              setUnlockNote('Reading your unlocks…')
+              try {
+                const rows = await loadMyUnlocks()
+                setUnlockNote(rows.length === 0
+                  ? 'No unlock rows for this account — the reward was never recorded.'
+                  : `${rows.length} unlock row(s): ${rows.map((row) => row.jobId.slice(0, 8)).join(', ')}`)
+              } catch (cause) {
+                setUnlockNote(cause instanceof Error ? cause.message : 'Could not read your unlocks.')
+              } finally {
+                setUnlockBusy(false)
+              }
+            }}
+          >
+            {unlockBusy ? 'Checking…' : 'Check my unlocks'}
+          </Button>
+          {unlockNote && <div className="text-[11px] font-mono text-slate-700 break-words">{unlockNote}</div>}
+          <Button
+            variant="secondary"
+            disabled={pingBusy}
+            onClick={async () => {
+              setPingBusy(true)
+              setPingNote('Asking the SDK…')
+              try {
+                setPingNote(await pingAdSdk())
+              } finally {
+                setPingBusy(false)
+                setAdsState(adsDiagnostics())
+              }
+            }}
+          >
+            {pingBusy ? 'Asking…' : 'Ping ad SDK'}
+          </Button>
+          {pingNote && <div className="text-[11px] font-mono text-slate-700 break-words">{pingNote}</div>}
+          {adsState?.trace && adsState.trace.length > 0 && (
+            <div className="text-[10px] font-mono leading-relaxed text-slate-600 break-words space-y-0.5">
+              {adsState.trace.slice(-9).map((line, index) => (
+                <div key={`${line}-${index}`}>{line}</div>
+              ))}
+            </div>
+          )}
           <Button
             variant="secondary"
             disabled={netBusy}

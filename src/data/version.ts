@@ -12,3 +12,13 @@ export const APP_VERSION: string =
 
 /** Human-facing form used by the UI, e.g. "v1.0.0". */
 export const APP_VERSION_LABEL = `v${APP_VERSION}`
+
+/**
+ * Which build is running: short commit plus build time.
+ *
+ * Several 1.0.2 APKs were installed on the test tablet over one day, and the
+ * version badge could not tell them apart — so a fixed bug looked unfixed. This
+ * is shown next to the badge and in the diagnostics card.
+ */
+export const APP_BUILD_LABEL: string =
+  typeof __BUILD_STAMP__ === 'string' && __BUILD_STAMP__.length > 0 ? __BUILD_STAMP__ : 'local build'
