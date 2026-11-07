@@ -59,6 +59,15 @@ let bannerWanted = false
 let lastBannerError = ''
 let lastRewardedError = ''
 let lastInitError = ''
+/**
+ * Banner requests and whether one is in flight right now.
+ *
+ * An empty `lastBannerError` was ambiguous: it meant either "never asked" or
+ * "asked a second ago and still waiting", and the card showed the same thing for
+ * both. With the counter and the flag the difference is visible.
+ */
+let bannerAttempts = 0
+let bannerPending = false
 /** null = not attempted yet, false = the plugin module never loaded. */
 let pluginLoaded: boolean | null = null
 
@@ -114,7 +123,20 @@ async function loadPlugin(): Promise<AdMobPlugin | null> {
  * is exactly what the on-device diagnostics showed (banner wanted: true,
  * banner visible: false, last banner error: empty).
  */
-async function settleWithin<T>(promise: Promise<T>, ms: number, what: string): Promise<T | null> {
+async function settleWithin<T>(
+  promise: Promise<T>,
+  ms: number,
+  what: string,
+  // Where the failure belongs. A banner timeout used to be written into
+  // `lastInitError`, so the card blamed initialisation for a banner that never
+  // answered.
+  sink: 'init' | 'banner' = 'init',
+): Promise<T | null> {
+  const record = (message: string) => {
+    if (sink === 'banner') lastBannerError = message
+    else lastInitError = message
+    console.warn('[ads]', message)
+  }
   let timer: number | undefined
   try {
     return await Promise.race([
@@ -123,20 +145,28 @@ async function settleWithin<T>(promise: Promise<T>, ms: number, what: string): P
         timer = window.setTimeout(() => {
           // Silence was the problem: a step that never answers looked exactly
           // like a step that succeeded.
-          lastInitError = `${what} did not answer within ${ms / 1000}s`
-          console.warn('[ads]', lastInitError)
+          record(`${what} did not answer within ${ms / 1000}s`)
           resolve(null)
         }, ms)
       }),
     ])
   } catch (cause) {
-    lastInitError = `${what}: ${describe(cause)}`
-    console.warn('[ads]', lastInitError)
+    record(`${what}: ${describe(cause)}`)
     return null
   } finally {
     if (timer !== undefined) window.clearTimeout(timer)
   }
 }
+
+/**
+ * How far initialisation has got.
+ *
+ * The card showed "Requesting…" with an empty error for over a minute: a step
+ * was still pending, and nothing said which. Naming the stage makes that visible
+ * without a USB cable.
+ */
+export type InitStage = 'idle' | 'sdk' | 'consent' | 'consent-form' | 'ready' | 'no-plugin'
+let initStage: InitStage = 'idle'
 
 /** UMP consent, then SDK init. Safe to call repeatedly; runs once. */
 export function initAds(): Promise<void> {
@@ -149,21 +179,31 @@ export function initAds(): Promise<void> {
 
 async function initialiseAds(): Promise<void> {
   const AdMob = await loadPlugin()
-  if (!AdMob) return
+  if (!AdMob) {
+    initStage = 'no-plugin'
+    return
+  }
 
   // SDK first (local, quick), consent second. The old order ran UMP first, so a
   // consent call that never answered stopped the SDK from ever starting — and
   // nothing was requested from AdMob.
+  initStage = 'sdk'
   await settleWithin(AdMob.initialize({ initializeForTesting: false }), 10_000, 'initialize')
 
+  initStage = 'consent'
   const consent = await settleWithin(
     AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: false }),
-    10_000,
+    6_000,
     'requestConsentInfo',
   )
   if (consent && consent.isConsentFormAvailable && consent.status === 'REQUIRED') {
-    await settleWithin(AdMob.showConsentForm(), 60_000, 'showConsentForm')
+    initStage = 'consent-form'
+    // Deliberately not awaited. The consent form is a native overlay; blocking
+    // the ad pipeline on it — 60 s, and a form that never closes blocks it for
+    // good — is what left the diagnostics button on "Requesting…" indefinitely.
+    void settleWithin(AdMob.showConsentForm(), 120_000, 'showConsentForm')
   }
+  initStage = 'ready'
 }
 
 async function showBannerOnce(margin: number): Promise<boolean> {
@@ -175,7 +215,10 @@ async function showBannerOnce(margin: number): Promise<boolean> {
       : 'Ads are available in the Android app only'
     return false
   }
-  await initAds()
+  // Never let a stuck initialisation swallow the request itself.
+  await within(initAds(), 12_000)
+  bannerAttempts += 1
+  bannerPending = true
   try {
     const shown = await settleWithin(
       AdMob.showBanner({
@@ -189,9 +232,10 @@ async function showBannerOnce(margin: number): Promise<boolean> {
       }),
       15_000,
       'showBanner',
+      'banner',
     )
     if (shown === null) {
-      lastBannerError = lastInitError || 'showBanner did not answer within 15s'
+      if (!lastBannerError) lastBannerError = 'showBanner did not answer within 15s'
       return false
     }
     bannerVisible = true
@@ -202,6 +246,8 @@ async function showBannerOnce(margin: number): Promise<boolean> {
     lastBannerError = describe(cause)
     console.warn('[ads] banner failed:', lastBannerError)
     return false
+  } finally {
+    bannerPending = false
   }
 }
 
@@ -322,6 +368,9 @@ export function adsDiagnostics() {
     pluginLoaded,
     bannerVisible,
     bannerWanted,
+    bannerAttempts,
+    bannerPending,
+    initStage,
     lastInitError,
     lastBannerError,
     lastRewardedError,
@@ -338,6 +387,8 @@ export function adsDiagnosticsText(): string {
     `plugin loaded: ${String(state.pluginLoaded)}`,
     `banner wanted: ${String(state.bannerWanted)}`,
     `banner visible: ${String(state.bannerVisible)}`,
+    `banner attempts: ${state.bannerAttempts}${state.bannerPending ? ' (one in flight)' : ''}`,
+    `init stage: ${state.initStage}`,
     `init error: ${state.lastInitError || '—'}`,
     `last banner error: ${state.lastBannerError || '—'}`,
     `last video error: ${state.lastRewardedError || '—'}`,
