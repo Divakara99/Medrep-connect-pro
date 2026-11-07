@@ -52,7 +52,6 @@ type AdMobPlugin = typeof import('@capacitor-community/admob').AdMob
 type BannerSize = import('@capacitor-community/admob').BannerAdSize
 type BannerPosition = import('@capacitor-community/admob').BannerAdPosition
 
-let pluginPromise: Promise<AdMobPlugin | null> | null = null
 let initPromise: Promise<void> | null = null
 let bannerVisible = false
 let bannerWanted = false
@@ -91,7 +90,18 @@ const trace: string[] = []
 function mark(step: string) {
   const at = new Date().toISOString().slice(11, 19)
   trace.push(`${at} ${step}`)
-  if (trace.length > 30) trace.shift()
+  if (trace.length > 60) trace.shift()
+}
+
+/**
+ * Rejections with no handler are invisible: nothing on screen, nothing in the
+ * card, and the code that produced them looks like it simply stopped. They are
+ * recorded in the trace instead.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    mark(`UNHANDLED ${describe(event.reason)}`)
+  })
 }
 
 function describe(cause: unknown): string {
@@ -126,20 +136,28 @@ async function loadPlugin(): Promise<AdMobPlugin | null> {
     mark('loadPlugin: not the Android app')
     return null
   }
-  if (!pluginPromise) mark('loadPlugin: importing plugin')
-  pluginPromise ??= import('@capacitor-community/admob')
-    .then((module) => {
-      pluginLoaded = true
-      mark('loadPlugin: imported')
-      return module.AdMob
-    })
-    .catch((cause: unknown) => {
+  // Deliberately NOT memoised. A cached promise that never settles is a trap:
+  // every later caller awaits it forever and nothing records why. `import()` is
+  // served from the module cache anyway, so this costs nothing.
+  try {
+    // Bounded as well: an import that never settles must become an error the
+    // card can show, never a silent wait.
+    const module = await within(import('@capacitor-community/admob'), 10_000)
+    if (!module) {
       pluginLoaded = false
-      lastInitError = `plugin import failed: ${describe(cause)}`
-      console.warn('[ads]', lastInitError)
+      lastInitError = 'plugin import did not settle in 10s'
+      mark('loadPlugin: import did not settle in 10s')
       return null
-    })
-  return pluginPromise
+    }
+    pluginLoaded = true
+    mark('loadPlugin: imported')
+    return module.AdMob
+  } catch (cause) {
+    pluginLoaded = false
+    lastInitError = `plugin import failed: ${describe(cause)}`
+    mark(`loadPlugin: failed ${describe(cause)}`)
+    return null
+  }
 }
 
 /**
@@ -201,7 +219,10 @@ export function initAds(): Promise<void> {
   // One shared promise, not a boolean: callers used to see "already started"
   // and run straight into showBanner() while initialize() was still in flight,
   // which the SDK answers with a failure we swallow.
-  initPromise ??= initialiseAds()
+  initPromise ??= initialiseAds().catch((cause: unknown) => {
+    lastInitError = `initialiseAds threw: ${describe(cause)}`
+    mark(`init: threw ${lastInitError}`)
+  })
   return initPromise
 }
 
@@ -282,6 +303,7 @@ async function showBannerOnce(margin: number): Promise<boolean> {
   } catch (cause) {
     bannerVisible = false
     lastBannerError = describe(cause)
+    mark(`banner: threw ${lastBannerError}`)
     console.warn('[ads] banner failed:', lastBannerError)
     return false
   } finally {
@@ -336,7 +358,11 @@ export async function probeBanner(): Promise<ReturnType<typeof adsDiagnostics>> 
   // on its own, but a step that hangs before its timer is armed (the SDK call
   // itself, for instance) would still leave the button on "Requesting…"
   // forever — which is exactly what the tablet showed.
-  const shown = await within(showBannerOnce(0), PROBE_DEADLINE_MS)
+  const shown = await within(showBannerOnce(0), PROBE_DEADLINE_MS).catch((cause: unknown) => {
+    lastBannerError = `banner request threw: ${describe(cause)}`
+    mark(`probe: threw ${lastBannerError}`)
+    return false
+  })
   if (shown === null) {
     lastBannerError =
       `no answer from the ad SDK within ${PROBE_DEADLINE_MS / 1000}s` +
