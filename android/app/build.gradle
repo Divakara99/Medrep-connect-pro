@@ -32,8 +32,8 @@ android {
         applicationId "in.medrepconnect.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "1.0.2"
+        versionCode 5
+        versionName "1.0.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // `aaptOptions` is deprecated in AGP 8 and removed in AGP 9; the
         // equivalent block lives under androidResources.

@@ -302,6 +302,7 @@ export function AccountScreen({
           Both buttons are anchored together so users don't accidentally hit Logout
           when trying to save, and they can't miss either action. */}
       <div
+        data-account-action-bar
         className="fixed bottom-0 inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 pt-2.5"
         style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}
       >

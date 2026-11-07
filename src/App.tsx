@@ -335,6 +335,34 @@ export default function App() {
 
   const { pull, refreshing } = usePullToRefresh(refreshFromServer, Boolean(userId) && !menuOpen)
 
+  /**
+   * Height of Account's fixed Save/Logout bar, in CSS pixels.
+   *
+   * The banner is a native overlay pinned to the bottom of the WebView, so the
+   * only way to keep it off that bar is a bottom margin in device pixels. A
+   * hard-coded 76 was a guess: on a phone with a gesture bar the real bar is
+   * taller (the padding adds env(safe-area-inset-bottom)), and the banner came
+   * back down over the Logout button. Measured instead of assumed.
+   */
+  const [accountBarPx, setAccountBarPx] = useState(76)
+  useEffect(() => {
+    if (nav.tab !== 'account') return
+    const measure = () => {
+      const bar = document.querySelector('[data-account-action-bar]')
+      if (!bar) return
+      const height = Math.ceil(bar.getBoundingClientRect().height)
+      if (height > 0) setAccountBarPx((current) => (current === height ? current : height))
+    }
+    measure()
+    // Fonts and insets settle after the first paint, so measure once more.
+    const settle = window.setTimeout(measure, 250)
+    window.addEventListener('resize', measure)
+    return () => {
+      window.clearTimeout(settle)
+      window.removeEventListener('resize', measure)
+    }
+  }, [nav.tab])
+
   function onAuthed() {
     setRecoveryMode(false)
     // SIGNED_IN/USER_UPDATED restores the authenticated view after the
@@ -522,6 +550,10 @@ export default function App() {
     return <VacancyPortal onExit={onLogout} />
   }
 
+  // A native banner sits above every WebView layer, so any overlay that owns
+  // the bottom of the screen wins only if the banner is taken away.
+  const adsCoveredByOverlay = menuOpen || notifOpen || selectedJob !== null
+
   // User app
   return (
     <div className="min-h-[100dvh] bg-slate-50">
@@ -607,8 +639,15 @@ export default function App() {
       {/* AdMob adaptive banner: content screens only, Android app only.
           Plans is the payment screen and login/sign-up never reach this
           shell, so no ads ever appear there. On Account the banner floats
-          above the fixed Save/Logout bar. */}
-      <AdBanner enabled={bannerAllowedOnTab(tab)} bottomMargin={tab === 'account' ? 76 : 0} />
+          above the fixed Save/Logout bar, and it is withdrawn entirely while
+          the menu, notifications or a job sheet is open — a native banner
+          always paints above the WebView, so anything anchored to the bottom
+          of an overlay (the menu's Log out, for one) sat underneath it and
+          could not be tapped. */}
+      <AdBanner
+        enabled={bannerAllowedOnTab(tab) && !adsCoveredByOverlay}
+        bottomMargin={tab === 'account' ? accountBarPx : 0}
+      />
 
       {menuOpen && (
         <div
