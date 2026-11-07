@@ -10,7 +10,7 @@ import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import type { Profile } from '../data/profile'
 import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
-import { adsDiagnostics, adsDiagnosticsText, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
+import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
 
 export function AccountScreen({
   user,
@@ -48,6 +48,8 @@ export function AccountScreen({
   const [copyNote, setCopyNote] = useState('')
   const [netBusy, setNetBusy] = useState(false)
   const [netResults, setNetResults] = useState<NetworkProbe[] | null>(null)
+  const [pingNote, setPingNote] = useState('')
+  const [pingBusy, setPingBusy] = useState(false)
 
   /** The card as plain text, so it can be pasted instead of photographed. */
   const diagnosticsText = adsState ? adsDiagnosticsText() : ''
@@ -181,6 +183,7 @@ export function AccountScreen({
             <div>banner visible: {String(adsState?.bannerVisible)}</div>
             <div>banner attempts: {String(adsState?.bannerAttempts)}{adsState?.bannerPending ? ' (one in flight)' : ''}</div>
             <div>init stage: {adsState?.initStage}</div>
+            <div>plugin available: {String(adsState?.pluginAvailable)}</div>
             <div>init error: {adsState?.lastInitError || '—'}</div>
             <div>last banner error: {adsState?.lastBannerError || '—'}</div>
             <div>last video error: {adsState?.lastRewardedError || '—'}</div>
@@ -201,6 +204,30 @@ export function AccountScreen({
           >
             {adsBusy ? 'Requesting…' : 'Request a banner ad now'}
           </Button>
+          <Button
+            variant="secondary"
+            disabled={pingBusy}
+            onClick={async () => {
+              setPingBusy(true)
+              setPingNote('Asking the SDK…')
+              try {
+                setPingNote(await pingAdSdk())
+              } finally {
+                setPingBusy(false)
+                setAdsState(adsDiagnostics())
+              }
+            }}
+          >
+            {pingBusy ? 'Asking…' : 'Ping ad SDK'}
+          </Button>
+          {pingNote && <div className="text-[11px] font-mono text-slate-700 break-words">{pingNote}</div>}
+          {adsState?.trace && adsState.trace.length > 0 && (
+            <div className="text-[10px] font-mono leading-relaxed text-slate-600 break-words space-y-0.5">
+              {adsState.trace.slice(-9).map((line, index) => (
+                <div key={`${line}-${index}`}>{line}</div>
+              ))}
+            </div>
+          )}
           <Button
             variant="secondary"
             disabled={netBusy}

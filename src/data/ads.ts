@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { rewardedErrorMessage } from './storeMessages'
 import { isAndroidApp } from './platform'
 import { ADMOB_APP_ID, ADMOB_BANNER_AD_UNIT_ID, ADMOB_REWARDED_AD_UNIT_ID, type UnlockStage } from './adConfig'
@@ -78,6 +79,21 @@ let bannerPending = false
 /** null = not attempted yet, false = the plugin module never loaded. */
 let pluginLoaded: boolean | null = null
 
+/**
+ * Timestamped trail of what the ad code actually did.
+ *
+ * Two rounds of diagnosis ended in states that contradicted themselves on
+ * screen — "plugin loaded: true" next to an initialisation that never started —
+ * so the steps are recorded as they happen and shown on the card. A timeline
+ * cannot contradict itself.
+ */
+const trace: string[] = []
+function mark(step: string) {
+  const at = new Date().toISOString().slice(11, 19)
+  trace.push(`${at} ${step}`)
+  if (trace.length > 30) trace.shift()
+}
+
 function describe(cause: unknown): string {
   if (cause instanceof Error) {
     // AdMob errors carry a numeric code and the message is often just the
@@ -106,10 +122,15 @@ function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 async function loadPlugin(): Promise<AdMobPlugin | null> {
-  if (!isAndroidApp()) return null
+  if (!isAndroidApp()) {
+    mark('loadPlugin: not the Android app')
+    return null
+  }
+  if (!pluginPromise) mark('loadPlugin: importing plugin')
   pluginPromise ??= import('@capacitor-community/admob')
     .then((module) => {
       pluginLoaded = true
+      mark('loadPlugin: imported')
       return module.AdMob
     })
     .catch((cause: unknown) => {
@@ -185,7 +206,9 @@ export function initAds(): Promise<void> {
 }
 
 async function initialiseAds(): Promise<void> {
+  mark('init: start')
   const AdMob = await loadPlugin()
+  mark(`init: plugin ${AdMob ? 'ready' : 'missing'}`)
   if (!AdMob) {
     initStage = 'no-plugin'
     return
@@ -195,9 +218,12 @@ async function initialiseAds(): Promise<void> {
   // consent call that never answered stopped the SDK from ever starting — and
   // nothing was requested from AdMob.
   initStage = 'sdk'
+  mark('init: initialize()')
   await settleWithin(AdMob.initialize({ initializeForTesting: false }), 10_000, 'initialize')
+  mark('init: initialize() settled')
 
   initStage = 'consent'
+  mark('init: requestConsentInfo()')
   const consent = await settleWithin(
     AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: false }),
     6_000,
@@ -211,10 +237,13 @@ async function initialiseAds(): Promise<void> {
     void settleWithin(AdMob.showConsentForm(), 120_000, 'showConsentForm')
   }
   initStage = 'ready'
+  mark('init: ready')
 }
 
 async function showBannerOnce(margin: number): Promise<boolean> {
+  mark('banner: start')
   const AdMob = await loadPlugin()
+  mark(`banner: plugin ${AdMob ? 'ready' : 'missing'}`)
   if (!AdMob) {
     // Previously silent: the button reported "wanted" forever with no error.
     lastBannerError = pluginLoaded === false
@@ -224,6 +253,7 @@ async function showBannerOnce(margin: number): Promise<boolean> {
   }
   // Never let a stuck initialisation swallow the request itself.
   await within(initAds(), 12_000)
+  mark(`banner: init wait done (stage ${initStage})`)
   bannerAttempts += 1
   bannerPending = true
   try {
@@ -245,6 +275,7 @@ async function showBannerOnce(margin: number): Promise<boolean> {
       if (!lastBannerError) lastBannerError = 'showBanner did not answer within 15s'
       return false
     }
+    mark('banner: shown')
     bannerVisible = true
     lastBannerError = ''
     return true
@@ -378,6 +409,10 @@ export async function probeAdNetwork(): Promise<NetworkProbe[]> {
  */
 export function adsDiagnostics() {
   return {
+    // Is the native side registered? A JS module can import fine while the
+    // native plugin is absent, and then every call hangs with no error.
+    pluginAvailable: pluginAvailable(),
+    trace: [...trace],
     appId: ADMOB_APP_ID,
     bannerUnit: ADMOB_BANNER_AD_UNIT_ID,
     rewardedUnit: ADMOB_REWARDED_AD_UNIT_ID,
@@ -393,6 +428,39 @@ export function adsDiagnostics() {
   }
 }
 
+/** Whether the native AdMob plugin is registered in this build. */
+function pluginAvailable(): boolean | null {
+  try {
+    return Capacitor.isPluginAvailable('AdMob')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Ask the SDK one question and report the answer, bypassing all of our own
+ * wrappers. If the import or the native call hangs here, the fault is in the
+ * bridge, not in the ad flow.
+ */
+export async function pingAdSdk(): Promise<string> {
+  mark('ping: start')
+  const imported = await within(import('@capacitor-community/admob'), 8_000)
+  if (!imported) {
+    mark('ping: import hung')
+    return 'plugin import did not finish in 8s'
+  }
+  mark('ping: imported')
+  const plugin = imported.AdMob
+  if (!plugin) return 'plugin module has no AdMob export'
+  const initialized = await within(plugin.initialize({ initializeForTesting: false }), 8_000)
+  if (initialized === null && !trace.includes('ping: initialize resolved')) {
+    mark('ping: initialize hung')
+    return 'initialize() did not answer in 8s'
+  }
+  mark('ping: initialize resolved')
+  return 'plugin imported, initialize() answered'
+}
+
 /** Everything the diagnostics card shows, as copyable text. */
 export function adsDiagnosticsText(): string {
   const state = adsDiagnostics()
@@ -405,6 +473,8 @@ export function adsDiagnosticsText(): string {
     `banner visible: ${String(state.bannerVisible)}`,
     `banner attempts: ${state.bannerAttempts}${state.bannerPending ? ' (one in flight)' : ''}`,
     `init stage: ${state.initStage}`,
+    `plugin available: ${String(state.pluginAvailable)}`,
+    ...state.trace.map((line) => `  ${line}`),
     `init error: ${state.lastInitError || '—'}`,
     `last banner error: ${state.lastBannerError || '—'}`,
     `last video error: ${state.lastRewardedError || '—'}`,
