@@ -6,6 +6,7 @@ import { normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
+import { useUnlockWindow } from './useUnlockWindow'
 
 function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
   const email = (job.managerEmail || '').trim()
@@ -97,8 +98,10 @@ export function JobDetail({
   onWatchUnlock?: (job: Job) => void
   unlockStage?: UnlockStage | null
 }) {
-  // Per-job company unlock (rewarded video), separate from subscription.
-  const companyUnlocked = Boolean(job && (unlocked || job.companyUnlocked))
+  // Per-job company unlock (rewarded video), separate from subscription — and
+  // time-limited, so it is re-checked against the clock while the sheet is open.
+  const unlockWindow = useUnlockWindow(job ?? { companyUnlocked: false, unlockExpiresAt: undefined })
+  const companyUnlocked = Boolean(job && (unlocked || unlockWindow.active))
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
   const hqItems = job ? parseHeadquarters(job.hq) : []
@@ -172,9 +175,10 @@ export function JobDetail({
                   <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">
-                  Company name unlocked by video ✓ — it stays unlocked for this job. Manager name, email and
-                  phone numbers still wait for an active subscription. City, HQ, division, salary, experience,
-                  posted date and the description above stay visible to everyone.
+                  Company name unlocked by video ✓ — visible for {unlockWindow.label} more. Watch another video
+                  when it lapses to open it again. Manager name, email and phone numbers still wait for an
+                  active subscription. City, HQ, division, salary, experience, posted date and the description
+                  above stay visible to everyone.
                 </p>
               </>
             ) : !unlocked ? (

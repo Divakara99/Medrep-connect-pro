@@ -35,11 +35,11 @@ export async function pollForCompanyUnlock(
 /**
  * The unlock rows this user owns, read straight from the table.
  *
- * One completed video is supposed to unlock that company name forever. When it
- * appears to come back after a restart, the question is binary: is the row
- * missing (the reward was never recorded), or is the row there and the job
- * projection is not reporting it? This answers that on the device. RLS lets a
- * signed-in user read their own rows and nothing else.
+ * One completed video shows that company name for a limited window (10 minutes
+ * by default). When a name comes back sooner than expected, the question is
+ * binary: is there no live row, or is the projection not reporting it? This
+ * answers that on the device. RLS lets a signed-in user read their own rows and
+ * nothing else.
  */
 export type CompanyUnlock = { jobId: string; createdAt: string }
 

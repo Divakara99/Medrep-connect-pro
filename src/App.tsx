@@ -16,6 +16,7 @@ import { AIChatScreen } from './screens/AIChatScreen'
 import { Wordmark } from './components/Logo'
 import { currentUser, getAuthSnapshot, logout as doLogout, onAuthStateChange, type AuthSnapshot, type User } from './data/auth'
 import { clearJobs, loadVisibleJobs, purgeLegacyJobs, type Job } from './data/jobs'
+import { unlockActive } from './data/unlockWindow'
 import { PullToRefreshIndicator } from './components/PullToRefresh'
 import { usePullToRefresh } from './components/usePullToRefresh'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
@@ -369,7 +370,7 @@ export default function App() {
    */
   const watchToUnlockCompany = useCallback(async (job: Job) => {
     if (!user || unlockingJobId) return
-    if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: job.companyUnlocked === true })) return
+    if (!rewardedUnlockOffered({ isAndroidApp: isAndroidApp(), subscribed: unlocked, companyUnlocked: unlockActive(job) })) return
     setUnlockingJobId(job.id)
     setUnlockStage('loading')
     try {

@@ -3,7 +3,10 @@
 -- SAME Supabase project. Safe to re-run.
 --
 -- Rules enforced here:
---   * One completed rewarded video unlocks ONE job's company name, forever.
+--   * One completed rewarded video shows ONE job's company name for a limited
+--     window (UNLOCK_MINUTES below, currently 10). After it lapses the name is
+--     withdrawn again and the user may watch another video to reopen it. The
+--     window is enforced by the database — the app only mirrors it for display.
 --   * Unlock rows are written ONLY by the admob-reward-verification Edge
 --     Function (service role) after Google's server-side verification (SSV)
 --     signature check. Signed-in users can read only their own rows; the
@@ -25,12 +28,22 @@ CREATE TABLE IF NOT EXISTS public.company_unlocks (
   reward_amount integer,
   reward_item text,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT company_unlocks_transaction_unique UNIQUE (transaction_id),
-  CONSTRAINT company_unlocks_user_job_unique UNIQUE (user_id, job_id)
+  -- How long this reward keeps the company name visible. Enforced by
+  -- list_visible_jobs(); changing it here changes the whole product rule.
+  expires_at timestamptz NOT NULL DEFAULT now() + interval '10 minutes',
+  CONSTRAINT company_unlocks_transaction_unique UNIQUE (transaction_id)
 );
 
 CREATE INDEX IF NOT EXISTS company_unlocks_user_idx
-  ON public.company_unlocks (user_id, job_id);
+  ON public.company_unlocks (user_id, job_id, expires_at);
+
+-- Existing installs: add the window and drop the old "one unlock per job,
+-- forever" constraint so the same job can be unlocked again later. Safe to
+-- re-run; rows already there simply age out.
+ALTER TABLE public.company_unlocks
+  ADD COLUMN IF NOT EXISTS expires_at timestamptz NOT NULL DEFAULT now() + interval '10 minutes';
+ALTER TABLE public.company_unlocks
+  DROP CONSTRAINT IF EXISTS company_unlocks_user_job_unique;
 
 ALTER TABLE public.company_unlocks ENABLE ROW LEVEL SECURITY;
 
@@ -87,7 +100,13 @@ BEGIN
       -- the per-job unlock only, so the two never get conflated.
       'companyUnlocked', EXISTS (
         SELECT 1 FROM public.company_unlocks AS cu
-        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id
+        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id AND cu.expires_at > now()
+      ),
+      -- Drives the countdown in the app ("9 min left"). The server decides
+      -- visibility on every read, so a stale client clock can never extend it.
+      'unlockExpiresAt', (
+        SELECT max(cu.expires_at)::text FROM public.company_unlocks AS cu
+        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id AND cu.expires_at > now()
       )
     ) || CASE
       WHEN can_view_private THEN
@@ -100,7 +119,7 @@ BEGIN
         )
       WHEN EXISTS (
         SELECT 1 FROM public.company_unlocks AS cu
-        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id
+        WHERE cu.user_id = auth.uid() AND cu.job_id = v.id AND cu.expires_at > now()
       ) THEN
         -- Unlocked by video: the company name only. The other four fields
         -- are still not sent at all.

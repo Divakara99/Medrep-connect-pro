@@ -30,6 +30,12 @@ export type Job = {
    */
   company: string
   companyUnlocked?: boolean
+  /**
+   * When the rewarded-video unlock lapses (ISO timestamp from the server).
+   * The name is withdrawn after this moment; the app only mirrors the rule for
+   * display — list_visible_jobs() is what actually decides.
+   */
+  unlockExpiresAt?: string | null
   manager?: string
   contact?: string
   managerAltPhone?: string // optional local 10-digit Indian mobile, shown with a +91 prefix
@@ -89,6 +95,7 @@ function parseJob(value: unknown): Job | null {
     title: row.title,
     company: typeof row.company === 'string' ? row.company : '',
     companyUnlocked: row.companyUnlocked === true,
+    unlockExpiresAt: typeof row.unlockExpiresAt === 'string' ? row.unlockExpiresAt : undefined,
     manager: typeof row.manager === 'string' ? row.manager : undefined,
     contact: typeof row.contact === 'string' ? row.contact : undefined,
     managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,
