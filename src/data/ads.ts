@@ -75,6 +75,10 @@ let lastInitError = ''
  */
 let bannerAttempts = 0
 let bannerPending = false
+/** Margin the currently shown banner was requested with, or null. */
+let bannerMargin: number | null = null
+/** The running retry loop, so repeat calls join it instead of stacking. */
+let bannerLoop: Promise<void> | null = null
 /** null = not attempted yet, false = the plugin module never loaded. */
 let pluginLoaded: boolean | null = null
 
@@ -190,11 +194,15 @@ async function settleWithin<T>(
   // Where the failure belongs. A banner timeout used to be written into
   // `lastInitError`, so the card blamed initialisation for a banner that never
   // answered.
-  sink: 'init' | 'banner' = 'init',
+  sink: 'init' | 'banner' | 'note' = 'init',
 ): Promise<T | null> {
   const record = (message: string) => {
     if (sink === 'banner') lastBannerError = message
-    else lastInitError = message
+    else if (sink === 'init') lastInitError = message
+    // 'note' only reaches the trace: UMP with no message configured in the
+    // AdMob console answers "Publisher misconfiguration", which is a console
+    // setting, not a broken app — and it must not look like one.
+    mark(message)
     console.warn('[ads]', message)
   }
   let timer: number | undefined
@@ -264,6 +272,7 @@ async function initialiseAds(): Promise<void> {
     AdMob.requestConsentInfo({ tagForUnderAgeOfConsent: false }),
     6_000,
     'requestConsentInfo',
+    'note',
   )
   if (consent && consent.isConsentFormAvailable && consent.status === 'REQUIRED') {
     initStage = 'consent-form'
@@ -339,9 +348,23 @@ async function showBannerOnce(margin: number): Promise<boolean> {
  */
 export async function showBanner(margin = 0): Promise<void> {
   bannerWanted = true
+  // Already on screen with the same margin: nothing to do. Screens remount
+  // freely, and each remount used to issue a fresh native request — twelve of
+  // them in one minute on the tablet, all queued behind a banner that was
+  // already visible.
+  if (bannerVisible && bannerMargin === margin) return
+  if (bannerLoop) return bannerLoop
+  bannerLoop = runBannerLoop(margin).finally(() => { bannerLoop = null })
+  return bannerLoop
+}
+
+async function runBannerLoop(margin: number): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (!bannerWanted) return
-    if (await showBannerOnce(margin)) return
+    if (await showBannerOnce(margin)) {
+      bannerMargin = margin
+      return
+    }
     if (attempt < 2) {
       await new Promise((resolve) => window.setTimeout(resolve, 15_000 * (attempt + 1)))
     }
@@ -351,6 +374,7 @@ export async function showBanner(margin = 0): Promise<void> {
 export async function hideBanner(): Promise<void> {
   bannerWanted = false
   if (!bannerVisible) return
+  bannerMargin = null
   if (!(await ensurePlugin()) || !pluginInstance) return
   const AdMob = pluginInstance
   bannerVisible = false
