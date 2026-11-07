@@ -12,15 +12,28 @@ import { isAndroidApp } from '../data/platform'
  * screens — see bannerAllowedOnTab in adConfig.ts). Both free and
  * subscribed users see the banner; subscribers never see rewarded videos.
  */
-export function AdBanner({ enabled, bottomMargin = 0 }: { enabled: boolean; bottomMargin?: number }) {
+export function AdBanner({ enabled }: { enabled: boolean }) {
   const active = enabled && isAndroidApp()
 
   useEffect(() => {
     if (!active) return
-    void showBanner(bottomMargin)
+    void showBanner()
     return () => { void hideBanner() }
-  }, [active, bottomMargin])
+  }, [active])
 
   if (!active) return null
-  return <div aria-hidden className="h-16 shrink-0" data-ad-banner-spacer style={{ marginBottom: bottomMargin }} />
+  // The spacer is what keeps the end of a page (the creator credit, the last
+  // job card, any footer line) clear of the banner. A fixed 4rem was shorter
+  // than the banner actually is on a tablet — adaptive banners grow with the
+  // screen width up to 90 dp — so the footer sat half under the ad. --ad-reserve
+  // is the measured-ish height for this viewport (see adConfig.ts), with half a
+  // rem of breathing room so the last line never touches the ad edge.
+  return (
+    <div
+      aria-hidden
+      data-ad-banner-spacer
+      className="shrink-0"
+      style={{ height: 'calc(var(--ad-reserve, 4rem) + 0.5rem)' }}
+    />
+  )
 }
