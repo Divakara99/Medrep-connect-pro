@@ -58,3 +58,65 @@
 - The portrait is used as a **still with a slow zoom** — no synthetic video of the founder is generated.
 - Captions burned in, so the ad works muted; the voice carries the language.
 - End card: icon, “MedRep Pro”, “Free on Google Play”, `medrepconnect.in`.
+
+---
+
+# On-camera version — shooting guide for the founder
+
+The photo-led cut is a fallback. A presenter who walks, talks and shows the app
+converts far better, and it has to be **real footage** — no synthetic video of a
+real person is produced anywhere in this project.
+
+## What to record (one session, ~5 minutes)
+
+Phone held **vertically** (portrait, 1080 × 1920), 30 fps, front camera at chest
+height, shot in daylight facing a window. Quiet room, no music, no zoom while
+recording. Do each shot twice so there is a choice in the edit.
+
+| # | Shot | Length | How |
+|---|------|--------|-----|
+| 1 | **Walking towards camera** | 5–6 s | Walk normally, smile, phone in hand. Leave 1 s still at the start and end so the cut is clean. |
+| 2 | **Standing, talking to camera** | 20–25 s | Full line below. Look at the lens, not the screen. |
+| 3 | **Showing the app** | 8–10 s | Hold the phone up to the camera, scroll the job feed slowly, tap “Watch video to unlock company name”, show the unlocked company name. |
+| 4 | **Close-up** | 5 s | Hand and thumb tapping, or head-and-shoulders while you say the call to action. |
+
+## The line to speak (shot 2)
+
+**English** — speak this if you are comfortable in English; the other three
+languages are dubbed over the same footage, which is normal for ads.
+
+> I am Divakar Reddy. Eight years I worked in Bangalore as a medical
+> representative and a business development manager. I struggled to find jobs —
+> so I built MedRep Pro for you. Genuine vacancies of every kind, all over
+> India. Watch one video and the company name is yours for ten minutes.
+> Download MedRep Pro — free on Google Play.
+
+<details><summary>Hindi / Kannada / Telugu on-camera lines</summary>
+
+### Hindi
+> मैं दिवाकर रेड्डी हूँ। आठ साल मैंने बैंगलोर में मेडिकल रिप्रेज़ेंटेटिव और बिज़नेस डेवलपमेंट मैनेजर के तौर पर काम किया। जॉब ढूँढने में मुझे बहुत मुश्किल हुई — इसलिए मैंने आपके लिए MedRep Pro बनाया। हर तरह की असली वैकेंसी, पूरे भारत में। एक वीडियो देखिए और कंपनी का नाम दस मिनट के लिए खुल जाएगा। MedRep Pro डाउनलोड कीजिए — Google Play पर फ्री।
+
+### Kannada
+> ನಾನು ದಿವಾಕರ್ ರೆಡ್ಡಿ. ಎಂಟು ವರ್ಷ ಬೆಂಗಳೂರಿನಲ್ಲಿ ಮೆಡಿಕಲ್ ರೆಪ್ರೆಸೆಂಟೇಟಿವ್ ಮತ್ತು ಬಿಸಿನೆಸ್ ಡೆವಲಪ್‌ಮೆಂಟ್ ಮ್ಯಾನೇಜರ್ ಆಗಿ ಕೆಲಸ ಮಾಡಿದ್ದೇನೆ. ಉದ್ಯೋಗ ಹುಡುಕುವಾಗ ನನಗೆ ತುಂಬಾ ಕಷ್ಟವಾಯಿತು — ಹಾಗಾಗಿ ನಿಮಗಾಗಿ MedRep Pro ಮಾಡಿದ್ದೇನೆ. ಎಲ್ಲಾ ರೀತಿಯ ನಿಜವಾದ ಉದ್ಯೋಗಗಳು, ಭಾರತದ ಎಲ್ಲೆಡೆ. ಒಂದು ವೀಡಿಯೊ ನೋಡಿ, ಕಂಪನಿಯ ಹೆಸರು ಹತ್ತು ನಿಮಿಷಗಳ ಕಾಲ ತೆರೆಯುತ್ತದೆ. MedRep Pro ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ — Google Play ನಲ್ಲಿ ಉಚಿತ.
+
+### Telugu
+> నేను దివాకర్ రెడ్డి. ఎనిమిది సంవత్సరాలు బెంగళూరులో మెడికల్ రిప్రజెంటేటివ్ మరియు బిజినెస్ డెవలప్‌మెంట్ మేనేజర్‌గా పని చేశాను. ఉద్యోగం వెతకడంలో నాకు చాలా కష్టం అనుభవమైంది — అందుకే మీ కోసం MedRep Pro తయారు చేశాను. అన్ని రకాల నిజమైన ఉద్యోగాలు, భారతదేశం అంతటా. ఒక వీడియో చూడండి, కంపెనీ పేరు పది నిమిషాల పాటు తెరుచుకుంటుంది. MedRep Pro డౌన్‌లోడ్ చేయండి — Google Playలో ఉచితం.
+
+</details>
+
+## How the edit is assembled once the clips arrive
+
+1. Shot 1 opens the ad; your voice from the recording is kept under the first line.
+2. Shot 2 becomes picture-in-picture over the app screens — you stay on screen
+   while the job feed, the unlock and the plans scroll behind you.
+3. Shot 3 supplies the screen-proof: the video plays and the company name appears.
+4. Shot 4 closes on the call to action; the four language voice-overs sit under it.
+5. Captions burned in; end card unchanged (icon, “Free on Google Play”, medrepconnect.in).
+
+## Before sending
+
+- Send the raw files, not a WhatsApp *forward* — the app re-compresses video.
+  Attach the originals, or share a Google Drive / WeTransfer link.
+- Nothing is needed on your side beyond the four shots: cropping, colour,
+  captions, the picture-in-picture, the music bed and the four language mixes
+  are done in the edit.
