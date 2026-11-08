@@ -90,7 +90,16 @@ supabase functions deploy verify-job-unlock            --project-ref lmhmbrusjiz
 ```
 
 > The ₹5 unlock reuses the existing `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`
-> secrets — nothing new to set. Inside the Android app it is deliberately not
+> secrets — nothing new to set.
+>
+> **Already deployed** to `lmhmbrusjizncumrufsx` (project "Medrep connect pro",
+> 8 Nov): the `job_unlocks` table with RLS and the new `list_visible_jobs()`,
+> plus both functions (`create-job-unlock-order`, `verify-job-unlock`, JWT on).
+> Those two were published through the Supabase connector, which only accepts a
+> single `index.ts`, so the live copies inline the `_shared/*` helpers. The repo
+> copies stay the source of truth and behave identically — a later
+> `supabase functions deploy` replaces the live copy with the module version,
+> which is fine and preferred. Inside the Android app it is deliberately not
 > sold: Google Play's lowest in-app price in India is ₹10, so the app keeps the
 > free rewarded-video unlock and never opens Razorpay (the website does both).
 
