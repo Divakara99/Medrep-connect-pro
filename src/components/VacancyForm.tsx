@@ -13,6 +13,29 @@ import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplic
  * vacancy team (post only). The database checks the same rules either way.
  */
 
+/**
+ * What the pasted-text reader may find, in form order. Auto-fill never writes
+ * these on its own: the admin ticks the values that belong in this vacancy.
+ */
+const EXTRACTED_FIELDS: { key: keyof VacancyExtraction; label: string }[] = [
+  { key: 'title', label: 'Title' },
+  { key: 'company', label: 'Company' },
+  { key: 'category', label: 'Category' },
+  { key: 'manager', label: 'Manager' },
+  { key: 'contact', label: 'Contact number' },
+  { key: 'managerAltPhone', label: 'Alternate number' },
+  { key: 'managerEmail', label: 'Manager email' },
+  { key: 'location', label: 'City' },
+  { key: 'hq', label: 'HQ' },
+  { key: 'division', label: 'Division' },
+  { key: 'salary', label: 'Salary' },
+  { key: 'experience', label: 'Experience' },
+  { key: 'qualification', label: 'Qualification' },
+  { key: 'ageLimit', label: 'Age limit' },
+  { key: 'vacancyCount', label: 'Number of vacancies' },
+  { key: 'description', label: 'Job description' },
+]
+
 export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { job: Job | null; open: boolean; onClose: () => void; onSaved: () => void; mode?: 'admin' | 'team' }) {
   const [title, setTitle] = useState(job?.title ?? '')
   const [company, setCompany] = useState(job?.company ?? '')
@@ -52,7 +75,8 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
   const [extractStatus, setExtractStatus] = useState('')
   const [extractError, setExtractError] = useState<string | null>(null)
   const [extractNotice, setExtractNotice] = useState<string | null>(null)
-  const [duplicateChecking, setDuplicateChecking] = useState(false)
+  // Values found in the pasted text, waiting for the admin to choose them.
+  const [review, setReview] = useState<{ fields: VacancyExtraction; picked: Partial<Record<keyof VacancyExtraction, boolean>> } | null>(null)
   const [duplicatePrompt, setDuplicatePrompt] = useState<{ result: VacancyDuplicateCheck; approvalKey: string } | null>(null)
   const [approvedDuplicateReview, setApprovedDuplicateReview] = useState<string | null>(null)
 
@@ -103,17 +127,60 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
     }
   }
 
+  /** What this field holds right now, used to leave typed values alone. */
+  function draftValue(key: keyof VacancyExtraction): string {
+    switch (key) {
+      case 'title': return title
+      case 'company': return company
+      case 'category': return category
+      case 'manager': return manager
+      case 'contact': return contact
+      case 'managerAltPhone': return managerAltPhone
+      case 'managerEmail': return managerEmail
+      case 'location': return location
+      case 'hq': return serializeHeadquarters(hqEntries)
+      case 'division': return division
+      case 'salary': return salary
+      case 'experience': return experience
+      case 'qualification': return qualification
+      case 'ageLimit': return ageLimit
+      case 'vacancyCount': return vacancyCount
+      case 'description': return description
+      default: return ''
+    }
+  }
+
+  /**
+   * Writes the values the admin ticked. HQ is special: a pasted block fills the
+   * first HQ box and never adds boxes of its own, so importing text can never
+   * create new fields in the form.
+   */
   function applyExtractedFields(fields: VacancyExtraction) {
     if (fields.title?.trim()) setTitle(fields.title.trim())
     if (fields.company?.trim()) setCompany(fields.company.trim())
     if (fields.manager?.trim()) setManager(fields.manager.trim())
-    if (fields.contact?.trim()) setContact(digitsOnly(fields.contact).slice(0, MOBILE_MAX_DIGITS))
-    if (fields.managerAltPhone?.trim()) setManagerAltPhone(normalizeIndianMobile(fields.managerAltPhone).slice(0, MOBILE_DIGITS))
+    if (fields.contact?.trim()) {
+      setContact(digitsOnly(fields.contact).slice(0, MOBILE_MAX_DIGITS))
+      setContactError(null)
+    }
+    if (fields.managerAltPhone?.trim()) {
+      setManagerAltPhone(normalizeIndianMobile(fields.managerAltPhone).slice(0, MOBILE_DIGITS))
+      setAltPhoneError(null)
+    }
     if (fields.managerEmail?.trim()) setManagerEmail(fields.managerEmail.trim())
     if (fields.location?.trim()) setLocation(fields.location.trim())
     if (fields.hq?.trim()) {
-      const entries = parseHeadquarters(fields.hq)
-      setHqEntries(entries.length ? entries : [''])
+      const hqText = fields.hq
+        .split(/\r?\n/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join(', ')
+        .slice(0, MAX_HQ_TEXT_LENGTH)
+      setHqEntries((current) => {
+        const next = current.length > 0 ? [...current] : ['']
+        if (!next[0].trim() && hqText) next[0] = hqText
+        return next
+      })
       setHqError(null)
     }
     if (fields.division?.trim()) setDivision(fields.division.trim())
@@ -126,23 +193,30 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
     if (fields.description?.trim()) setDescription(fields.description.trim())
   }
 
-  async function openDuplicateReview(fields: VacancyDuplicateFields) {
-    setDuplicateChecking(true)
-    setError(null)
-    try {
-      const result = await checkVacancyDuplicates(fields, job?.id)
-      setDuplicatePrompt({ result, approvalKey: vacancyDuplicateApprovalKey(fields, result) })
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not check existing vacancies.')
-    } finally {
-      setDuplicateChecking(false)
+  /** Fills only the ticked values, then says how many fields changed. */
+  function applyReviewedFields() {
+    if (!review) return
+    const chosen: VacancyExtraction = {}
+    let filled = 0
+    for (const { key } of EXTRACTED_FIELDS) {
+      if (!review.picked[key]) continue
+      const value = review.fields[key]
+      if (typeof value !== 'string' || !value.trim()) continue
+      ;(chosen as Record<string, string>)[key] = value
+      filled += 1
     }
+    applyExtractedFields(chosen)
+    setReview(null)
+    setExtractNotice(filled > 0
+      ? `Filled ${filled} field${filled === 1 ? '' : 's'} from the pasted text. Check each value before Final Submit.`
+      : 'Nothing was filled. Tick at least one value first.')
   }
 
-  async function extractAndReview() {
+  async function readSource() {
     setExtractError(null)
     setError(null)
     setExtractNotice(null)
+    setReview(null)
     setExtracting(true)
     setExtractProgress(0)
     setExtractStatus(sourceMode === 'image' ? 'Starting local OCR…' : 'Reading vacancy text…')
@@ -163,14 +237,20 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
       if (!rawText) throw new Error('No readable text was found. Try a clearer image or paste the job text.')
 
       const extracted = extractVacancyFields(rawText)
-      const fields = { ...collectDraftFields(), ...extracted }
-      applyExtractedFields(extracted)
-      setApprovedDuplicateReview(null)
-      const count = Object.keys(extracted).length
-      setExtractNotice(count > 0
-        ? `Auto-filled ${count} field${count === 1 ? '' : 's'}. Review each value before posting.`
-        : 'No fields were confidently detected. Review the OCR text and complete the form manually.')
-      await openDuplicateReview(fields)
+      const found = EXTRACTED_FIELDS.filter(({ key }) => {
+        const value = extracted[key]
+        return typeof value === 'string' && value.trim().length > 0
+      })
+      if (found.length === 0) {
+        setExtractNotice('No fields were confidently detected. Read the text above and type the vacancy details yourself.')
+        return
+      }
+      // Nothing is written into the form here. Fields the admin already typed
+      // start unticked, so a paste can never overwrite their work.
+      const picked: Partial<Record<keyof VacancyExtraction, boolean>> = {}
+      for (const { key } of found) picked[key] = !draftValue(key).trim()
+      setReview({ fields: extracted, picked })
+      setExtractNotice(`Found ${found.length} value${found.length === 1 ? '' : 's'}. Nothing is filled yet — tick the ones that belong in this vacancy.`)
     } catch (cause) {
       setExtractError(cause instanceof Error ? cause.message : 'Could not read the vacancy source.')
     } finally {
@@ -219,7 +299,7 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
     setExtractStatus('')
     setExtractError(null)
     setExtractNotice(null)
-    setDuplicateChecking(false)
+    setReview(null)
     setDuplicatePrompt(null)
     setApprovedDuplicateReview(null)
   }
@@ -290,8 +370,8 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
         {!job && (
           <section className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-indigo-50 p-3 space-y-3">
             <div>
-              <div className="font-bold text-slate-900">✨ Auto-fill from a vacancy poster or text</div>
-              <p className="text-xs text-slate-600 mt-1">OCR runs locally in this browser. It only drafts form fields—nothing is posted until you review and press Final Submit.</p>
+              <div className="font-bold text-slate-900">✨ Fill fields from a vacancy poster or text</div>
+              <p className="text-xs text-slate-600 mt-1">OCR runs locally in this browser. It reads the text and shows what it found — you choose what to fill, and nothing is posted until you press Final Submit.</p>
             </div>
             <div className="flex gap-2">
               <Button type="button" variant={sourceMode === 'image' ? 'primary' : 'secondary'} className="flex-1" onClick={() => setSourceMode('image')} disabled={extracting}>
@@ -328,8 +408,8 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
                 disabled={extracting}
               />
             )}
-            <Button type="button" className="w-full" variant="secondary" onClick={() => { void extractAndReview() }} disabled={extracting || duplicateChecking}>
-              {extracting ? 'Reading and filling…' : '✨ Extract fields & check duplicates'}
+            <Button type="button" className="w-full" variant="secondary" onClick={() => { void readSource() }} disabled={extracting}>
+              {extracting ? 'Reading…' : '🔍 Read the text & show what was found'}
             </Button>
             {extracting && (
               <div role="status" className="text-xs font-semibold text-brand-800">
@@ -339,6 +419,53 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
             )}
             {extractError && <p role="alert" className="text-xs font-bold text-red-700">{extractError}</p>}
             {extractNotice && <p role="status" className="text-xs font-semibold text-emerald-800">{extractNotice}</p>}
+            {review && (
+              <div className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                <div className="text-sm font-bold text-slate-900">Choose what to fill</div>
+                <p className="text-xs text-slate-600">
+                  Only the ticked values are written into the form. Fields you have already typed start unticked, and HQ text
+                  fills the first HQ box without adding new ones.
+                </p>
+                <div className="space-y-1.5">
+                  {EXTRACTED_FIELDS.map(({ key, label }) => {
+                    const value = review.fields[key]
+                    if (typeof value !== 'string' || !value.trim()) return null
+                    const checked = review.picked[key] === true
+                    const typed = draftValue(key).trim().length > 0
+                    return (
+                      <label key={key} className="flex items-start gap-2 rounded-lg bg-slate-50 p-2 text-xs">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={checked}
+                          onChange={(event) => setReview((current) => current
+                            ? { ...current, picked: { ...current.picked, [key]: event.target.checked } }
+                            : current)}
+                        />
+                        <span className="min-w-0">
+                          <span className="font-bold text-slate-800">{label}</span>
+                          {typed && <span className="ml-1 font-semibold text-amber-700">· replaces what you typed</span>}
+                          <span className="mt-0.5 block break-words text-slate-600">{value.slice(0, 160)}</span>
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="secondary" className="flex-1" onClick={() => setReview(null)}>
+                    Discard
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    onClick={applyReviewedFields}
+                    disabled={!EXTRACTED_FIELDS.some(({ key }) => review.picked[key] === true)}
+                  >
+                    Fill selected values
+                  </Button>
+                </div>
+              </div>
+            )}
             {sourceMode === 'image' && ocrText && (
               <details className="rounded-lg bg-white/80 p-2 text-xs text-slate-700">
                 <summary className="cursor-pointer font-semibold">Review the text OCR found</summary>
@@ -536,7 +663,7 @@ export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { j
           placeholders only — those values are never sent to them.
         </p>
         {error && <p role="alert" className="text-sm font-bold text-red-800">{error}</p>}
-        <Button className="w-full" onClick={() => { void save() }} disabled={saving || duplicateChecking || extracting}>{saving ? 'Checking and saving…' : job ? 'Save changes' : 'Final Submit'}</Button>
+        <Button className="w-full" onClick={() => { void save() }} disabled={saving || extracting}>{saving ? 'Checking and saving…' : job ? 'Save changes' : 'Final Submit'}</Button>
       </div>
       </Modal>
       <Modal open={Boolean(duplicatePrompt)} onClose={discardDraft} title="Review duplicate status">

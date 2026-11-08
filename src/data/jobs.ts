@@ -194,12 +194,27 @@ export async function deleteJob(id: string, reason: string): Promise<void> {
   // Every deletion needs a reason; the audit log keeps it with the vacancy.
   const problem = deleteReasonProblem(reason)
   if (problem) throw new Error(problem)
-  // Tombstone rather than delete so a stale client cannot resurrect a row.
-  const { error } = await supabase.from('vacancies').update({
-    data: { deleted: true, deletedAt: Date.now(), deleteReason: reason.trim() },
+  if (!id) throw new Error('Choose the vacancy to delete and try again.')
+  // Only a vacancy this admin can actually see may be deleted, so a stale id
+  // can never reach the database.
+  const previous = jobs.find((job) => job.id === id)
+  if (!previous) throw new Error('That vacancy is not in the current list. Reload and try again.')
+  // Tombstone rather than delete so a stale client cannot resurrect a row. The
+  // rest of the row is kept: the activity log stays readable and a restored
+  // vacancy comes back whole.
+  const { data, error } = await supabase.from('vacancies').update({
+    data: { ...previous, id, deleted: true, deletedAt: Date.now(), deleteReason: reason.trim() },
     synced_at: new Date().toISOString(),
-  }).eq('id', id).select('id').single()
+  }).eq('id', id).select('id')
   if (error) throw new Error('Vacancy could not be deleted. Check permissions and try again.')
+  // The update is scoped to one primary key, so exactly one row must come back.
+  // Anything else is reported instead of silently hiding the list.
+  const changed = Array.isArray(data) ? data.length : 0
+  if (changed !== 1) {
+    throw new Error(changed === 0
+      ? 'That vacancy no longer exists. Reload the list to see the current vacancies.'
+      : `The database changed ${changed} rows for a single delete. No other vacancy was removed here — reload and check the list before deleting again.`)
+  }
   jobs = jobs.filter((job) => job.id !== id)
 }
 

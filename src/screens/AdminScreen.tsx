@@ -26,6 +26,7 @@ import {
   paymentTypeLabel,
   type PaymentLike,
 } from '../data/vacancyRules'
+import { duplicateRemovalIds, groupDuplicateVacancies } from '../data/vacancyDuplicateGroups'
 import { getAllPlansIncludingRetired, refreshPlans, savePlans, type Plan } from '../data/plans'
 import {
   getPayments,
@@ -95,11 +96,37 @@ function useCurrentTime() {
 export function AdminScreen({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState<AdminTab>('dashboard')
   const [adminMenuOpen, setAdminMenuOpen] = useState(false)
-  // The back arrow leaves the panel; signing out is irreversible for the
-  // session, so it asks first instead of logging out on a stray tap.
+  // Leaving is the last step, never the first one: the back arrow walks back
+  // through the panel (section → dashboard) and only the dashboard offers to
+  // close the panel. Signing out also asks first.
   const [exitOpen, setExitOpen] = useState(false)
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
-  useBackHandler(adminMenuOpen, () => setAdminMenuOpen(false))
+  /** Short confirmation shown above the section after a change (survives the remount). */
+  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
+  const flash = useCallback((text: string, tone: 'ok' | 'warn' = 'ok') => setNotice({ text, tone }), [])
+
+  /**
+   * One back step inside the admin panel: close the menu, otherwise leave the
+   * open section for the dashboard. Only the dashboard itself asks to exit.
+   */
+  const stepBack = useCallback(() => {
+    if (adminMenuOpen) { setAdminMenuOpen(false); return }
+    if (tab !== 'dashboard') {
+      setTab('dashboard')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    setExitOpen(true)
+  }, [adminMenuOpen, tab])
+  // The phone's back button follows the same steps instead of signing out.
+  useBackHandler(true, stepBack)
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 8000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
   const [version, setVersion] = useState(0) // re-render trigger after mutations
   const bump = () => setVersion((v) => v + 1)
   const [requests, setRequests] = useState<SupportRequest[]>([])
@@ -146,7 +173,10 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       {/* Header */}
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
-          <BackButton onClick={() => setExitOpen(true)} label="Leave the admin panel" />
+          <BackButton
+            onClick={stepBack}
+            label={tab === 'dashboard' ? 'Leave the admin panel' : 'Back to the dashboard'}
+          />
           <div className="min-w-0 flex-1">
             <Wordmark size="text-sm" />
           </div>
@@ -169,17 +199,26 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
       <ConfirmDialog
         open={exitOpen}
         title="Leave the admin panel?"
-        message="You will be signed out of the administrator session and returned to the sign-in page. Nothing you changed is undone."
+        message="This is the last step back — every section already returns to the dashboard. Leaving signs you out of the administrator session and returns to the sign-in page. Nothing you changed is undone; press Stay to keep working."
         confirmLabel="Sign out"
+        cancelLabel="Stay"
         danger
         onConfirm={() => { setExitOpen(false); onExit() }}
         onCancel={() => setExitOpen(false)}
       />
 
       <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
+        {notice && (
+          <p
+            role="status"
+            className={`rounded-xl p-3 text-sm font-semibold ring-1 ${notice.tone === 'warn' ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'bg-emerald-50 text-emerald-900 ring-emerald-200'}`}
+          >
+            {notice.text}
+          </p>
+        )}
         <AdminSearchCard requests={requests} onNavigate={navigate} />
         {tab === 'dashboard' && <DashboardTab requests={requests} onNavigate={navigate} />}
-        {tab === 'vacancies' && <VacanciesTab onMutate={bump} />}
+        {tab === 'vacancies' && <VacanciesTab onMutate={bump} onNotice={flash} />}
         {tab === 'announce' && <AnnouncementsTab />}
         {tab === 'team' && <VacancyTeamAdmin />}
         {tab === 'plans' && <PlansTab onMutate={bump} />}
@@ -356,16 +395,25 @@ function ApplicationsTab() {
 }
 
 // -------------------- Vacancies --------------------
-function VacanciesTab({ onMutate }: { onMutate: () => void }) {
+function VacanciesTab({ onMutate, onNotice }: {
+  onMutate: () => void
+  onNotice: (text: string, tone?: 'ok' | 'warn') => void
+}) {
   const jobs = useMemo(() => sortedJobs(getJobs()), [])
+  const duplicateGroups = useMemo(() => groupDuplicateVacancies(jobs), [jobs])
+  const duplicateIds = useMemo(() => duplicateRemovalIds(duplicateGroups), [duplicateGroups])
   const [editing, setEditing] = useState<Job | null>(null)
   const [open, setOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false)
+  const [duplicateReason, setDuplicateReason] = useState('Duplicate entry')
+  const [duplicateBusy, setDuplicateBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const legacyCount = getLegacyJobs().length
   const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
+  const duplicateReasonProblem = deleteReasonProblem(duplicateReason)
 
   function confirmDelete() {
     if (!deleteTarget || deleteReasonProblem(deleteReason)) return
@@ -373,13 +421,48 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
     const reason = deleteReason
     setDeleteTarget(null)
     setDeleteReason('')
-    void change(() => deleteJob(target.id, reason))
+    void change(
+      () => deleteJob(target.id, reason),
+      // Say exactly what changed, so one delete can never look like a bulk delete.
+      () => onNotice(`Deleted 1 vacancy — “${target.title}”. The other ${Math.max(jobs.length - 1, 0)} vacancies are unchanged.`),
+    )
   }
 
-  async function change(action: () => Promise<unknown>) {
+  /**
+   * Duplicate clean-up: the preview is on screen, one copy of every group is
+   * kept, and each row is deleted on its own — a failure stops the run instead
+   * of hiding the rest of the list.
+   */
+  async function removeDuplicates() {
+    const problem = deleteReasonProblem(duplicateReason)
+    if (problem) { setError(problem); return }
+    const ids = duplicateIds
+    if (ids.length === 0) { setDuplicatesOpen(false); return }
+    setDuplicateBusy(true)
+    setError(null)
+    let removed = 0
+    try {
+      for (const id of ids) {
+        await deleteJob(id, duplicateReason)
+        removed += 1
+      }
+      setDuplicatesOpen(false)
+      onNotice(`Removed ${removed} duplicate ${removed === 1 ? 'vacancy' : 'vacancies'} — one copy of each was kept.`)
+      onMutate()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Duplicate removal stopped.'
+      setDuplicatesOpen(false)
+      onNotice(`Removed ${removed} of ${ids.length} duplicates. ${message}`, 'warn')
+      onMutate()
+    } finally {
+      setDuplicateBusy(false)
+    }
+  }
+
+  async function change(action: () => Promise<unknown>, done?: () => void) {
     setBusy(true)
     setError(null)
-    try { await action(); onMutate() }
+    try { await action(); done?.(); onMutate() }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Vacancy change failed.') }
     finally { setBusy(false) }
   }
@@ -394,6 +477,7 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
   }
   function onSaved() {
     setOpen(false)
+    onNotice(editing ? `Saved changes to “${editing.title}”.` : 'Vacancy posted.')
     onMutate()
   }
 
@@ -401,7 +485,18 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold text-slate-900">Vacancies ({jobs.length})</h2>
-        <Button onClick={openNew}>+ Post vacancy</Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {duplicateIds.length > 0 && (
+            <Button
+              variant="secondary"
+              disabled={busy || duplicateBusy}
+              onClick={() => { setDuplicateReason('Duplicate entry'); setDuplicatesOpen(true) }}
+            >
+              🧹 Remove duplicates ({duplicateIds.length})
+            </Button>
+          )}
+          <Button onClick={openNew}>+ Post vacancy</Button>
+        </div>
       </div>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
       {legacyCount > 0 && (
@@ -453,6 +548,9 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
             <div className="text-sm text-slate-900">
               <span className="font-semibold">{deleteTarget.title}</span> · {deleteTarget.company} · {deleteTarget.location}
             </div>
+            <p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+              This deletes this one vacancy only. The other {Math.max(jobs.length - 1, 0)} vacancies stay published.
+            </p>
             <div>
               <Label htmlFor="vacancy-delete-reason">Reason for deleting</Label>
               <Textarea
@@ -467,10 +565,56 @@ function VacanciesTab({ onMutate }: { onMutate: () => void }) {
             {reasonProblem && <p role="alert" className="text-sm font-semibold text-red-800">{reasonProblem}</p>}
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => { setDeleteTarget(null); setDeleteReason('') }}>Cancel</Button>
-              <Button variant="danger" className="flex-1" disabled={!!deleteReasonProblem(deleteReason) || busy} onClick={confirmDelete}>Delete vacancy</Button>
+              <Button variant="danger" className="flex-1" disabled={!!deleteReasonProblem(deleteReason) || busy} onClick={confirmDelete}>Delete this vacancy</Button>
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={duplicatesOpen} onClose={() => { if (!duplicateBusy) setDuplicatesOpen(false) }} title="Remove duplicate vacancies">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-700">
+            {duplicateIds.length} duplicate {duplicateIds.length === 1 ? 'vacancy' : 'vacancies'} in {duplicateGroups.length} {duplicateGroups.length === 1 ? 'group' : 'groups'}.
+            One copy of each group is kept — the pinned one, otherwise the oldest post. Nothing is removed until you press the button below.
+          </p>
+          <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+            {duplicateGroups.map((group) => (
+              <div key={group.key} className="rounded-xl border border-slate-200 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Keep</div>
+                <div className="truncate text-sm font-semibold text-slate-900">{group.keep.title}</div>
+                <div className="truncate text-xs text-slate-600">{group.keep.company} · {group.keep.location}</div>
+                <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-red-700">
+                  Remove {group.remove.length}
+                </div>
+                {group.remove.map((job) => (
+                  <div key={job.id} className="truncate text-xs text-slate-700">— {job.title} · {job.company} · {job.location}</div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div>
+            <Label htmlFor="duplicate-delete-reason">Reason for deleting</Label>
+            <Input
+              id="duplicate-delete-reason"
+              value={duplicateReason}
+              maxLength={300}
+              onChange={(e) => setDuplicateReason(e.target.value)}
+            />
+            <div className="mt-1 text-xs text-slate-600">Required · 5 to 300 characters · kept in Vacancy team → Deleted</div>
+            {duplicateReasonProblem && <p role="alert" className="mt-1 text-sm font-semibold text-red-800">{duplicateReasonProblem}</p>}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" disabled={duplicateBusy} onClick={() => setDuplicatesOpen(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              disabled={duplicateBusy || Boolean(duplicateReasonProblem)}
+              onClick={() => { void removeDuplicates() }}
+            >
+              {duplicateBusy ? 'Removing…' : `Delete ${duplicateIds.length} duplicate${duplicateIds.length === 1 ? '' : 's'}`}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
