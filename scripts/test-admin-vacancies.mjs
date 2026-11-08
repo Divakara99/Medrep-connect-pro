@@ -62,6 +62,16 @@ assert.match(deleteBody, /const previous = jobs\.find/, 'only a vacancy the admi
 assert.match(deleteBody, /\.\.\.previous/, 'the tombstone keeps the rest of the row instead of blanking it')
 assert.match(deleteBody, /jobs = jobs\.filter\(\(job\) => job\.id !== id\)/, 'only that one row leaves the local list')
 
+// ------------------------------------------------------------------- undo
+const restoreStart = jobs.indexOf('export async function restoreJob')
+assert.ok(restoreStart > 0, 'a delete can be undone from the database')
+const restoreBody = jobs.slice(restoreStart, jobs.indexOf('\n}', restoreStart) + 2)
+assert.match(restoreBody, /\.eq\('id', id\)\.select\('id'\)/, 'a restore touches exactly one primary key')
+assert.match(restoreBody, /delete restored\.deleted/, 'the tombstone flag is what gets cleared')
+assert.match(restoreBody, /changed !== 1/, 'a restore is verified like a delete')
+assert.match(restoreBody, /before its details were kept, so it cannot be restored/, 'old empty tombstones are refused instead of restoring a blank card')
+assert.match(jobs, /export async function loadDeletedVacancies/, 'the bin can be listed')
+
 // ------------------------------------------------------------- back navigation
 const admin = await read('src/screens/AdminScreen.tsx')
 assert.match(admin, /const stepBack = useCallback\(\(\) => \{/, 'the admin panel has one back step')
@@ -101,4 +111,12 @@ assert.match(form, /const next = current\.length > 0 \? \[\.\.\.current\] : \[''
 assert.match(form, /if \(!next\[0\]\.trim\(\) && hqText\) next\[0\] = hqText/, 'HQ text fills the first box only')
 assert.doesNotMatch(form, /if \(fields\.hq\?\.trim\(\)\) \{\s*const entries = parseHeadquarters/, 'the old HQ box-spawning path is gone')
 
-console.log('admin vacancies: back steps to the dashboard, one delete removes one row, pasted text is opt-in, duplicates are previewed — passed')
+// The panel offers Undo twice: in the banner right after a delete, and per row
+// in the Deleted list.
+assert.match(admin, /label: '↩ Undo', run: \(\) => undoDelete\(target\)/, 'the delete banner carries an Undo action')
+assert.match(admin, /Deleted \(\{deleted\.length\}\)/, 'the Vacancies tab lists what was deleted')
+assert.match(admin, /\{undoBusyId === item\.id \? 'Restoring…' : '↩ Undo'\}/, 'each deleted vacancy has its own Undo')
+assert.match(admin, /await restoreJob\(target\.id\)/, 'Undo restores through the database helper')
+assert.match(admin, /action\?: \{ label: string; run: \(\) => void \}/, 'the notice can carry one action')
+
+console.log('admin vacancies: back steps to the dashboard, one delete removes one row and can be undone, pasted text is opt-in, duplicates are previewed — passed')

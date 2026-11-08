@@ -218,6 +218,81 @@ export async function deleteJob(id: string, reason: string): Promise<void> {
   jobs = jobs.filter((job) => job.id !== id)
 }
 
+/**
+ * What the admin needs to see in the bin: enough to recognise the vacancy and
+ * decide whether to bring it back. Older tombstones (from before the row was
+ * kept) may only have an id, so every field falls back safely.
+ */
+export type DeletedVacancy = {
+  id: string
+  title: string
+  company: string
+  location: string
+  deletedAt: number
+  deleteReason: string
+}
+
+export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
+  const { data, error } = await supabase
+    .from('vacancies')
+    .select('id,data')
+    .order('synced_at', { ascending: false })
+    .limit(500)
+  if (error) throw new Error('Deleted vacancies could not be loaded.')
+  return ((data ?? []) as { id: string; data: unknown }[])
+    .filter((row) => (row.data as { deleted?: boolean } | null)?.deleted === true)
+    .map((row) => {
+      const from = (row.data ?? {}) as Record<string, unknown>
+      return {
+        id: row.id,
+        title: typeof from.title === 'string' && from.title.trim() ? from.title : 'Deleted vacancy',
+        company: typeof from.company === 'string' ? from.company : '',
+        location: typeof from.location === 'string' ? from.location : '',
+        deletedAt: typeof from.deletedAt === 'number' ? from.deletedAt : 0,
+        deleteReason: typeof from.deleteReason === 'string' ? from.deleteReason : '',
+      }
+    })
+}
+
+/**
+ * Undo a delete: the tombstone is cleared and the vacancy becomes live again,
+ * with everything else about it untouched. Scoped to one primary key and
+ * verified like deleteJob, so a restore can only ever bring back one row.
+ */
+export async function restoreJob(id: string): Promise<void> {
+  if (!id) throw new Error('Choose the vacancy to restore and try again.')
+  const { data: row, error: readError } = await supabase
+    .from('vacancies')
+    .select('id,data')
+    .eq('id', id)
+    .maybeSingle()
+  if (readError) throw new Error('That vacancy could not be read. Reload and try again.')
+  if (!row) throw new Error('That vacancy no longer exists.')
+  const previous = (row.data ?? {}) as Record<string, unknown>
+  if (previous.deleted !== true) throw new Error('That vacancy is already live.')
+  // A tombstone written by an older build kept only the id, so it has nothing
+  // to bring back. Say so instead of restoring an empty card.
+  if (typeof previous.title !== 'string' || !previous.title.trim()
+    || typeof previous.location !== 'string' || !previous.location.trim()
+    || typeof previous.category !== 'string') {
+    throw new Error('This vacancy was deleted before its details were kept, so it cannot be restored. Post it again instead.')
+  }
+  const restored: Record<string, unknown> = { ...previous }
+  delete restored.deleted
+  delete restored.deletedAt
+  delete restored.deleteReason
+  restored.restoredAt = Date.now()
+  const { data, error } = await supabase.from('vacancies').update({
+    data: restored,
+    synced_at: new Date().toISOString(),
+  }).eq('id', id).select('id')
+  if (error) throw new Error('The vacancy could not be restored. Check permissions and try again.')
+  const changed = Array.isArray(data) ? data.length : 0
+  if (changed !== 1) throw new Error(`The database changed ${changed} rows for one restore. Reload the list before trying again.`)
+  // The list is re-read from the server by the panel; nothing is trusted here.
+  await loadAdminJobs().catch(() => undefined)
+}
+
 export async function togglePin(id: string, pinned: boolean): Promise<Job> {
   // Pinning is housekeeping, not a content update — do not spam notifications.
   return updateJob(id, { pinned }, { silent: true })

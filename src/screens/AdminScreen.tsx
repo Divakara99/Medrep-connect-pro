@@ -14,8 +14,11 @@ import {
   getLegacyJobs,
   importLegacyJobs,
   loadAdminJobs,
+  loadDeletedVacancies,
+  restoreJob,
   sortedJobs,
   togglePin,
+  type DeletedVacancy,
   type Job,
 } from '../data/jobs'
 import {
@@ -101,9 +104,19 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   // close the panel. Signing out also asks first.
   const [exitOpen, setExitOpen] = useState(false)
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
-  /** Short confirmation shown above the section after a change (survives the remount). */
-  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
-  const flash = useCallback((text: string, tone: 'ok' | 'warn' = 'ok') => setNotice({ text, tone }), [])
+  /**
+   * Short confirmation shown above the section after a change (it survives the
+   * remount). It can carry one action — that is where Undo lives after a
+   * delete, so a wrong tap is one press away from being undone.
+   */
+  const [notice, setNotice] = useState<{
+    text: string
+    tone: 'ok' | 'warn'
+    action?: { label: string; run: () => void }
+  } | null>(null)
+  const flash = useCallback((text: string, tone: 'ok' | 'warn' = 'ok', action?: { label: string; run: () => void }) => {
+    setNotice({ text, tone, action })
+  }, [])
 
   /**
    * One back step inside the admin panel: close the menu, otherwise leave the
@@ -209,12 +222,25 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
 
       <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
         {notice && (
-          <p
+          <div
             role="status"
-            className={`rounded-xl p-3 text-sm font-semibold ring-1 ${notice.tone === 'warn' ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'bg-emerald-50 text-emerald-900 ring-emerald-200'}`}
+            className={`flex flex-wrap items-center gap-3 rounded-2xl p-3 text-sm font-semibold ring-1 ${notice.tone === 'warn' ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'bg-emerald-50 text-emerald-900 ring-emerald-200'}`}
           >
-            {notice.text}
-          </p>
+            <span className="min-w-0 flex-1">{notice.text}</span>
+            {notice.action && (
+              <Button
+                variant="secondary"
+                className="shrink-0 px-3 py-1.5 text-sm"
+                onClick={() => {
+                  const action = notice.action
+                  setNotice(null)
+                  action?.run()
+                }}
+              >
+                {notice.action.label}
+              </Button>
+            )}
+          </div>
         )}
         <AdminSearchCard requests={requests} onNavigate={navigate} />
         {tab === 'dashboard' && <DashboardTab requests={requests} onNavigate={navigate} />}
@@ -397,7 +423,7 @@ function ApplicationsTab() {
 // -------------------- Vacancies --------------------
 function VacanciesTab({ onMutate, onNotice }: {
   onMutate: () => void
-  onNotice: (text: string, tone?: 'ok' | 'warn') => void
+  onNotice: (text: string, tone?: 'ok' | 'warn', action?: { label: string; run: () => void }) => void
 }) {
   // The list always comes from the server, never from the mutable job cache the
   // user feed shares: an emptied cache can never look like "all vacancies
@@ -415,6 +441,10 @@ function VacanciesTab({ onMutate, onNotice }: {
   const [duplicateBusy, setDuplicateBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // The bin: everything deleted, with an Undo per row.
+  const [deleted, setDeleted] = useState<DeletedVacancy[]>([])
+  const [deletedOpen, setDeletedOpen] = useState(false)
+  const [undoBusyId, setUndoBusyId] = useState<string | null>(null)
   const legacyCount = getLegacyJobs().length
   const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
   const duplicateReasonProblem = deleteReasonProblem(duplicateReason)
@@ -429,6 +459,34 @@ function VacanciesTab({ onMutate, onNotice }: {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    void refreshDeleted()
+  }, [])
+
+  /** Re-reads the deleted list; a failure only hides Undo, never the catalogue. */
+  async function refreshDeleted() {
+    try { setDeleted(await loadDeletedVacancies()) } catch { /* the bin is optional */ }
+  }
+
+  /**
+   * Undo one delete. Only the module-level restore plus the panel callbacks are
+   * used, so the Undo button keeps working from an older banner too.
+   */
+  function undoDelete(target: { id: string; title: string }) {
+    setUndoBusyId(target.id)
+    void (async () => {
+      try {
+        await restoreJob(target.id)
+        onNotice(`Restored “${target.title}”. It is live in the app again.`)
+        onMutate()
+      } catch (cause) {
+        onNotice(cause instanceof Error ? cause.message : 'The vacancy could not be restored.', 'warn')
+      } finally {
+        setUndoBusyId(null)
+      }
+    })()
+  }
 
   /** Re-reads the catalogue from the database and returns what is left. */
   async function reload(): Promise<Job[]> {
@@ -459,10 +517,19 @@ function VacanciesTab({ onMutate, onNotice }: {
       await deleteJob(target.id, reason)
       let after: number | null = null
       try { after = (await reload()).length } catch { after = null }
+      await refreshDeleted()
       if (after !== null && after < before - 1) {
-        onNotice(`Deleted 1 vacancy — “${target.title}”, but the list now shows ${after} of ${before}. Open Vacancy team → Deleted to see every deletion with its time before posting again.`, 'warn')
+        onNotice(
+          `Deleted 1 vacancy — “${target.title}”, but the list now shows ${after} of ${before}. Open Vacancy team → Deleted to see every deletion with its time before posting again.`,
+          'warn',
+          { label: '↩ Undo', run: () => undoDelete(target) },
+        )
       } else {
-        onNotice(`Deleted 1 vacancy — “${target.title}”. ${after ?? Math.max(before - 1, 0)} vacancies remain.`)
+        onNotice(
+          `Deleted 1 vacancy — “${target.title}”. ${after ?? Math.max(before - 1, 0)} vacancies remain.`,
+          'ok',
+          { label: '↩ Undo', run: () => undoDelete(target) },
+        )
       }
       onMutate()
     } catch (cause) {
@@ -491,6 +558,7 @@ function VacanciesTab({ onMutate, onNotice }: {
         removed += 1
       }
       setDuplicatesOpen(false)
+      await refreshDeleted()
       let left: number | null = null
       try { left = (await reload()).length } catch { left = null }
       onNotice(`Removed ${removed} duplicate ${removed === 1 ? 'vacancy' : 'vacancies'} — one copy of each was kept.${left === null ? '' : ` ${left} vacancies remain.`}`)
@@ -586,6 +654,50 @@ function VacanciesTab({ onMutate, onNotice }: {
           </Card>
         ))}
       </div>
+
+      {/* The bin. A delete can always be undone, so a wrong tap (or a whole
+          run of duplicates) is recoverable without re-typing the vacancy. */}
+      {deleted.length > 0 && (
+        <Card className="overflow-hidden p-0">
+          <button
+            type="button"
+            onClick={() => setDeletedOpen((open) => !open)}
+            aria-expanded={deletedOpen}
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-slate-50"
+          >
+            <span className="text-sm font-bold text-slate-900">🗑 Deleted ({deleted.length})</span>
+            <span className="text-xs font-semibold text-slate-500">{deletedOpen ? 'Hide' : 'Show · undo a delete'}</span>
+          </button>
+          {deletedOpen && (
+            <div className="divide-y divide-slate-100 border-t border-slate-100">
+              {deleted.map((item) => (
+                <div key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
+                    {(item.company || item.location) && (
+                      <div className="truncate text-xs text-slate-600">{[item.company, item.location].filter(Boolean).join(' · ')}</div>
+                    )}
+                    <div className="text-xs text-slate-500">
+                      {item.deletedAt
+                        ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
+                        : 'Deleted'}
+                      {' · '}{item.deleteReason || 'No reason recorded'}
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    className="shrink-0 px-3 py-1.5 text-sm"
+                    disabled={undoBusyId === item.id}
+                    onClick={() => undoDelete(item)}
+                  >
+                    {undoBusyId === item.id ? 'Restoring…' : '↩ Undo'}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       <VacancyForm key={editing?.id ?? 'new'} job={editing} open={open} onClose={() => setOpen(false)} onSaved={onSaved} />
 
