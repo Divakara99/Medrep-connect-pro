@@ -71,9 +71,18 @@ assert.match(admin, /<BackButton\s*onClick=\{stepBack\}/, 'the header arrow uses
 assert.doesNotMatch(admin, /BackButton onClick=\{\(\) => setExitOpen\(true\)\}/, 'no arrow signs the admin out directly')
 assert.match(admin, /label=\{tab === 'dashboard' \? 'Leave the admin panel' : 'Back to the dashboard'\}/, 'the arrow says where it goes')
 
+// The list itself is server-backed, so an emptied cache cannot look like a
+// deleted catalogue.
+assert.match(admin, /const \[jobs, setJobs\] = useState<Job\[\]>\(\(\) => sortedJobs\(getJobs\(\)\)\)/, 'the tab keeps its own list')
+assert.match(admin, /void loadAdminJobs\(\)/, 'the tab re-reads the catalogue when it opens')
+assert.match(admin, /async function reload\(\): Promise<Job\[\]> \{\s*const list = sortedJobs\(await loadAdminJobs\(\)\)/, 'every change re-reads the catalogue from the server')
+assert.match(admin, /await deleteJob\(target\.id, reason\)/, 'the single delete still targets one primary key')
+
 // One delete = one vacancy, and the admin is told exactly what happened.
 assert.match(admin, /This deletes this one vacancy only\. The other \{Math\.max\(jobs\.length - 1, 0\)\} vacancies stay published\./)
-assert.match(admin, /Deleted 1 vacancy — “\$\{target\.title\}”\. The other \$\{Math\.max\(jobs\.length - 1, 0\)\} vacancies are unchanged\./)
+assert.match(admin, /Deleted 1 vacancy — “\$\{target\.title\}”\. \$\{after \?\? Math\.max\(before - 1, 0\)\} vacancies remain\./, 'the banner reports exactly how many vacancies remain')
+assert.match(admin, /after < before - 1/, 'a drop of more than one row is called out instead of hidden')
+assert.match(admin, /Vacancy team → Deleted/, 'the warning points at the deletion log')
 
 // Duplicates: preview + confirmation, one row at a time.
 assert.match(admin, /Remove duplicates \(\{duplicateIds\.length\}\)/, 'the list offers a duplicate clean-up')

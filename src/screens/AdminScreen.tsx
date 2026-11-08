@@ -399,7 +399,11 @@ function VacanciesTab({ onMutate, onNotice }: {
   onMutate: () => void
   onNotice: (text: string, tone?: 'ok' | 'warn') => void
 }) {
-  const jobs = useMemo(() => sortedJobs(getJobs()), [])
+  // The list always comes from the server, never from the mutable job cache the
+  // user feed shares: an emptied cache can never look like "all vacancies
+  // deleted", and a refresh brings the real catalogue back.
+  const [jobs, setJobs] = useState<Job[]>(() => sortedJobs(getJobs()))
+  const [loading, setLoading] = useState(true)
   const duplicateGroups = useMemo(() => groupDuplicateVacancies(jobs), [jobs])
   const duplicateIds = useMemo(() => duplicateRemovalIds(duplicateGroups), [duplicateGroups])
   const [editing, setEditing] = useState<Job | null>(null)
@@ -415,17 +419,57 @@ function VacanciesTab({ onMutate, onNotice }: {
   const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
   const duplicateReasonProblem = deleteReasonProblem(duplicateReason)
 
+  useEffect(() => {
+    let active = true
+    void loadAdminJobs()
+      .then((list) => { if (active) setJobs(sortedJobs(list)) })
+      .catch((cause: unknown) => {
+        if (active) setError(cause instanceof Error ? cause.message : 'Vacancies could not be loaded.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  /** Re-reads the catalogue from the database and returns what is left. */
+  async function reload(): Promise<Job[]> {
+    const list = sortedJobs(await loadAdminJobs())
+    setJobs(list)
+    return list
+  }
+
   function confirmDelete() {
     if (!deleteTarget || deleteReasonProblem(deleteReason)) return
     const target = deleteTarget
     const reason = deleteReason
     setDeleteTarget(null)
     setDeleteReason('')
-    void change(
-      () => deleteJob(target.id, reason),
-      // Say exactly what changed, so one delete can never look like a bulk delete.
-      () => onNotice(`Deleted 1 vacancy — “${target.title}”. The other ${Math.max(jobs.length - 1, 0)} vacancies are unchanged.`),
-    )
+    void removeOne(target, reason)
+  }
+
+  /**
+   * Deletes exactly one vacancy, then reads the list back from the server and
+   * says what is left. If the count ever drops by more than one, the admin is
+   * warned on the spot instead of finding out later.
+   */
+  async function removeOne(target: Job, reason: string) {
+    setBusy(true)
+    setError(null)
+    const before = jobs.length
+    try {
+      await deleteJob(target.id, reason)
+      let after: number | null = null
+      try { after = (await reload()).length } catch { after = null }
+      if (after !== null && after < before - 1) {
+        onNotice(`Deleted 1 vacancy — “${target.title}”, but the list now shows ${after} of ${before}. Open Vacancy team → Deleted to see every deletion with its time before posting again.`, 'warn')
+      } else {
+        onNotice(`Deleted 1 vacancy — “${target.title}”. ${after ?? Math.max(before - 1, 0)} vacancies remain.`)
+      }
+      onMutate()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Vacancy deletion failed.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   /**
@@ -447,7 +491,9 @@ function VacanciesTab({ onMutate, onNotice }: {
         removed += 1
       }
       setDuplicatesOpen(false)
-      onNotice(`Removed ${removed} duplicate ${removed === 1 ? 'vacancy' : 'vacancies'} — one copy of each was kept.`)
+      let left: number | null = null
+      try { left = (await reload()).length } catch { left = null }
+      onNotice(`Removed ${removed} duplicate ${removed === 1 ? 'vacancy' : 'vacancies'} — one copy of each was kept.${left === null ? '' : ` ${left} vacancies remain.`}`)
       onMutate()
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Duplicate removal stopped.'
@@ -462,7 +508,7 @@ function VacanciesTab({ onMutate, onNotice }: {
   async function change(action: () => Promise<unknown>, done?: () => void) {
     setBusy(true)
     setError(null)
-    try { await action(); done?.(); onMutate() }
+    try { await action(); done?.(); await reload(); onMutate() }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Vacancy change failed.') }
     finally { setBusy(false) }
   }
@@ -498,6 +544,7 @@ function VacanciesTab({ onMutate, onNotice }: {
           <Button onClick={openNew}>+ Post vacancy</Button>
         </div>
       </div>
+      {loading && <p role="status" className="text-xs font-semibold text-slate-500">Refreshing vacancies from the server…</p>}
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
       {legacyCount > 0 && (
         <Card className="p-4 space-y-2">
