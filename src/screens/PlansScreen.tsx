@@ -316,10 +316,18 @@ export function PlansScreen({
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
-      <Card className="p-3 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-brand-800">Subscription</div>
-        <h1 className="text-base font-extrabold text-slate-900 leading-tight">Unlock company details and apply</h1>
-        <p className="text-xs text-slate-700 mt-0.5">{inApp ? 'Pay with Google Play. Access starts once the server verifies your purchase.' : 'Pay inside secure Razorpay Checkout. Access starts once the server verifies payment.'}</p>
+      <Card className="hairline relative overflow-hidden p-5">
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-brand-100/60 blur-2xl" />
+        <div className="relative">
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Passes</div>
+          <h1 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-slate-900">
+            Manager contact details
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Browsing vacancies is free for everyone. A pass opens the manager&apos;s name, email and phone number on every
+            job until it expires — {inApp ? 'paid with Google Play' : 'paid in secure Razorpay Checkout'}, activated only after the server verifies it.
+          </p>
+        </div>
         {unlocked && activeUntil && (
           <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-950 bg-emerald-100 px-2.5 py-1 rounded-full ring-1 ring-emerald-300">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}

@@ -36,14 +36,14 @@ function SensitiveValue({ label, value, plus = false }: { label: string; value: 
   const [revealed, setRevealed] = useState(false)
   if (!value) {
     return (
-      <div className="rounded-xl ring-1 ring-slate-200 p-3">
+      <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
         <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
         <div className="text-sm font-semibold text-slate-400">—</div>
       </div>
     )
   }
   return (
-    <div className="rounded-xl ring-1 ring-slate-200 p-3">
+    <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
       <button
         type="button"
@@ -142,7 +142,7 @@ export function JobDetail({
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
-          <div className="rounded-xl ring-1 ring-slate-200 p-3">
+          <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Job description</div>
               <Badge color="slate">Public</Badge>
@@ -161,7 +161,7 @@ export function JobDetail({
             )}
           </div>
 
-          <div className="rounded-xl ring-1 ring-slate-200 p-3">
+          <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               Hiring company & contact
             </div>
@@ -214,9 +214,14 @@ export function JobDetail({
                   {unlockButtonLabel(unlockStage)}
                 </Button>
               )}
-              <Button className="w-full" variant="accent" onClick={onSubscribe}>
-                💎 Subscribe to unlock & apply
+              {/* Quiet by design: a pass is one way to see the contact, not
+                  the pitch of the screen. The job itself is the subject. */}
+              <Button className="w-full" variant="secondary" onClick={onSubscribe}>
+                🔓 Unlock manager contact
               </Button>
+              <p className="text-center text-xs font-medium text-slate-500">
+                Contact details need a pass. Watching the video above keeps the company name open for a few minutes.
+              </p>
             </>
           ) : (
             <Button className="w-full" onClick={() => onApply(job)}>
@@ -234,7 +239,7 @@ export function JobDetail({
 
 function Field({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) {
   return (
-    <div className="rounded-xl ring-1 ring-slate-200 p-3">
+    <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
       <div className={`text-sm font-semibold text-slate-900 ${multiline ? 'whitespace-pre-line break-words' : 'truncate'}`}>{value}</div>
     </div>

@@ -41,11 +41,11 @@ assert.match(
 //    visible jump. The login shell anchors to the top on phones and keeps the
 //    centred look from the sm breakpoint up.
 assert.match(login, /data-login-shell/, 'the sign-in shell is identifiable')
-assert.match(
-  login,
-  /flex items-start sm:items-center justify-center/,
-  'the sign-in card is top-aligned on phones and centred only on wider screens',
-)
+/** The two alignment classes can appear in any order — the rule is that the
+ *  shell starts at the top and only centres from the sm breakpoint up. */
+const shellAlignment = login.match(/<div className="[^"]*items-start[^"]*"/)?.[0] ?? ''
+assert.match(shellAlignment, /items-start/, 'the sign-in card is top-aligned on phones')
+assert.match(shellAlignment, /sm:items-center/, 'the sign-in card is centred only on wider screens')
 assert.doesNotMatch(
   login,
   /flex-1 flex items-center justify-center/,

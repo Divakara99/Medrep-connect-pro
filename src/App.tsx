@@ -37,12 +37,17 @@ import { pollForCompanyUnlock } from './data/companyUnlocks'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
 
+/**
+ * The job-seeker menu. Passes sit at the very end, without a gem or a badge:
+ * a pass is something you buy when you want a manager's contact, not the
+ * headline of the product. Job hunting stays the subject of every screen.
+ */
 const USER_MENU_ITEMS: { id: UserTab; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: '🏠' },
   { id: 'priority', label: 'Priority Jobs', icon: '⭐' },
-  { id: 'plans', label: 'Plans', icon: '💎' },
   { id: 'ai', label: 'AI Help', icon: '🤖' },
   { id: 'account', label: 'Account & Profile', icon: '👤' },
+  { id: 'plans', label: 'Passes & pricing', icon: '🎫' },
 ]
 export default function App() {
   const [adminPortal] = useState(() => new URLSearchParams(window.location.search).get('portal') === 'admin')
@@ -489,25 +494,25 @@ export default function App() {
     // spinner becomes a card with a way out, instead of "Loading your account…"
     // spinning forever.
     return (
-      <main role="status" aria-live="polite" className="grid min-h-[100dvh] place-items-center bg-brand-50 px-6 text-center text-brand-900">
+      <main role="status" aria-live="polite" className="hero-mesh grid min-h-[100dvh] place-items-center px-6 text-center text-white">
         {authTimedOut ? (
           <div className="w-full max-w-sm space-y-3">
             <div className="text-4xl" aria-hidden="true">📶</div>
             <div className="text-xl font-extrabold">Can't reach MedRep Pro</div>
-            <p className="text-base font-medium text-slate-700">
+            <p className="text-base font-medium text-white/85">
               Your connection looks down, or the server is busy. Nothing on your account has changed.
             </p>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="w-full rounded-xl bg-brand-600 px-4 py-3 text-base font-bold text-white transition hover:bg-brand-700 active:scale-95"
+              className="w-full rounded-2xl bg-white px-4 py-3 text-base font-bold text-brand-800 shadow-lg transition hover:bg-brand-50 active:scale-95"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => setView(portalLoginView)}
-              className="w-full rounded-xl bg-white px-4 py-3 text-base font-bold text-brand-900 ring-1 ring-brand-200 transition hover:bg-brand-50 active:scale-95"
+              className="w-full rounded-2xl bg-white/10 px-4 py-3 text-base font-bold text-white ring-1 ring-white/30 transition hover:bg-white/15 active:scale-95"
             >
               Go to sign in
             </button>
@@ -515,7 +520,7 @@ export default function App() {
         ) : (
           <div className="space-y-2">
             <div className="text-lg font-bold">Loading your account…</div>
-            <div className="text-sm font-medium text-slate-600">Checking your saved session.</div>
+            <div className="text-sm font-medium text-white/75">Checking your saved session.</div>
           </div>
         )}
       </main>
@@ -551,7 +556,7 @@ export default function App() {
   // User app
   return (
     <div
-      className="min-h-[100dvh] bg-slate-50"
+      className="min-h-[100dvh]"
       // The banner is a native view over the bottom of the WebView, so the app
       // itself gives that strip away: every screen — and every footer inside
       // it — ends above the ad instead of scrolling under it.
@@ -567,7 +572,7 @@ export default function App() {
                 onClick={goBackInApp}
                 aria-label="Back"
                 title="Back"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M15 18l-6-6 6-6" />
@@ -581,7 +586,7 @@ export default function App() {
           <span className="capitalize">
             {tab === 'home' && 'Home'}
             {tab === 'priority' && 'Priority Jobs'}
-            {tab === 'plans' && 'Plans'}
+            {tab === 'plans' && 'Passes'}
             {tab === 'ai' && 'AI Help'}
             {tab === 'account' && 'Account'}
           </span>
@@ -594,7 +599,7 @@ export default function App() {
             aria-haspopup="dialog"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen(true)}
-            className="w-10 h-10 shrink-0 rounded-xl bg-white ring-1 ring-slate-200 hover:bg-slate-50 text-slate-700 grid place-items-center transition active:scale-95"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h16" />
@@ -633,6 +638,7 @@ export default function App() {
           onProfileSaved={handleProfileSaved}
           onResumeChange={setResume}
           onBrowseJobs={() => navigate('home')}
+          onViewPasses={() => navigate('plans')}
         />
       )}
 
@@ -656,7 +662,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="user-menu-title"
-            className="absolute inset-y-0 right-0 flex w-72 max-w-[84vw] flex-col bg-white shadow-2xl animate-slide-in-right"
+            className="absolute inset-y-0 right-0 flex w-72 max-w-[84vw] flex-col rounded-l-[28px] border-l border-white/70 bg-white/95 shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.6)] backdrop-blur-xl animate-slide-in-right"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
