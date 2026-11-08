@@ -119,4 +119,10 @@ assert.match(admin, /\{undoBusyId === item\.id \? 'Restoring…' : '↩ Undo'\}/
 assert.match(admin, /await restoreJob\(target\.id\)/, 'Undo restores through the database helper')
 assert.match(admin, /action\?: \{ label: string; run: \(\) => void \}/, 'the notice can carry one action')
 
+// ------------------------------------------------- the list reads as a table
+assert.match(admin, />\s*Vacancy\s*<\/span>\s*<span>City<\/span>\s*<span>Category<\/span>\s*<span>Posted<\/span>/, 'the vacancy list has column headings')
+assert.match(admin, /sm:grid-cols-\[minmax\(0,2\.2fr\)_minmax\(0,1fr\)_minmax\(0,1fr\)_minmax\(0,0\.8fr\)_auto\]/, 'each row uses the same column tracks as the heading')
+assert.match(admin, /function postedOn\(ms: number\): string/, 'the Posted column has one shared date format')
+assert.doesNotMatch(admin, /w-10 h-10 rounded-lg bg-brand-100/, 'the stacked avatar card is gone')
+
 console.log('admin vacancies: back steps to the dashboard, one delete removes one row and can be undone, pasted text is opt-in, duplicates are previewed — passed')

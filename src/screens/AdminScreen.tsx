@@ -421,6 +421,16 @@ function ApplicationsTab() {
 }
 
 // -------------------- Vacancies --------------------
+/** Short, unambiguous post date for the table row: 4 Oct 2026. */
+function postedOn(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—'
+  try {
+    return new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  } catch {
+    return '—'
+  }
+}
+
 function VacanciesTab({ onMutate, onNotice }: {
   onMutate: () => void
   onNotice: (text: string, tone?: 'ok' | 'warn', action?: { label: string; run: () => void }) => void
@@ -620,40 +630,66 @@ function VacanciesTab({ onMutate, onNotice }: {
           <Button variant="secondary" disabled={busy} onClick={() => { void change(importLegacyJobs) }}>Import older vacancies</Button>
         </Card>
       )}
-      <div className="grid gap-2">
-        {jobs.map((j) => (
-          <Card key={j.id} className="p-3">
-            {/* Info row */}
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-brand-100 text-brand-700 grid place-items-center font-bold text-sm shrink-0">
-                {j.company.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="font-semibold text-slate-900 truncate">{j.title}</div>
-                  <Badge color="brand">{j.category}</Badge>
+      {/* A table, not a stack of cards: every vacancy reads across one line so
+          title, city, category, date and actions line up under their headings.
+          On a phone the columns fold into a compact two-line row. */}
+      <Card className="overflow-hidden p-0">
+        <div className="hidden items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]">
+          <span>Vacancy</span>
+          <span>City</span>
+          <span>Category</span>
+          <span>Posted</span>
+          <span className="text-right">Actions</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {jobs.map((j) => (
+            <div
+              key={j.id}
+              className="px-4 py-3 transition hover:bg-slate-50/70 sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto] sm:items-center sm:gap-3"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-bold text-slate-900">{j.title}</span>
                   {j.pinned && <Badge color="amber">★ Pinned</Badge>}
                 </div>
-                <div className="text-xs text-slate-500 truncate">
-                  {j.company} · {j.location} · {j.salary || 'Salary not mentioned'}{j.postedBy ? ` · posted by ${j.postedBy}` : ''}
+                <div className="truncate text-xs text-slate-500">
+                  {j.company}
+                  {j.salary ? ` · ${j.salary}` : ''}
+                  {j.postedBy ? ` · by ${j.postedBy}` : ''}
+                </div>
+                {/* Phone-only meta, so no column is lost on a small screen. */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
+                  <Badge color="brand">{j.category}</Badge>
+                  <span className="text-xs font-medium text-slate-600">📍 {j.location}</span>
+                  <span className="text-xs text-slate-400">· {postedOn(j.postedAt)}</span>
                 </div>
               </div>
+              <div className="hidden truncate text-sm text-slate-700 sm:block">{j.location}</div>
+              <div className="hidden sm:block">
+                <Badge color="brand">{j.category}</Badge>
+              </div>
+              <div className="hidden text-xs font-medium text-slate-500 sm:block">{postedOn(j.postedAt)}</div>
+              <div className="mt-2.5 flex items-center gap-1.5 sm:mt-0 sm:justify-end">
+                <Button
+                  variant="secondary"
+                  className="px-2.5 py-1.5 text-xs"
+                  disabled={busy}
+                  onClick={() => { void change(() => togglePin(j.id, !j.pinned)) }}
+                  title={j.pinned ? 'Unpin this vacancy' : 'Pin this vacancy to the top'}
+                >
+                  {j.pinned ? '★ Unpin' : '☆ Pin'}
+                </Button>
+                <Button variant="secondary" className="px-2.5 py-1.5 text-xs" onClick={() => openEdit(j)}>
+                  ✏️ Edit
+                </Button>
+                <Button variant="danger" className="px-2.5 py-1.5 text-xs" onClick={() => setDeleteTarget(j)}>
+                  🗑 Delete
+                </Button>
+              </div>
             </div>
-            {/* Action row — always visible on mobile (no side overflow) */}
-            <div className="flex items-center gap-2 mt-3">
-              <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => { void change(() => togglePin(j.id, !j.pinned)) }}>
-                {j.pinned ? '★ Unpin' : '☆ Pin'}
-              </Button>
-              <Button variant="secondary" className="flex-1" onClick={() => openEdit(j)}>
-                ✏️ Edit
-              </Button>
-              <Button variant="danger" className="flex-1" onClick={() => setDeleteTarget(j)}>
-                🗑 Delete
-              </Button>
-            </div>
-          </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+      </Card>
 
       {/* The bin. A delete can always be undone, so a wrong tap (or a whole
           run of duplicates) is recoverable without re-typing the vacancy. */}

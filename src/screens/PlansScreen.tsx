@@ -344,12 +344,14 @@ export function PlansScreen({
         </div>
       )}
 
+      {/* Simple price boxes: one per pass, in a plain grid. No badges are used
+          to push a plan — only the states a buyer needs (Active/Expired). */}
       <Card className="overflow-hidden">
-        <div className="flex items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <div className="text-sm font-bold text-slate-900">Choose a pass</div>
           <div className="text-xs font-medium text-slate-500">One payment · no auto-renew</div>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3">
           {plans.map((plan) => {
             const isSelected = selected.id === plan.id
             // Marked active/purchased: the plan the server ledger says is
@@ -361,44 +363,41 @@ export function PlansScreen({
             const isExpired = !isActive && expiredPlan?.planId === plan.id
             const boughtAt = purchasedPlans.get(plan.id)
             return (
-              <div key={plan.id} className={`flex flex-wrap items-center gap-3 px-4 py-3 ${isSelected ? 'bg-slate-50/80' : ''}`}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-slate-900">{planTitle(plan.title)}</span>
-                    {isActive && <Badge color="green">Active</Badge>}
-                    {isExpired && <Badge color="amber">Expired</Badge>}
-                    {!isActive && isSelected && <Badge color="brand">Selected</Badge>}
-                    {!isActive && !isExpired && boughtAt !== undefined && <Badge color="slate">Purchased</Badge>}
-                  </div>
-                  <div className="mt-0.5 text-xs font-medium text-slate-600">
-                    {periodLabel(plan.days)}{plan.tagline ? ` · ${plan.tagline}` : ''}
-                  </div>
-                  {isActive && activeExpiry !== undefined && (
-                    <div className="mt-1 text-xs font-bold text-emerald-700">Active until {when(activeExpiry)}</div>
-                  )}
-                  {isExpired && expiredPlan?.expiresAt !== undefined && (
-                    <div className="mt-1 text-xs font-bold text-amber-800">
-                      Expired on {when(expiredPlan.expiresAt)} — renew to open contacts again
-                    </div>
-                  )}
-                  {!isActive && !isExpired && boughtAt !== undefined && (
-                    <div className="mt-1 text-xs font-medium text-slate-500">
-                      {boughtAt > Date.now() ? `Purchased earlier · access till ${when(boughtAt)}` : `Purchased earlier · expired ${when(boughtAt)}`}
-                    </div>
-                  )}
+              <div
+                key={plan.id}
+                className={`flex flex-col rounded-2xl border p-3 transition ${
+                  isSelected ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-200' : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{periodLabel(plan.days)}</div>
+                <div className="mt-1 text-2xl font-extrabold leading-none tabular-nums text-slate-900">
+                  {inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <div className="text-lg font-extrabold tabular-nums text-slate-900">
-                    {inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}
-                  </div>
-                  <Button
-                    variant={isSelected ? 'primary' : 'secondary'}
-                    className="px-3 py-1.5 text-sm"
-                    onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
-                  >
-                    {isSelected ? (unlocked ? 'Renew' : isExpired ? 'Renew' : 'Continue') : 'Select'}
-                  </Button>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {isActive && <Badge color="green">Active</Badge>}
+                  {isExpired && <Badge color="amber">Expired</Badge>}
+                  {!isActive && isSelected && <Badge color="brand">Selected</Badge>}
+                  {!isActive && !isExpired && boughtAt !== undefined && <Badge color="slate">Purchased</Badge>}
                 </div>
+                {plan.tagline && <div className="mt-1.5 line-clamp-2 text-xs text-slate-600">{plan.tagline}</div>}
+                {isActive && activeExpiry !== undefined && (
+                  <div className="mt-1.5 text-xs font-bold text-emerald-700">Until {when(activeExpiry)}</div>
+                )}
+                {isExpired && expiredPlan?.expiresAt !== undefined && (
+                  <div className="mt-1.5 text-xs font-bold text-amber-800">Expired {when(expiredPlan.expiresAt)}</div>
+                )}
+                {!isActive && !isExpired && boughtAt !== undefined && (
+                  <div className="mt-1.5 text-xs font-medium text-slate-500">
+                    {boughtAt > Date.now() ? `Till ${when(boughtAt)}` : `Ended ${when(boughtAt)}`}
+                  </div>
+                )}
+                <Button
+                  variant={isSelected ? 'primary' : 'secondary'}
+                  className="mt-3 w-full px-2 py-1.5 text-sm"
+                  onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
+                >
+                  {isSelected ? (unlocked ? 'Renew' : isExpired ? 'Renew' : 'Continue') : 'Select'}
+                </Button>
               </div>
             )
           })}

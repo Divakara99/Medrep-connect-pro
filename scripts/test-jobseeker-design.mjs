@@ -51,6 +51,11 @@ assert.doesNotMatch(plans, /ring-2 ring-brand-600 ring-offset-2/, 'a pass is not
 assert.match(plans, /Choose a pass/, 'passes are one plain list')
 assert.match(plans, /One payment · no auto-renew/, 'the list states the terms in one line')
 
+// Each pass is its own plain box: a bordered card in a grid, not a divided list.
+assert.match(plans, /grid grid-cols-2 gap-3 p-3 sm:grid-cols-3/, 'passes sit in a simple box grid')
+assert.match(plans, /flex flex-col rounded-2xl border p-3/, 'every pass is a plain bordered box')
+assert.doesNotMatch(plans, /divide-y divide-slate-100/, 'the single divided list is gone')
+
 // 3. The account page names what a pass is for, quietly -----------------------
 assert.match(account, /Passes &amp; pricing/, 'passes are one tap away in Account')
 assert.match(account, /A pass is only needed for the manager/, 'the account page explains a pass before pricing')
