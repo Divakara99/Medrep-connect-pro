@@ -14,7 +14,7 @@ must be under 500 characters — the text below is ~400.
 ```
 <en-IN>
 • A company name you unlock with a video now stays visible for 10 minutes only. After that it blurs again — watch another video to reopen it.
-• The ads banner no longer covers the Logout button, in the menu and on the Account screen.
+• The ads banner no longer covers the Logout button, the menu or the page footer.
 • "How to use the app" plays in all 7 languages with voice.
 </en-IN>
 ```
