@@ -6,7 +6,8 @@ import { normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
-import { useUnlockWindow } from './useUnlockWindow'
+import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
+import { jobUnlockLabel } from '../data/jobUnlock'
 
 function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
   const email = (job.managerEmail || '').trim()
@@ -87,6 +88,7 @@ export function JobDetail({
   onApply,
   onWatchUnlock,
   unlockStage = null,
+  paidUnlock,
 }: {
   job: Job | null
   /** Subscription flag ONLY — a company unlock must never set this. */
@@ -97,11 +99,21 @@ export function JobDetail({
   /** Android app, free users only: rewarded video for the company name. */
   onWatchUnlock?: (job: Job) => void
   unlockStage?: UnlockStage | null
+  /**
+   * The ₹5 single-job unlock (website only — Play's lowest price is ₹10).
+   * `available` is false inside the app, where the rewarded video is the free
+   * path and Razorpay is never opened.
+   */
+  paidUnlock?: { available: boolean; busy: boolean; onBuy: (job: Job) => void }
 }) {
   // Per-job company unlock (rewarded video), separate from subscription — and
   // time-limited, so it is re-checked against the clock while the sheet is open.
   const unlockWindow = useUnlockWindow(job ?? { companyUnlocked: false, unlockExpiresAt: undefined })
   const companyUnlocked = Boolean(job && (unlocked || unlockWindow.active))
+  // The paid ₹5 window reveals the whole contact block for this one job, so it
+  // behaves like a pass for this sheet — and only for this sheet.
+  const paidWindow = usePaidUnlockWindow(job ?? { jobUnlocked: false, jobUnlockExpiresAt: undefined })
+  const fullDetails = Boolean(job && (unlocked || paidWindow.active))
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
   const hqItems = job ? parseHeadquarters(job.hq) : []
@@ -165,7 +177,7 @@ export function JobDetail({
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               Hiring company & contact
             </div>
-            {!unlocked && companyUnlocked ? (
+            {!fullDetails && companyUnlocked ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <SensitiveValue label="Company name" value={job.company} />
@@ -181,7 +193,7 @@ export function JobDetail({
                   above stay visible to everyone.
                 </p>
               </>
-            ) : !unlocked ? (
+            ) : !fullDetails ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <LockedValue label="Company name" placeholder="Hidden Pharma Pvt Ltd" />
@@ -207,12 +219,31 @@ export function JobDetail({
             )}
           </div>
 
-          {!unlocked ? (
+          {paidWindow.active && (
+            <p className="text-center text-xs font-bold text-emerald-700">
+              Full contact unlocked for this job · {paidWindow.label} left
+            </p>
+          )}
+          {!fullDetails ? (
             <>
               {!companyUnlocked && onWatchUnlock && (
                 <Button className="w-full" variant="secondary" disabled={unlockStage !== null} onClick={() => onWatchUnlock(job)}>
                   {unlockButtonLabel(unlockStage)}
                 </Button>
+              )}
+              {paidUnlock?.available && (
+                <>
+                  <Button
+                    className="w-full"
+                    disabled={paidUnlock.busy}
+                    onClick={() => paidUnlock.onBuy(job)}
+                  >
+                    {paidUnlock.busy ? 'Opening secure checkout…' : `🔓 ${jobUnlockLabel()}`}
+                  </Button>
+                  <p className="text-center text-xs font-medium text-slate-500">
+                    ₹5 opens this one job's manager name, email and phone numbers for 1 hour. One payment — nothing renews.
+                  </p>
+                </>
               )}
               {/* Quiet by design: a pass is one way to see the contact, not
                   the pitch of the screen. The job itself is the subject. */}
@@ -220,7 +251,9 @@ export function JobDetail({
                 🔓 Unlock manager contact
               </Button>
               <p className="text-center text-xs font-medium text-slate-500">
-                Contact details need a pass. Watching the video above keeps the company name open for a few minutes.
+                {paidUnlock?.available
+                  ? 'Or open every job with a pass. Watching the video keeps only the company name open for a few minutes.'
+                  : 'Contact details need a pass. Watching the video above keeps the company name open for a few minutes.'}
               </p>
             </>
           ) : (

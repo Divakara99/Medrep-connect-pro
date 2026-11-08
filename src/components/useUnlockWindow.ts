@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Job } from '../data/jobs'
-import { formatUnlockRemaining, unlockActive, unlockRemainingMs } from '../data/unlockWindow'
+import { formatUnlockRemaining, paidUnlockActive, unlockActive, unlockRemainingMs } from '../data/unlockWindow'
 
 /**
  * The countdown for a rewarded-video unlock.
@@ -25,4 +25,21 @@ export function useUnlockWindow(job: Pick<Job, 'companyUnlocked' | 'unlockExpire
     remainingMs,
     label: formatUnlockRemaining(remainingMs),
   }
+}
+
+/**
+ * The countdown for the paid ₹5 unlock (one job, one hour). Same idea as the
+ * video window: the sheet must stop showing a contact the server would no
+ * longer send.
+ */
+export function usePaidUnlockWindow(job: Pick<Job, 'jobUnlocked' | 'jobUnlockExpiresAt'>) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (job.jobUnlocked !== true || !job.jobUnlockExpiresAt) return
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [job.jobUnlocked, job.jobUnlockExpiresAt])
+
+  const remainingMs = unlockRemainingMs(job.jobUnlockExpiresAt, now)
+  return { active: paidUnlockActive(job, now), remainingMs, label: formatUnlockRemaining(remainingMs) }
 }

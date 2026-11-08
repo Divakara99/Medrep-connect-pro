@@ -35,6 +35,20 @@ export function unlockActive(
   return unlockRemainingMs(job.unlockExpiresAt, now) > 0
 }
 
+/**
+ * True while a paid ₹5 unlock for this job is still running. The server already
+ * withholds the fields once the hour is up; this only keeps an open sheet from
+ * showing stale values until the next read.
+ */
+export function paidUnlockActive(
+  job: Pick<Job, 'jobUnlocked' | 'jobUnlockExpiresAt'>,
+  now = Date.now(),
+): boolean {
+  if (job.jobUnlocked !== true) return false
+  if (!job.jobUnlockExpiresAt) return true
+  return unlockRemainingMs(job.jobUnlockExpiresAt, now) > 0
+}
+
 /** "9 min left", "40 s left" — never negative. */
 export function formatUnlockRemaining(remainingMs: number): string {
   if (remainingMs <= 0) return '0 s'

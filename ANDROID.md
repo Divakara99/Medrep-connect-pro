@@ -70,6 +70,13 @@ Run each file once, top to bottom (all are safe to re-run):
    `confirm_google_play_subscription_payment()` /
    `mark_google_play_purchase_finalised()` /
    `handle_google_play_voided_purchase()`.
+3. `supabase/job_unlocks.sql` — the **₹5 single-job unlock** (website only:
+   one vacancy's full contact block for 1 hour). Creates `job_unlocks`
+   (`amount_paise = 500` CHECK, `razorpay_order_id`/`razorpay_payment_id`
+   UNIQUE, users read own rows only) and replaces `list_visible_jobs()` so a
+   paid, unexpired row reveals the same five confidential fields a pass does —
+   for that one job, while the hour runs. Run it **after**
+   `company_unlocks.sql`.
 
 ### 2b. Edge Functions — deploy
 
@@ -78,7 +85,15 @@ supabase link --project-ref lmhmbrusjizncumrufsx   # once
 supabase functions deploy admob-reward-verification   --project-ref lmhmbrusjizncumrufsx  # JWT check OFF (set in supabase/config.toml)
 supabase functions deploy verify-google-play-purchase --project-ref lmhmbrusjizncumrufsx  # JWT check ON
 supabase functions deploy admin-manage-employees      --project-ref lmhmbrusjizncumrufsx  # redeploy: team-password minimum is now 6
+supabase functions deploy create-job-unlock-order      --project-ref lmhmbrusjizncumrufsx  # ₹5 job unlock: prices the order at 500 paise
+supabase functions deploy verify-job-unlock            --project-ref lmhmbrusjizncumrufsx  # verifies signature + capture, stamps 1 hour
 ```
+
+> The ₹5 unlock reuses the existing `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`
+> secrets — nothing new to set. Inside the Android app it is deliberately not
+> sold: Google Play's lowest in-app price in India is ₹10, so the app keeps the
+> free rewarded-video unlock and never opens Razorpay (the website does both).
+
 
 Set the secrets from the CLI if you prefer:
 

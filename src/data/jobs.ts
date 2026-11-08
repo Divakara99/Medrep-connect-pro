@@ -36,6 +36,13 @@ export type Job = {
    * display — list_visible_jobs() is what actually decides.
    */
   unlockExpiresAt?: string | null
+  /**
+   * Paid ₹5 single-job unlock: the whole contact block for THIS vacancy, for
+   * the hour the server stamped. Set by list_visible_jobs() only while the
+   * window runs; the app mirrors it, it never decides it.
+   */
+  jobUnlocked?: boolean
+  jobUnlockExpiresAt?: string | null
   manager?: string
   contact?: string
   managerAltPhone?: string // optional local 10-digit Indian mobile, shown with a +91 prefix
@@ -96,6 +103,8 @@ function parseJob(value: unknown): Job | null {
     company: typeof row.company === 'string' ? row.company : '',
     companyUnlocked: row.companyUnlocked === true,
     unlockExpiresAt: typeof row.unlockExpiresAt === 'string' ? row.unlockExpiresAt : undefined,
+    jobUnlocked: row.jobUnlocked === true,
+    jobUnlockExpiresAt: typeof row.jobUnlockExpiresAt === 'string' ? row.jobUnlockExpiresAt : undefined,
     manager: typeof row.manager === 'string' ? row.manager : undefined,
     contact: typeof row.contact === 'string' ? row.contact : undefined,
     managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,

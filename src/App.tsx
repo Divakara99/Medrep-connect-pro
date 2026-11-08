@@ -34,6 +34,7 @@ import { adaptiveBannerHeightPx, bannerAllowedOnTab, rewardedUnlockOffered, type
 import { isAndroidApp } from './data/platform'
 import { adsDiagnostics, initAds, preloadRewardedUnlock, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
+import { buyJobUnlock, paidJobUnlockAvailable } from './data/jobUnlock'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
 
@@ -83,6 +84,8 @@ export default function App() {
   // Job whose company name a rewarded video is unlocking (Android app only).
   const [unlockingJobId, setUnlockingJobId] = useState<string | null>(null)
   const [unlockStage, setUnlockStage] = useState<UnlockStage | null>(null)
+  // Job whose ₹5 unlock is being bought on the website (Razorpay).
+  const [buyingUnlockId, setBuyingUnlockId] = useState<string | null>(null)
   void notifTick
 
   const applyAuthSnapshot = useCallback((snapshot: AuthSnapshot, resetTab = false) => {
@@ -443,6 +446,31 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, unlocked, unlockingJobId])
 
+  /**
+   * ₹5 → one job's full contact for one hour (website only).
+   *
+   * The purchase is verified server-side; the app then re-reads the projection
+   * so the sheet shows what the database actually allows, not what the browser
+   * thinks it paid for.
+   */
+  const buyUnlock = useCallback(async (job: Job) => {
+    if (!user || buyingUnlockId) return
+    setBuyingUnlockId(job.id)
+    try {
+      await buyJobUnlock({ id: job.id, title: job.title }, { name: user.name, email: user.email })
+      const fresh = await loadVisibleJobs()
+      setJobs(fresh)
+      setSelectedJob((current) => (current ? fresh.find((candidate) => candidate.id === current.id) ?? current : current))
+      showToast('Unlocked ✓ Full contact for this job is open for 1 hour')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'The ₹5 unlock could not be completed.')
+    } finally {
+      setBuyingUnlockId(null)
+    }
+    // showToast only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, buyingUnlockId])
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 2200)
@@ -750,6 +778,11 @@ export default function App() {
         onApply={requestApplication}
         onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
         unlockStage={selectedJob && unlockingJobId === selectedJob.id ? unlockStage : null}
+        paidUnlock={{
+          available: paidJobUnlockAvailable() && !unlocked,
+          busy: Boolean(selectedJob && buyingUnlockId === selectedJob.id),
+          onBuy: buyUnlock,
+        }}
       />
       <Modal
         open={profileGateOpen}

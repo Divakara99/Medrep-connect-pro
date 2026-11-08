@@ -132,6 +132,39 @@ export type Database = {
         }>
         Relationships: []
       }
+      job_unlocks: {
+        Row: {
+          id: string
+          user_id: string
+          job_id: string
+          amount_paise: number
+          razorpay_order_id: string
+          razorpay_payment_id: string | null
+          payment_status: 'pending' | 'paid' | 'failed'
+          created_at: string
+          paid_at: string | null
+          expires_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          job_id: string
+          amount_paise?: number
+          razorpay_order_id: string
+          razorpay_payment_id?: string | null
+          payment_status?: 'pending' | 'paid' | 'failed'
+          created_at?: string
+          paid_at?: string | null
+          expires_at?: string | null
+        }
+        Update: Partial<{
+          razorpay_payment_id: string | null
+          payment_status: 'pending' | 'paid' | 'failed'
+          paid_at: string | null
+          expires_at: string | null
+        }>
+        Relationships: []
+      }
       user_accounts: {
         Row: { user_id: string; subscribed_until: string | null }
         Insert: { user_id: string; subscribed_until?: string | null }
