@@ -171,8 +171,8 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   return (
     <div className="min-h-[100dvh] bg-slate-50" key={version}>
       {/* Header */}
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
+      <header className="glass-bar sticky top-0 z-30 border-b border-white/60">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <BackButton
             onClick={stepBack}
             label={tab === 'dashboard' ? 'Leave the admin panel' : 'Back to the dashboard'}

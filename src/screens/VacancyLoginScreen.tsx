@@ -30,18 +30,22 @@ export function VacancyLoginScreen({ onAuthed }: { onAuthed: () => void }) {
   }
 
   return (
-    <main className="min-h-[100dvh] bg-gradient-to-b from-emerald-100 via-white to-white flex flex-col">
+    <main className="flex min-h-[100dvh] flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
-          <header className="flex flex-col items-center mb-6">
-            <Logo size={56} />
-            <h1 className="mt-3 text-2xl font-extrabold text-slate-900">Vacancy team sign in</h1>
-            <span className="inline-flex mt-2 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900 ring-1 ring-emerald-300">
+          <header className="mb-6 flex flex-col items-center">
+            <div className="hairline grid h-20 w-20 place-items-center rounded-[26px] bg-white shadow-[0_22px_44px_-24px_rgba(16,185,129,0.6)] ring-1 ring-white/70">
+              <Logo size={56} />
+            </div>
+            <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">Vacancy team sign in</h1>
+            <p className="mt-1 text-sm font-medium text-slate-600">Post and close vacancies. Nothing else.</p>
+            <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-emerald-900 ring-1 ring-emerald-200">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               MedRep Connect Pro · {APP_VERSION_LABEL}
             </span>
           </header>
 
-          <Card className="p-5">
+          <Card className="hairline p-5 backdrop-blur-sm">
             <form onSubmit={submit} className="space-y-3">
               <div>
                 <Label htmlFor="vacancy-email">Login ID (email)</Label>

@@ -43,6 +43,14 @@ assert.match(detail, /Unlock manager contact/, 'the detail sheet offers the cont
 assert.doesNotMatch(card, /Subscribe to unlock/, 'the job card does not push a subscription')
 assert.match(card, /Contact locked/, 'the job card states the lock without selling')
 
+// 2b. The passes page itself is a plain list, not a shop window ---------------
+const plans = await read('src/screens/PlansScreen.tsx')
+assert.doesNotMatch(plans, /Most popular/, 'passes carry no "most popular" badge')
+assert.doesNotMatch(plans, /hero-mesh/, 'the passes page opens with text, not a promo hero')
+assert.doesNotMatch(plans, /ring-2 ring-brand-600 ring-offset-2/, 'a pass is not highlighted just for existing')
+assert.match(plans, /Choose a pass/, 'passes are one plain list')
+assert.match(plans, /One payment · no auto-renew/, 'the list states the terms in one line')
+
 // 3. The account page names what a pass is for, quietly -----------------------
 assert.match(account, /Passes &amp; pricing/, 'passes are one tap away in Account')
 assert.match(account, /A pass is only needed for the manager/, 'the account page explains a pass before pricing')
@@ -63,4 +71,4 @@ assert.match(home, /className="hero-mesh/, 'the feed opens with the shared hero'
 assert.match(priority, /from-amber-300 via-amber-400 to-orange-500/, 'priority keeps its own warm hero')
 assert.match(priority, /rounded-\[28px\]/, 'both heroes use the same radius')
 
-console.log('job-seeker design: no plan promotion, one shared surface language, heroes on both feeds — passed')
+console.log('job-seeker design: passes are plain and last, no plan promotion, one shared surface language, heroes on both feeds — passed')

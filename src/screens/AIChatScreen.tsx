@@ -381,10 +381,10 @@ export function AIChatScreen({ user }: { user: User }) {
   const lastIndex = messages.length - 1
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-4 pt-4 flex flex-col h-[calc(100svh-64px)]">
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white grid place-items-center text-lg">🤖</div>
+    <div className="mx-auto flex h-[calc(100svh-64px)] max-w-3xl flex-col px-4 pb-4 pt-4">
+      <Card className="flex flex-1 flex-col overflow-hidden">
+        <div className="hairline flex items-center gap-3 border-b border-slate-100 bg-gradient-to-r from-white via-white to-violet-50/60 px-4 py-3">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-700 text-lg text-white shadow-[0_12px_24px_-16px_rgba(79,70,229,0.95)]">🤖</div>
           <div className="min-w-0">
             <div className="font-bold text-slate-900">MedRep AI · App help</div>
             <div className="text-xs text-slate-500 flex items-center gap-1">
@@ -393,19 +393,19 @@ export function AIChatScreen({ user }: { user: User }) {
           </div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/60">
+        <div ref={scrollRef} className="slim-scroll flex-1 space-y-3 overflow-y-auto bg-slate-50/50 p-4">
           {messages.map((m, i) => (
             <div key={i} className="space-y-2">
               <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[85%] rounded-3xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap shadow-[0_10px_24px_-22px_rgba(15,23,42,0.7)] ${
                     m.role === 'user'
-                      ? 'bg-brand-600 text-white rounded-br-md'
+                      ? 'bg-gradient-to-b from-brand-500 to-brand-700 text-white rounded-br-lg ring-1 ring-brand-700/20'
                       : m.kind === 'ticket'
-                        ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 rounded-bl-md'
+                        ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 rounded-bl-lg'
                         : m.kind === 'ask'
-                          ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200 rounded-bl-md'
-                          : 'bg-white text-slate-800 ring-1 ring-slate-200 rounded-bl-md'
+                          ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200 rounded-bl-lg'
+                          : 'bg-white text-slate-800 ring-1 ring-slate-200 rounded-bl-lg'
                   }`}
                 >
                   {m.text}
@@ -433,20 +433,20 @@ export function AIChatScreen({ user }: { user: User }) {
         </div>
 
         {/* Quick chips */}
-        <div className="px-3 pt-2 flex gap-2 overflow-x-auto no-scrollbar bg-white">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto bg-white px-3 pt-2">
           {CHIPS.map((c) => (
             <button
               key={c}
               type="button"
               onClick={() => handle(c)}
-              className="shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 px-3 py-1.5 touch-manipulation"
+              className="shrink-0 touch-manipulation rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 hover:ring-slate-300"
             >
               {c}
             </button>
           ))}
         </div>
 
-        <div className="border-t border-slate-100 p-3 flex gap-2 bg-white">
+        <div className="flex items-end gap-2 border-t border-slate-100 bg-white p-3">
           <Input
             className="min-w-0 flex-1"
             placeholder="Ask about the app: jobs, plans, apply, payments…"
@@ -456,7 +456,9 @@ export function AIChatScreen({ user }: { user: User }) {
               if (e.key === 'Enter') handle(input)
             }}
           />
-          <Button className="shrink-0" disabled={busy} onClick={() => handle(input)}>Send</Button>
+          <Button className="shrink-0" disabled={busy || !input.trim()} onClick={() => handle(input)} aria-label="Send message">
+            Send <span aria-hidden>↗</span>
+          </Button>
         </div>
       </Card>
     </div>

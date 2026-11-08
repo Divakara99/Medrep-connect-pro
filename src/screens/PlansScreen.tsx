@@ -316,29 +316,27 @@ export function PlansScreen({
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
-      <Card className="hairline relative overflow-hidden p-5">
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-brand-100/60 blur-2xl" />
-        <div className="relative">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Passes</div>
-          <h1 className="mt-1 text-xl font-extrabold leading-tight tracking-tight text-slate-900">
-            Manager contact details
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Browsing vacancies is free for everyone. A pass opens the manager&apos;s name, email and phone number on every
-            job until it expires — {inApp ? 'paid with Google Play' : 'paid in secure Razorpay Checkout'}, activated only after the server verifies it.
-          </p>
+      {/* Deliberately plain: this page exists so a candidate can buy a pass,
+          not so the product can sell one. No gradient, no badge, no hero. */}
+      <header className="space-y-1.5">
+        <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Passes</h1>
+        <p className="text-sm leading-relaxed text-slate-600">
+          Browsing vacancies is free. A pass opens the manager&apos;s name, email and phone number on every job until it
+          expires — {inApp ? 'paid with Google Play' : 'paid in secure Razorpay Checkout'}, activated only after the server verifies it.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {unlocked && activeUntil && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
+            </span>
+          )}
+          {!unlocked && expiredPlan?.expiresAt !== undefined && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+              Pass expired on {when(expiredPlan.expiresAt)} — contacts are locked until you renew
+            </span>
+          )}
         </div>
-        {unlocked && activeUntil && (
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-950 bg-emerald-100 px-2.5 py-1 rounded-full ring-1 ring-emerald-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
-          </div>
-        )}
-        {!unlocked && expiredPlan?.expiresAt !== undefined && (
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-950 ring-1 ring-amber-300">
-            Pass expired on {when(expiredPlan.expiresAt)} — company details are locked until you renew
-          </div>
-        )}
-      </Card>
+      </header>
 
       {catalogError && (
         <div role="alert" className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm font-semibold text-amber-900">
@@ -346,60 +344,66 @@ export function PlansScreen({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {plans.map((plan) => {
-          const isSelected = selected.id === plan.id
-          // Marked active/purchased: the plan the server ledger says is
-          // covering the subscription right now, or the one bought in this
-          // session a moment ago.
-          const isActive = activePlan?.planId === plan.id
-          const activeExpiry = isActive ? activePlan.expiresAt : undefined
-          // Ran out: no green badge, an amber Expired badge and a renewal.
-          const isExpired = !isActive && expiredPlan?.planId === plan.id
-          const boughtAt = purchasedPlans.get(plan.id)
-          return (
-            <Card
-              key={plan.id}
-              onClick={() => selectPlan(plan.id)}
-              className={`p-4 relative cursor-pointer transition ${isActive ? 'ring-2 ring-emerald-500 ring-offset-2 bg-gradient-to-br from-emerald-50 to-white' : isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : 'hover:ring-1 hover:ring-brand-300'} ${plan.popular && !isSelected && !isActive ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}
-            >
-              {isActive && <div className="absolute -top-2 right-3"><Badge color="green">✓ Active</Badge></div>}
-              {isExpired && <div className="absolute -top-2 right-3"><Badge color="amber">Expired</Badge></div>}
-              {!isActive && isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
-              {!isActive && !isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
-              {!isActive && !isExpired && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-bold text-slate-900">{planTitle(plan.title)}</div>
-                <div className="text-2xl font-extrabold text-brand-800">{inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}</div>
-              </div>
-              <div className="text-sm font-semibold text-slate-700 mt-0.5">
-                {periodLabel(plan.days)}
-              </div>
-              <div className="text-sm text-slate-800 mt-2">{plan.tagline}</div>
-              {isActive && activeExpiry !== undefined && (
-                <div className="mt-2 text-sm font-extrabold text-emerald-700">Active until {when(activeExpiry)}</div>
-              )}
-              {isExpired && expiredPlan?.expiresAt !== undefined && (
-                <div className="mt-2 text-sm font-extrabold text-amber-800">
-                  Expired on {when(expiredPlan.expiresAt)} — renew to unlock company details again
+      <Card className="overflow-hidden">
+        <div className="flex items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div className="text-sm font-bold text-slate-900">Choose a pass</div>
+          <div className="text-xs font-medium text-slate-500">One payment · no auto-renew</div>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {plans.map((plan) => {
+            const isSelected = selected.id === plan.id
+            // Marked active/purchased: the plan the server ledger says is
+            // covering the subscription right now, or the one bought in this
+            // session a moment ago.
+            const isActive = activePlan?.planId === plan.id
+            const activeExpiry = isActive ? activePlan.expiresAt : undefined
+            // Ran out: no green badge, an amber Expired badge and a renewal.
+            const isExpired = !isActive && expiredPlan?.planId === plan.id
+            const boughtAt = purchasedPlans.get(plan.id)
+            return (
+              <div key={plan.id} className={`flex flex-wrap items-center gap-3 px-4 py-3 ${isSelected ? 'bg-slate-50/80' : ''}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-slate-900">{planTitle(plan.title)}</span>
+                    {isActive && <Badge color="green">Active</Badge>}
+                    {isExpired && <Badge color="amber">Expired</Badge>}
+                    {!isActive && isSelected && <Badge color="brand">Selected</Badge>}
+                    {!isActive && !isExpired && boughtAt !== undefined && <Badge color="slate">Purchased</Badge>}
+                  </div>
+                  <div className="mt-0.5 text-xs font-medium text-slate-600">
+                    {periodLabel(plan.days)}{plan.tagline ? ` · ${plan.tagline}` : ''}
+                  </div>
+                  {isActive && activeExpiry !== undefined && (
+                    <div className="mt-1 text-xs font-bold text-emerald-700">Active until {when(activeExpiry)}</div>
+                  )}
+                  {isExpired && expiredPlan?.expiresAt !== undefined && (
+                    <div className="mt-1 text-xs font-bold text-amber-800">
+                      Expired on {when(expiredPlan.expiresAt)} — renew to open contacts again
+                    </div>
+                  )}
+                  {!isActive && !isExpired && boughtAt !== undefined && (
+                    <div className="mt-1 text-xs font-medium text-slate-500">
+                      {boughtAt > Date.now() ? `Purchased earlier · access till ${when(boughtAt)}` : `Purchased earlier · expired ${when(boughtAt)}`}
+                    </div>
+                  )}
                 </div>
-              )}
-              {!isActive && !isExpired && boughtAt !== undefined && (
-                <div className="mt-2 text-xs font-semibold text-slate-600">
-                  {boughtAt > Date.now() ? `Purchased earlier · access till ${when(boughtAt)}` : `Purchased earlier · expired ${when(boughtAt)}`}
+                <div className="flex shrink-0 items-center gap-3">
+                  <div className="text-lg font-extrabold tabular-nums text-slate-900">
+                    {inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}
+                  </div>
+                  <Button
+                    variant={isSelected ? 'primary' : 'secondary'}
+                    className="px-3 py-1.5 text-sm"
+                    onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
+                  >
+                    {isSelected ? (unlocked ? 'Renew' : isExpired ? 'Renew' : 'Continue') : 'Select'}
+                  </Button>
                 </div>
-              )}
-              <Button
-                variant={isSelected ? 'primary' : 'secondary'}
-                className="w-full mt-3"
-                onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
-              >
-                {isSelected ? (unlocked ? 'Extend / Renew' : isExpired ? 'Renew this plan' : 'Choose plan') : 'Select plan'}
-              </Button>
-            </Card>
-          )
-        })}
-      </div>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
 
       <Card className="p-4">
         <div className="text-sm font-bold text-slate-900 mb-1">Plan benefits</div>
