@@ -1,6 +1,6 @@
 import { CREATOR } from './creator'
 import { mirror, supabase } from './supabase'
-import { read, write } from './storage'
+import { remove } from './storage'
 import { announcementBody, nextWatermark, notificationsToAlert } from './pushRules'
 import { publishToEveryone } from './push'
 import {
@@ -26,6 +26,35 @@ export type Notification = {
 
 const NOTIF_KEY = 'mrc_notifications_v1'
 const PERSONAL_NOTIF_KEY = 'mrc_private_notifications_v1'
+
+/**
+ * Notices and read state are held ONLINE, not in the browser.
+ *
+ * `public.notifications` (via the list_visible_notifications RPC) is the only
+ * feed, and `public.notification_state` holds the account's read watermark,
+ * alert watermark and chime preference. What this module keeps locally is a
+ * session-only copy so a render does not hit the network; the old browser keys
+ * are deleted at start-up.
+ */
+const session = new Map<string, unknown>()
+
+function read<T>(key: string, fallback: T): T {
+  return session.has(key) ? (session.get(key) as T) : fallback
+}
+
+function write<T>(key: string, value: T): void {
+  session.set(key, value)
+}
+
+/** Drop every notice/state copy for this session (sign-out, account switch). */
+export function clearNotificationCache(): void {
+  session.clear()
+}
+
+// The previous browser copies are no longer read; remove them.
+remove(NOTIF_KEY)
+remove('mrc_notif_read_v1')
+remove('mrc_notif_sound_v1')
 
 function personalNotificationKey(email: string): string {
   return `${PERSONAL_NOTIF_KEY}:${email.trim().toLowerCase()}`
@@ -59,12 +88,12 @@ type EventKind =
   | { kind: 'welcome'; userName: string }
 
 // ---------- Notification sound (WebAudio chime, no asset needed) ----------
-const SOUND_KEY = 'mrc_notif_sound_v1'
-
-/** Sound is on unless the user switched it off on this device. */
+/** Sound is on unless the user switched it off on their account. */
 export function soundEnabled(): boolean {
   return read<boolean>(SOUND_KEY, true) !== false
 }
+
+const SOUND_KEY = 'mrc_notif_sound_v1'
 
 let audioCtx: AudioContext | null = null
 export function playNotifSound() {
@@ -217,26 +246,9 @@ export function broadcast(ev: EventKind, opts?: BroadcastOptions): Notification 
 
 export function getNotifications(): Notification[] {
   const stored = read<Notification[]>(NOTIF_KEY, [])
-  const existing = stored.filter((notification) =>
+  return stored.filter((notification) =>
     Boolean(notification && typeof notification === 'object' && isBroadcastNotification(notification)),
   )
-  if (existing.length !== stored.length) write(NOTIF_KEY, existing)
-  if (existing.length === 0) {
-    // Seed a welcome-to-the-platform broadcast on first launch
-    const seed: Notification = {
-      id: nid(),
-      title: 'Welcome to MedRep Connect Pro',
-      body:
-        `Hi 👋\n\nWelcome to India's first pharma-job network — MR vacancies are pinned first, followed by multi-industry openings. Subscribe to unlock company names, manager contacts, and one-tap apply.\n\nIf you have questions, the AI Help tab is always on.\n\n${SIGN_OFF}`,
-      type: 'system',
-      createdAt: Date.now(),
-      from: `Mr. ${CREATOR.name} · MedRep Connect Pro`,
-      target: 'all',
-    }
-    write(NOTIF_KEY, [seed])
-    return [seed]
-  }
-  return existing
 }
 
 function parseRemoteNotification(value: unknown, email: string): Notification | null {
@@ -312,8 +324,59 @@ export async function refreshNotificationsFromServer(email: string): Promise<voi
 }
 
 const READ_KEY = 'mrc_notif_read_v1'
+const STATE_TABLE = 'notification_state'
+
 function getReadMap(): Record<string, number> {
   return read<Record<string, number>>(READ_KEY, {})
+}
+
+/** The read watermark for this account, for the notifications panel. */
+export function readSinceMs(email: string): number {
+  return getReadMap()[email.trim().toLowerCase()] ?? 0
+}
+
+/**
+ * Load the signed-in account's notification state from the server: what has
+ * been read, what has already chimed, and the sound preference. Called once
+ * when a session appears, so a new phone inherits the same read state.
+ */
+export async function refreshNotificationState(): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const email = (user.email ?? '').trim().toLowerCase()
+    const { data, error } = await supabase
+      .from(STATE_TABLE)
+      .select('read_since, seen_watermark, sound_enabled')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (error) return
+    const row = (data ?? null) as { read_since?: number; seen_watermark?: number; sound_enabled?: boolean } | null
+    if (email) {
+      const map = getReadMap()
+      map[email] = Number(row?.read_since ?? 0)
+      write(READ_KEY, map)
+      write(`${SEEN_KEY}:${email}`, Number(row?.seen_watermark ?? 0))
+    }
+    write(SOUND_KEY, row?.sound_enabled ?? true)
+  } catch {
+    // Offline: the session keeps whatever it already knows.
+  }
+}
+
+/** Persist one piece of notification state for the signed-in account. */
+function saveAccountState(patch: { read_since?: number; seen_watermark?: number; sound_enabled?: boolean }): void {
+  void (async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase
+        .from(STATE_TABLE)
+        .upsert({ user_id: user.id, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    } catch {
+      // A failed preference write must never block reading notices.
+    }
+  })()
 }
 
 export function getNotificationsForUser(email: string): Notification[] {
@@ -334,8 +397,10 @@ export function unreadCount(email: string): number {
 
 export function markAllRead(email: string) {
   const read = getReadMap()
-  read[email.trim().toLowerCase()] = Date.now()
+  const since = Date.now()
+  read[email.trim().toLowerCase()] = since
   write(READ_KEY, read)
+  saveAccountState({ read_since: since })
 }
 
 export function markOneRead(email: string, id: string) {
@@ -346,6 +411,7 @@ export function markOneRead(email: string, id: string) {
   const prev = read[key] ?? 0
   read[key] = Math.max(prev, notification.createdAt)
   write(READ_KEY, read)
+  saveAccountState({ read_since: read[key] })
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +495,10 @@ export async function refreshNotificationsAndAlert(email: string): Promise<Notif
   const merged = getNotificationsForUser(normalizedEmail)
   const fresh = notificationsToAlert(merged, known, watermark, MAX_ALERTS_PER_CHECK)
   const next = nextWatermark(watermark, merged, fresh)
-  if (next !== watermark) write(seenKey, next)
+  if (next !== watermark) {
+    write(seenKey, next)
+    saveAccountState({ seen_watermark: next })
+  }
   return fresh
 }
 

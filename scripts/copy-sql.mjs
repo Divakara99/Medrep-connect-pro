@@ -33,6 +33,8 @@ const MIGRATIONS = [
   { file: 'supabase/google_play_billing.sql', what: 'Google Play purchases: verified activation, idempotent tokens, refund claw-back' },
   { file: 'supabase/company_unlocks.sql', what: 'Rewarded-video company unlock: 10-minute window, SSV-written, own-row reads' },
   { file: 'supabase/job_unlocks.sql', what: 'Paid ₹5 single-job unlock: 1-hour window, verified payment only, full contact for that job' },
+  { file: 'supabase/job_profiles.sql', what: 'Job-seeker profiles stored online, own-row only, no browser copy' },
+  { file: 'supabase/notification_state.sql', what: 'Per-account read/alert state and chime preference, own-row only' },
 ]
 
 const root = fileURLToPath(new URL('..', import.meta.url))

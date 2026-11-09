@@ -1,6 +1,6 @@
-import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
-import { getProfile, newEducation, newExperience, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
+import { getProfile, newEducation, newExperience, refreshProfile, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
@@ -27,7 +27,22 @@ export const ProfileEditor = forwardRef<
   })
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Never overwrite fields the user has already started typing into.
+  const dirty = useRef(false)
+
+  // The profile is stored online, so pull this account's copy when the editor
+  // opens rather than trusting whatever the previous screen had in memory.
+  useEffect(() => {
+    let alive = true
+    refreshProfile(email).then((remote) => {
+      if (!alive || dirty.current) return
+      setP((prev) => ({ ...remote, phone: prev.phone || remote.phone || phone }))
+    })
+    return () => { alive = false }
+  }, [email, phone])
+
   function update(patch: Partial<Profile>) {
+    dirty.current = true
     setP((prev) => ({ ...prev, ...patch }))
   }
 
@@ -60,12 +75,18 @@ export const ProfileEditor = forwardRef<
       return null
     }
 
-    const saved = saveProfile({ ...p, email, phone: phoneResult.phone })
-    setP(saved)
-    setSavedMsg('Profile saved.')
-    setTimeout(() => setSavedMsg(null), 2000)
-    onSaved?.(saved)
-    return saved
+    try {
+      const saved = await saveProfile({ ...p, email, phone: phoneResult.phone })
+      dirty.current = false
+      setP(saved)
+      setSavedMsg('Profile saved.')
+      setTimeout(() => setSavedMsg(null), 2000)
+      onSaved?.(saved)
+      return saved
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Your profile could not be saved online.')
+      return null
+    }
   }, [p, email, onSaved])
 
   useImperativeHandle(ref, () => ({ save }), [save])

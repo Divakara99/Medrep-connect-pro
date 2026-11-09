@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Badge, Button, Card, EmptyState, Modal } from './ui'
-import { getNotificationsForUser, markAllRead, markOneRead, refreshNotificationsFromServer, unreadCount, type Notification } from '../data/notifications'
+import { getNotificationsForUser, markAllRead, markOneRead, readSinceMs, refreshNotificationsFromServer, unreadCount, type Notification } from '../data/notifications'
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -23,15 +23,6 @@ function typeIcon(t: Notification['type']) {
   }
 }
 
-function getReadSince(email: string): number {
-  try {
-    const all = JSON.parse(localStorage.getItem('mrc_notif_read_v1') || '{}') as Record<string, number>
-    return all[email.toLowerCase()] ?? 0
-  } catch {
-    return 0
-  }
-}
-
 export function NotificationsPanel({
   open,
   onClose,
@@ -50,7 +41,7 @@ export function NotificationsPanel({
     await refreshNotificationsFromServer(email)
     setList(getNotificationsForUser(email))
     setCount(unreadCount(email))
-    setReadSince(getReadSince(email))
+    setReadSince(readSinceMs(email))
   }
 
   useEffect(() => {

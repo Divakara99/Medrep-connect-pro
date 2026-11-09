@@ -1,4 +1,4 @@
-import { read, remove, write } from './storage'
+import { read, remove } from './storage'
 import { supabase } from './supabase'
 import { broadcast, publish } from './notifications'
 import { deleteReasonProblem } from './vacancyRules'
@@ -72,14 +72,9 @@ export function clearJobs(): void { ++generation; jobs = [] }
 // an admin device it can instead be explicitly reviewed and imported once.
 export function purgeLegacyJobs(): void {
   remove(LEGACY_JOBS_KEY)
-  // Old local job alerts could include company names. Keep other notices but
-  // purge those historic alerts when a normal user signs in.
-  const notifications = read<unknown>('mrc_notifications_v1', [])
-  if (Array.isArray(notifications)) {
-    write('mrc_notifications_v1', notifications.filter((notice) =>
-      notice && typeof notice === 'object' && notice.type !== 'job',
-    ))
-  }
+  // Notifications no longer live in the browser at all; delete the old feed,
+  // which could contain company names, when a normal user signs in.
+  remove('mrc_notifications_v1')
 }
 export function getLegacyJobs(): Job[] {
   const saved = read<unknown>(LEGACY_JOBS_KEY, [])

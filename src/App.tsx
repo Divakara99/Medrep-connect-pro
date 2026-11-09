@@ -21,9 +21,9 @@ import { PullToRefreshIndicator } from './components/PullToRefresh'
 import { usePullToRefresh } from './components/usePullToRefresh'
 import { ApplyConfirmSheet, JobDetail } from './components/JobDetail'
 import { clearMyApplicationCache, openApplication } from './data/apply'
-import { getProfile, profileCompletionIssues, type Profile } from './data/profile'
+import { clearProfileCache, profileCompletionIssues, refreshProfile, type Profile } from './data/profile'
 import { clearResumeCache, getLatestResume, type ResumeRecord } from './data/resume'
-import { playNotifSound, refreshNotificationsAndAlert, soundEnabled, unreadCount } from './data/notifications'
+import { clearNotificationCache, playNotifSound, refreshNotificationState, refreshNotificationsAndAlert, soundEnabled, unreadCount } from './data/notifications'
 import { showSystemNotification, syncPushSubscription } from './data/push'
 import { clearSupportCache } from './data/supportRequests'
 import { clearPaymentCache } from './data/payments'
@@ -127,6 +127,11 @@ export default function App() {
       } else {
         setUser(snapshot.user)
         setView('user')
+        // The profile and the notification state are stored online; fetch this
+        // account's copies into memory so screens that read them synchronously
+        // show what was saved, on any device.
+        void refreshProfile(snapshot.user.email)
+        void refreshNotificationState()
         if (resetTab) setNav({ tab: 'home', stack: [] })
       }
     } else {
@@ -378,6 +383,8 @@ export default function App() {
   async function onLogout() {
     clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache()
     clearJobs()
+    clearProfileCache()
+    clearNotificationCache()
     await doLogout()
     setRecoveryMode(false)
     setUser(null)
@@ -487,9 +494,10 @@ export default function App() {
     setApplyJob(job)
   }
 
-  function requestApplication(job: Job) {
+  async function requestApplication(job: Job) {
     if (!user) return
-    const missing = profileCompletionIssues(getProfile(user.email), user.phone)
+    const profile = await refreshProfile(user.email)
+    const missing = profileCompletionIssues(profile, user.phone)
     if (missing.length > 0) {
       setPendingApplyJob(job)
       setProfileMissing(missing)
