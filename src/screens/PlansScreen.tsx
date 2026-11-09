@@ -3,7 +3,7 @@ import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { readPlanState } from '../data/planState'
-import { accessLabel, daysLabel, periodLabel, planTitle } from '../data/planDisplay'
+import { accessLabel, daysLabel, paymentDayLabel, paymentDayStart, paymentStatusLabel, periodLabel, planTitle } from '../data/planDisplay'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
   createRazorpayOrder,
@@ -17,6 +17,17 @@ import { isAndroidApp } from '../data/platform'
 import { TermsPage } from './TermsPage'
 import { PlanInfoPage } from './PlanInfoPage'
 import { buyPlanWithGooglePlay, loadPlayPrices, restorePlayPurchases } from '../data/playBilling'
+
+
+/** One labelled line inside a receipt. */
+function ReceiptField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-2.5">
+      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className={`break-words font-semibold text-slate-900 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>{value}</dd>
+    </div>
+  )
+}
 
 export function PlansScreen({
   user,
@@ -44,6 +55,8 @@ export function PlansScreen({
   const [showTerms, setShowTerms] = useState(false)
   // The three reading cards live on their own page; the passes page is for choosing.
   const [showInfo, setShowInfo] = useState(false)
+  // The one payment whose receipt is open over the page.
+  const [historyPayment, setHistoryPayment] = useState<PaymentRecord | null>(null)
   const [showCheckout, setShowCheckout] = useState(false)
   // Tapped × / backdrop / phone-back while a payment was still running: ask
   // instead of doing nothing, so the sheet can never become unclosable.
@@ -316,6 +329,30 @@ export function PlansScreen({
 
   const paymentRows = payments.length > 0 ? payments : getPaymentsByUser(user.id)
 
+  /**
+   * History, read the way a bank statement reads: newest day first, one
+   * heading per day with that day's total, then one row per payment. The old
+   * table had to be scrolled sideways on a phone and gave no sense of when
+   * things happened.
+   */
+  const historyGroups = useMemo(() => {
+    const byDay = new Map<number, PaymentRecord[]>()
+    for (const payment of paymentRows) {
+      const key = paymentDayStart(payment.createdAt)
+      const list = byDay.get(key)
+      if (list) list.push(payment)
+      else byDay.set(key, [payment])
+    }
+    return [...byDay.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([dayStart, items]) => ({
+        dayStart,
+        label: paymentDayLabel(dayStart),
+        items: [...items].sort((a, b) => b.createdAt - a.createdAt),
+        total: items.reduce((sum, payment) => sum + (payment.status === 'success' ? payment.amount : 0), 0),
+      }))
+  }, [paymentRows])
+
   // Terms and the plan details are pages of text, so they open as pages — not sheets.
   if (showTerms) return <TermsPage onClose={() => setShowTerms(false)} />
   if (showInfo) return <PlanInfoPage inApp={inApp} onClose={() => setShowInfo(false)} />
@@ -446,43 +483,67 @@ export function PlansScreen({
         </div>
       </Card>
 
+      {/* Payment history, date by date. Each day gets a heading and a total;
+          each payment is a row with its own receipt. */}
       <Card className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-bold text-slate-900">Payment history</div>
-          <Badge color="slate">{paymentRows.length} records</Badge>
+          <Badge color="slate">
+            {paymentRows.length} {paymentRows.length === 1 ? 'record' : 'records'}
+          </Badge>
         </div>
         {paymentRows.length === 0 ? (
-          <div className="text-sm text-slate-700">No payments yet.</div>
+          <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+            No payments yet. Your first pass will appear here with its date, amount and receipt.
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[480px]">
-              <thead className="text-slate-700 text-left">
-                <tr>
-                  <th className="py-1 pr-2">Date</th>
-                  <th className="py-1 pr-2">Plan</th>
-                  <th className="py-1 pr-2">Reference</th>
-                  <th className="py-1 pr-2">UTR</th>
-                  <th className="py-1 pr-2">Amount</th>
-                  <th className="py-1 pr-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentRows.map((payment) => (
-                  <tr key={payment.id} className="border-t border-slate-200">
-                    <td className="py-2 pr-2 text-slate-700">{new Date(payment.createdAt).toLocaleDateString()}</td>
-                    <td className="py-2 pr-2 font-semibold text-slate-900">{payment.planTitle ?? payment.planId}</td>
-                    <td className="py-2 pr-2 font-mono text-slate-800">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
-                    <td className="py-2 pr-2 font-mono text-slate-800">{payment.utr || '—'}</td>
-                    <td className="py-2 pr-2 font-bold text-slate-900">₹{payment.amount}</td>
-                    <td className="py-2 pr-2">
-                      <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
-                        {payment.manualReview ? 'Awaiting UPI verification' : payment.status === 'success' ? 'Paid' : payment.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            {historyGroups.map((group) => (
+              <div key={group.dayStart}>
+                <div className="flex items-baseline justify-between gap-2 px-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{group.label}</div>
+                  <div className="text-[11px] font-semibold tabular-nums text-slate-400">
+                    {group.items.length} {group.items.length === 1 ? 'payment' : 'payments'} · ₹{group.total} paid
+                  </div>
+                </div>
+                <div className="mt-1.5 space-y-2">
+                  {group.items.map((payment) => (
+                    <div key={payment.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-slate-900">
+                            {planTitle(payment.planTitle ?? payment.planId)}
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-slate-500">
+                            {new Date(payment.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {payment.planDays ? ` · ${daysLabel(payment.planDays)}` : ''}
+                            {payment.paymentMethod ? ` · ${payment.paymentMethod}` : ''}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-base font-extrabold tabular-nums text-slate-900">₹{payment.amount}</div>
+                          <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
+                            {paymentStatusLabel(payment.status, payment.manualReview)}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          className="px-2.5 py-1.5 text-xs"
+                          onClick={() => setHistoryPayment(payment)}
+                        >
+                          🧾 Receipt
+                        </Button>
+                        {payment.refundStatus && payment.refundStatus !== 'none' && (
+                          <span className="text-xs font-semibold text-slate-600">Refund {payment.refundStatus}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>
@@ -601,6 +662,51 @@ export function PlansScreen({
         )}
       </Modal>
 
+
+      {/* A receipt is a decision-free read of one payment: a sheet is fine, and
+          it keeps the reference copyable without leaving the page. */}
+      <Modal
+        open={!!historyPayment}
+        onClose={() => setHistoryPayment(null)}
+        title="Payment receipt"
+      >
+        {historyPayment && (
+          <div className="space-y-3 text-sm">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Plan</div>
+              <div className="text-base font-extrabold text-slate-900">
+                {planTitle(historyPayment.planTitle ?? historyPayment.planId)}
+              </div>
+              <div className="text-xs text-slate-600">
+                {new Date(historyPayment.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                {historyPayment.planDays ? ` · ${daysLabel(historyPayment.planDays)}` : ''}
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-2">
+              <ReceiptField label="Amount" value={`₹${historyPayment.amount}`} />
+              <ReceiptField label="Status" value={paymentStatusLabel(historyPayment.status, historyPayment.manualReview)} />
+              <ReceiptField label="Method" value={historyPayment.paymentMethod ?? '—'} />
+              <ReceiptField label="Reference" value={historyPayment.gatewayPaymentId ?? historyPayment.txRef ?? '—'} mono />
+              <ReceiptField label="UTR" value={historyPayment.utr || '—'} mono />
+              <ReceiptField
+                label="Access until"
+                value={historyPayment.expiresAt
+                  ? new Date(historyPayment.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+                  : '—'}
+              />
+            </dl>
+            {historyPayment.refundStatus && historyPayment.refundStatus !== 'none' && (
+              <p className="text-xs font-semibold text-slate-600">
+                Refund {historyPayment.refundStatus}{historyPayment.refundRef ? ` · ${historyPayment.refundRef}` : ''}
+              </p>
+            )}
+            <p className="text-xs text-slate-500">
+              Keep the reference when writing to support. We never ask for a bank PIN, UPI PIN or OTP.
+            </p>
+            <Button className="w-full" onClick={() => setHistoryPayment(null)}>Close</Button>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
