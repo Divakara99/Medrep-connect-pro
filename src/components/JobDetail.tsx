@@ -8,6 +8,7 @@ import { CREATOR } from '../data/creator'
 import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
 import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
 import { jobUnlockLabel } from '../data/jobUnlock'
+import { ShareJobButton } from './ShareJobButton'
 
 function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
   const email = (job.managerEmail || '').trim()
@@ -261,6 +262,10 @@ export function JobDetail({
               {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}
             </Button>
           )}
+          <ShareJobButton job={job} variant="secondary" />
+          <p className="text-center text-xs font-medium text-slate-500">
+            Sharing sends the role, city, HQ and the Play Store link — never the company name or contact details.
+          </p>
           <Button variant="ghost" className="w-full" onClick={onClose}>
             Close
           </Button>

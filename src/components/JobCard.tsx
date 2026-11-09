@@ -3,6 +3,7 @@ import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { descriptionPoints, type Job } from '../data/jobs'
 import { normalizeIndianMobile } from '../data/vacancyRules'
 import { useUnlockWindow } from './useUnlockWindow'
+import { ShareJobButton } from './ShareJobButton'
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -154,19 +155,23 @@ export function JobCard({
         )}
       </button>
 
-      {showUnlockButton && (
-        <div className="px-4 pb-4">
+      {/* The card action row. Sharing is open to everyone, free or subscribed —
+          the message carries the public details and the Play Store link, never
+          the contact block. */}
+      <div className={`flex items-center gap-2 px-4 pb-4 ${showUnlockButton ? '' : 'justify-end'}`}>
+        {showUnlockButton && (
           <button
             type="button"
             disabled={unlockStage !== null}
             onClick={() => onWatchUnlock?.(job)}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 py-3 text-sm font-bold text-white transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60"
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 py-3 text-sm font-bold text-white transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60"
           >
             <span aria-hidden>🎬</span>
             {unlockButtonLabel(unlockStage)}
           </button>
-        </div>
-      )}
+        )}
+        <ShareJobButton job={job} variant="ghost" compact />
+      </div>
     </Card>
   )
 }
