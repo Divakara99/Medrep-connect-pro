@@ -1,16 +1,15 @@
 import { useMemo, useState } from 'react'
 import type { UnlockStage } from '../data/adConfig'
-import { Badge, Button, Card, EmptyState, Input, Select } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Select } from '../components/ui'
 import { CreatorCredit } from '../components/CreatorCredit'
 import { AboutPage } from './AboutPage'
 import { JobCard } from '../components/JobCard'
-import { CATEGORIES, filterJobs, jobStats, sortedJobs, type Job, type JobCategory } from '../data/jobs'
+import { CATEGORIES, cityOptions, filterJobs, hqOptions, jobStats, sortedJobs, type Job, type JobCategory } from '../data/jobs'
 import type { User } from '../data/auth'
 import { isSubscribed } from '../data/auth'
 import { CREATOR } from '../data/creator'
 
 const EXP_OPTIONS = ['All', 'Fresher', '0–2 years', '2–5 years', '5+ years']
-const SALARY_OPTIONS = ['All', 'Under ₹2 LPA', '₹2–4 LPA', '₹4–7 LPA', '₹7–12 LPA', '₹12 LPA+']
 
 export function HomeScreen({
   user,
@@ -28,18 +27,25 @@ export function HomeScreen({
   unlockStage?: UnlockStage | null
 }) {
   const [query, setQuery] = useState('')
-  const [location, setLocation] = useState('')
+  const [city, setCity] = useState('All')
+  const [hq, setHq] = useState('All')
   const [category, setCategory] = useState<JobCategory>('All')
   const [experience, setExperience] = useState('All')
-  const [salary, setSalary] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const unlocked = isSubscribed(user)
 
   const stats = useMemo(() => jobStats(jobs), [jobs])
+  const cities = useMemo(() => cityOptions(jobs), [jobs])
+  const headquarters = useMemo(() => hqOptions(jobs), [jobs])
 
   const list = useMemo(() => {
-    let filtered = filterJobs(jobs, { query, category, location })
+    let filtered = filterJobs(jobs, {
+      query,
+      category,
+      city: city === 'All' ? '' : city,
+      hq: hq === 'All' ? '' : hq,
+    })
     if (experience !== 'All') {
       filtered = filtered.filter((j) => {
         const e = (j.experience || '').toLowerCase()
@@ -50,34 +56,18 @@ export function HomeScreen({
         return true
       })
     }
-    if (salary !== 'All') {
-      filtered = filtered.filter((j) => {
-        const s = j.salary || ''
-        // crude LPA-based parse
-        const nums = s.replace(/[^\d.\-–]/g, '').split(/[-–]/).map(Number).filter((n) => !isNaN(n))
-        if (nums.length === 0) return false
-        const min = Math.min(...nums)
-        const max = Math.max(...nums)
-        if (salary === 'Under ₹2 LPA') return max < 2
-        if (salary === '₹2–4 LPA') return max >= 2 && min < 4
-        if (salary === '₹4–7 LPA') return max >= 4 && min < 7
-        if (salary === '₹7–12 LPA') return max >= 7 && min < 12
-        if (salary === '₹12 LPA+') return max >= 12
-        return true
-      })
-    }
     return sortedJobs(filtered)
-  }, [jobs, query, category, location, experience, salary])
+  }, [jobs, query, category, experience, city, hq])
 
   function clearFilters() {
-    setQuery(''); setLocation(''); setCategory('All'); setExperience('All'); setSalary('All')
+    setQuery(''); setCity('All'); setHq('All'); setCategory('All'); setExperience('All')
   }
 
   const activeFilterCount =
     (category !== 'All' ? 1 : 0) +
     (experience !== 'All' ? 1 : 0) +
-    (salary !== 'All' ? 1 : 0) +
-    (location.trim() ? 1 : 0)
+    (city !== 'All' ? 1 : 0) +
+    (hq !== 'All' ? 1 : 0)
 
   const firstName = user.name.trim().split(' ')[0] || 'there'
 
@@ -145,7 +135,18 @@ export function HomeScreen({
             aria-expanded={showFilters}
             onClick={() => setShowFilters((v) => !v)}
           >
-            <span aria-hidden>⚙️</span>
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 5h16l-6.4 7.5V19l-3.2 1.6v-8.1L4 5Z" />
+            </svg>
             <span className="hidden sm:inline">Filters</span>
             {activeFilterCount > 0 && (
               <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-extrabold text-brand-700">
@@ -158,17 +159,26 @@ export function HomeScreen({
         {showFilters && (
           <div className="mt-2 space-y-3 border-t border-slate-100 px-1 pb-1 pt-3 animate-fade-in">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Input placeholder="Location (city)" aria-label="Filter by city" value={location} onChange={(e) => setLocation(e.target.value)} />
+              <Select aria-label="Filter by city" value={city} onChange={(e) => setCity(e.target.value)}>
+                <option value="All">City: All</option>
+                {cities.map((c) => <option key={c} value={c}>City: {c}</option>)}
+              </Select>
+              <Select aria-label="Filter by HQ" value={hq} onChange={(e) => setHq(e.target.value)}>
+                <option value="All">HQ: All</option>
+                {headquarters.map((h) => <option key={h} value={h}>HQ: {h}</option>)}
+              </Select>
               <Select aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value as JobCategory)}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {CATEGORIES.map((c) => <option key={c} value={c}>Category: {c}</option>)}
               </Select>
               <Select aria-label="Filter by experience" value={experience} onChange={(e) => setExperience(e.target.value)}>
                 {EXP_OPTIONS.map((e) => <option key={e} value={e}>Exp: {e}</option>)}
               </Select>
-              <Select aria-label="Filter by salary" value={salary} onChange={(e) => setSalary(e.target.value)}>
-                {SALARY_OPTIONS.map((s) => <option key={s} value={s}>Salary: {s}</option>)}
-              </Select>
             </div>
+            {cities.length === 0 && headquarters.length === 0 && (
+              <p className="px-1 text-xs font-semibold text-slate-500">
+                City and HQ choices appear once vacancies are published.
+              </p>
+            )}
             <div className="flex justify-end">
               <Button variant="ghost" className="px-3 py-1.5 text-sm" onClick={clearFilters}>Clear all</Button>
             </div>
@@ -218,7 +228,7 @@ export function HomeScreen({
             <EmptyState
               icon="🗂"
               title={jobs.length === 0 ? 'No vacancies published yet' : 'Nothing matches these filters'}
-              subtitle={jobs.length === 0 ? 'New openings are posted every week — check back soon.' : 'Try a wider city, category or salary range.'}
+              subtitle={jobs.length === 0 ? 'New openings are posted every week — check back soon.' : 'Try a wider city, HQ, category or experience.'}
             />
             <div className="flex justify-center">
               <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>

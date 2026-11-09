@@ -2,6 +2,9 @@ import { read, remove } from './storage'
 import { supabase } from './supabase'
 import { broadcast, publish } from './notifications'
 import { deleteReasonProblem } from './vacancyRules'
+import { matchesCity, matchesHq } from './jobFilters'
+
+export { cityOptions, hqOptions } from './jobFilters'
 
 export type JobCategory =
   | 'MR' | 'ABM' | 'Part-time' | 'E-commerce' | 'Finance' | 'Banking'
@@ -314,10 +317,12 @@ export function sortedJobs(jobs: Job[]): Job[] {
 
 export function filterJobs(
   jobs: Job[],
-  opts: { query?: string; category?: JobCategory; location?: string },
+  opts: { query?: string; category?: JobCategory; location?: string; city?: string; hq?: string },
 ): Job[] {
   const q = opts.query?.trim().toLowerCase()
   const loc = opts.location?.trim().toLowerCase()
+  const city = opts.city?.trim().toLowerCase()
+  const hq = opts.hq?.trim().toLowerCase()
   return jobs.filter((j) => {
     if (opts.category && opts.category !== 'All' && j.category !== opts.category) return false
     if (q) {
@@ -325,15 +330,13 @@ export function filterJobs(
       if (!hay.includes(q)) return false
     }
     if (loc && !j.location.toLowerCase().includes(loc)) return false
+    // A vacancy may name more than one working city or HQ, so match any entry.
+    if (!matchesCity(j, city ?? '')) return false
+    if (!matchesHq(j, hq ?? '')) return false
     return true
   })
 }
 
-/**
- * Job descriptions are entered one point per line and rendered as • bullets.
- * A bullet typed by the admin at the start of a line — "(+)", "•", "*" or "-"
- * — is tolerated and stripped here, so a line is never shown with two bullets.
- */
 export function descriptionPoints(description?: string): string[] {
   return (description || '')
     .split(/\r?\n|•/)
