@@ -9,6 +9,7 @@
 | Data safety answers | `data-safety.md` | ✅ Ready to copy into Play Console |
 | Reviewer notes + test-login placeholders | `reviewer-notes.md` | ⚠ Fill the two `<…>` placeholders at submission (never commit real credentials) |
 | Screenshots (1080×1920 ×4) | `screenshot-*.png` | ⚠ **TEMPLATES — replace with real captures** (below) |
+| Every manual Play Console step | `play-console-entries.md` | ✅ Copy-paste for the 1.0.4 release |
 
 ## Real screenshots (required before submitting)
 
