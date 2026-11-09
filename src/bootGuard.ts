@@ -25,7 +25,20 @@ function describe(error: unknown): string {
   return 'The app hit an unexpected problem while starting.'
 }
 
-function paint(reason: string): void {
+/**
+ * The first stack frame that belongs to the app, so a screenshot of this panel
+ * is enough to locate a startup failure without a desktop devtools session.
+ */
+function where(error: unknown): string {
+  if (!(error instanceof Error) || !error.stack) return ''
+  const frame = error.stack
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => /^at\s/.test(line) && /\.(tsx?|jsx?)/.test(line))
+  return frame ? frame.replace(/^at\s+/, '').slice(0, 140) : ''
+}
+
+function paint(reason: string, source = ''): void {
   const root = document.getElementById('root')
   if (!root || root.dataset.bootState === 'failed') return
   root.dataset.bootState = 'failed'
@@ -55,6 +68,10 @@ function paint(reason: string): void {
   detail.textContent = reason
   detail.style.cssText = 'color:#334155'
 
+  const sourceLine = document.createElement('div')
+  sourceLine.textContent = source
+  sourceLine.style.cssText = 'font:600 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#64748b;word-break:break-word'
+
   const hint = document.createElement('div')
   hint.textContent = 'Check your internet connection, then reload. If it keeps happening, message support from the app.'
   hint.style.cssText = 'font-size:14px;color:#475569'
@@ -75,7 +92,8 @@ function paint(reason: string): void {
   ].join(';')
   button.addEventListener('click', () => window.location.reload())
 
-  card.append(title, detail, hint, button)
+  const parts = sourceLine.textContent?.trim() ? [title, detail, sourceLine, hint, button] : [title, detail, hint, button]
+  card.append(...parts)
   panel.append(card)
   root.append(panel)
 }
@@ -102,7 +120,7 @@ export function installBootGuard(): Guard {
   const fail = (reason: unknown) => {
     if (done) return
     stop()
-    paint(describe(reason))
+    paint(describe(reason), where(reason))
   }
 
   const onError = (event: ErrorEvent) => fail(event.error ?? event.message)
