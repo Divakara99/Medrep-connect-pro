@@ -107,7 +107,14 @@ assert.ok(/<ShareJobButton job=\{job\}/.test(detail), 'the job page offers Share
 assert.ok(!/unlocked &&[\s\S]{0,80}<ShareJobButton/.test(card), 'Share is not gated behind the subscription')
 assert.ok(/icon className="absolute right-3 top-3/.test(card), 'the card share sits in the corner, taking no card height')
 assert.ok(!/displays the share row/.test(card) && !/justify-end">\s*\{showUnlockButton/.test(card), 'no extra action row is added to the card')
-assert.ok(/ShareJobButton job=\{job\} variant="secondary"/.test(detail), 'the job page keeps the full labelled button')
+assert.ok(/<ShareJobButton job=\{job\} \/>/.test(detail), 'the job page keeps the full labelled button')
+
+// ---------- the web control is a link, the app uses the chooser ----------
+const button = await readFile(new URL('../src/components/ShareJobButton.tsx', import.meta.url), 'utf8')
+assert.ok(/href=\{webHref\}/.test(button), 'on the web the control is a real link to WhatsApp')
+assert.ok(/target="_blank"/.test(button), 'the link opens in a new tab, not over the app')
+assert.ok(/isNativeApp\(\)/.test(button), 'the Android app still opens the system chooser')
+assert.ok(!/window\.open\(/.test(button), 'the web control does not script a popup')
 
 // ---------- native share sheet with a copy fallback ----------
 const platform = await readFile(new URL('../src/data/jobShare.ts', import.meta.url), 'utf8')

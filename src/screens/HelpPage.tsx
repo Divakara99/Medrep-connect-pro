@@ -1,7 +1,7 @@
 import { ContentPage } from '../components/ContentPage'
 import { Button } from '../components/ui'
 import { CREATOR } from '../data/creator'
-import { JOB_UNLOCK_PRICE_RUPEES, JOB_UNLOCK_MINUTES } from '../data/jobUnlock'
+import { JOB_UNLOCK_PRICE_RUPEES } from '../data/jobUnlock'
 import { UNLOCK_WINDOW_MINUTES } from '../data/unlockWindow'
 
 /**
@@ -46,7 +46,7 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
             </li>
             <li>
               <span className="font-semibold">₹{JOB_UNLOCK_PRICE_RUPEES} for one job</span> (website) opens that
-              vacancy's full contact block for {JOB_UNLOCK_MINUTES} hour. Nothing renews.
+              vacancy's full contact block and keeps it open for that job. One payment. Nothing renews.
             </li>
           </ul>
         </section>

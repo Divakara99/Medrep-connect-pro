@@ -10,18 +10,17 @@ import {
 /**
  * The ₹5 single-job unlock.
  *
- * One vacancy, the full contact block, one hour — bought once, never renewed
- * automatically. The server owns both the price (500 paise) and the window
- * (60 minutes); this module only drives Razorpay Checkout and waits for the
- * verified result.
+ * One vacancy, the full contact block, bought once and kept for that job — it
+ * does not run out and it never renews. The server owns the price (500 paise)
+ * and the permanence (`expires_at = 'infinity'`); this module only drives
+ * Razorpay Checkout and waits for the verified result.
  *
- * Play-only note: Google Play's lowest in-app price in India is ₹10, so a ₹5
- * purchase cannot exist inside the Android app. There the rewarded video
- * (company name, 10 minutes) stays the free path, and this paid unlock is sold
- * on the website through Razorpay/UPI where ₹5 is a normal amount.
+ * Platform note: Google Play's lowest in-app price in India is ₹10, so a ₹5
+ * charge cannot be created as a Play product. Buying here stays on the website
+ * (Razorpay/UPI), where ₹5 is a normal amount; the Android app keeps the free
+ * video unlock and its Play-priced passes.
  */
 export const JOB_UNLOCK_PRICE_RUPEES = 5
-export const JOB_UNLOCK_MINUTES = 60
 
 /** Paid unlocks are a website feature; the Play build must not open Razorpay. */
 export function paidJobUnlockAvailable(): boolean {
@@ -31,7 +30,7 @@ export function paidJobUnlockAvailable(): boolean {
 export type JobUnlockPrefill = { name?: string; email?: string }
 
 export function jobUnlockLabel(): string {
-  return `₹${JOB_UNLOCK_PRICE_RUPEES} · Full contact for 1 hour`
+  return `₹${JOB_UNLOCK_PRICE_RUPEES} · Unlock this job for good`
 }
 
 /**
@@ -45,7 +44,7 @@ export async function buyJobUnlock(
   onStage?: (stage: 'opening' | 'paying' | 'verifying') => void,
 ): Promise<string> {
   if (isNativeApp()) {
-    throw new Error('The ₹5 unlock is only available on medrepconnect.in. In the app, watch the short video to see the company name.')
+    throw new Error('The ₹5 unlock is bought on medrepconnect.in. In the app, watch the short video to see the company name.')
   }
 
   onStage?.('opening')
@@ -70,7 +69,7 @@ export async function buyJobUnlock(
       amount: order.amount,
       currency: order.currency,
       name: 'MedRep Connect Pro',
-      description: `Full contact · ${(order.jobTitle || job.title).slice(0, 60)} · 1 hour`,
+      description: `Full contact · ${(order.jobTitle || job.title).slice(0, 60)}`,
       order_id: order.orderId,
       prefill: { name: prefill.name ?? '', email: prefill.email ?? '' },
       theme: { color: '#1746bb' },
@@ -79,8 +78,9 @@ export async function buyJobUnlock(
         void (async () => {
           try {
             const verified = await verifyJobUnlock(response)
-            if (verified.ok && verified.expiresAt) {
-              succeed(verified.expiresAt)
+            // A permanent unlock has no expiry — that is a success, not a miss.
+            if (verified.ok && (verified.permanent || verified.expiresAt)) {
+              succeed(verified.expiresAt ?? 'permanent')
               return
             }
             fail(verified.message

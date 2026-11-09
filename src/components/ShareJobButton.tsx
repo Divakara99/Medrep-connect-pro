@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Job } from '../data/jobs'
+import { isNativeApp } from '../data/platform'
 import { shareJob, shareJobByMessage, shareJobText, whatsappShareUrl } from '../data/jobShare'
-import { Button } from './ui'
 
 type Notice = 'shared' | 'whatsapp' | 'messages' | 'blocked' | 'failed' | null
+
+const FULL_BUTTON = 'inline-flex w-full select-none items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-base font-bold transition-[transform,background-color,box-shadow,border-color] duration-200 active:scale-[0.97]'
+const SECONDARY = 'bg-brand-50 text-brand-800 ring-1 ring-brand-200 shadow-[0_6px_18px_-16px_rgba(29,78,216,0.7)] hover:bg-brand-100 hover:ring-brand-300'
+const ICON_BUTTON = 'grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-200 hover:text-slate-900 active:scale-95'
 
 /** The Android share glyph: three dots joined by lines. */
 function ShareGlyph({ className = 'h-4 w-4' }: { className?: string }) {
@@ -41,12 +45,10 @@ function ShareGlyph({ className = 'h-4 w-4' }: { className?: string }) {
  */
 export function ShareJobButton({
   job,
-  variant = 'secondary',
   className = '',
   icon = false,
 }: {
   job: Job
-  variant?: 'primary' | 'secondary' | 'ghost'
   className?: string
   icon?: boolean
 }) {
@@ -75,33 +77,74 @@ export function ShareJobButton({
     }
   }
 
+  // On the web the control is a real link to WhatsApp: clicking an anchor is
+  // never treated as a popup, so it opens even where a scripted window.open is
+  // blocked. On a phone with the system share sheet, that sheet is used first.
+  const webHref = whatsappShareUrl(shareJobText(job))
+  const native = isNativeApp()
+
+  function onWebClick(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return
+    event.preventDefault()
+    void onShare()
+  }
+
   if (icon) {
+    if (native) {
+      return (
+        <button
+          type="button"
+          onClick={onShare}
+          disabled={busy}
+          aria-label="Share this vacancy on WhatsApp or another app"
+          title="Share this vacancy"
+          className={`${ICON_BUTTON} ${className}`}
+        >
+          <ShareGlyph />
+        </button>
+      )
+    }
     return (
-      <button
-        type="button"
-        onClick={onShare}
-        disabled={busy}
+      <a
+        href={webHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onWebClick}
         aria-label="Share this vacancy on WhatsApp or another app"
         title="Share this vacancy"
-        className={`grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-200 hover:text-slate-900 active:scale-95 disabled:opacity-60 ${className}`}
+        className={`${ICON_BUTTON} ${className}`}
       >
         <ShareGlyph />
-      </button>
+      </a>
     )
   }
 
   return (
     <div className="w-full">
-      <Button
-        variant={variant}
-        className={`w-full ${className}`}
-        onClick={onShare}
-        disabled={busy}
-        aria-label="Share this vacancy on WhatsApp or another app"
-      >
-        <ShareGlyph />
-        <span>Share this vacancy</span>
-      </Button>
+      {native ? (
+        <button
+          type="button"
+          onClick={onShare}
+          disabled={busy}
+          className={`${FULL_BUTTON} ${SECONDARY} ${className}`}
+          aria-label="Share this vacancy on WhatsApp or another app"
+        >
+          <ShareGlyph />
+          <span>Share this vacancy</span>
+        </button>
+      ) : (
+        <a
+          href={webHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onWebClick}
+          className={`${FULL_BUTTON} ${SECONDARY} ${className}`}
+          aria-label="Share this vacancy on WhatsApp or another app"
+        >
+          <ShareGlyph />
+          <span>Share this vacancy</span>
+        </a>
+      )}
       {(notice === 'shared' || notice === 'whatsapp' || notice === 'messages') && (
         <p className="mt-1.5 text-center text-xs font-semibold text-emerald-700">
           {notice === 'whatsapp'
@@ -114,15 +157,10 @@ export function ShareJobButton({
       {notice === 'blocked' && (
         <p className="mt-1.5 text-center text-xs font-semibold text-slate-600">
           Your browser blocked the new tab.{' '}
-          <a
-            href={whatsappShareUrl(shareJobText(job))}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-bold text-brand-700 underline"
-          >
+          <a href={webHref} target="_blank" rel="noopener noreferrer" className="font-bold text-brand-700 underline">
             Open WhatsApp
-          </a>
-          {' '}to send it.
+          </a>{' '}
+          to send it.
         </p>
       )}
       {notice === 'failed' && (

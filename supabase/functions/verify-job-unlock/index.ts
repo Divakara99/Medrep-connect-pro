@@ -3,16 +3,17 @@ import { jsonResponse, readJson } from '../_shared/http.ts'
 import { captureRazorpayPayment, fetchRazorpayPayment, verifyCheckoutSignature } from '../_shared/razorpay.ts'
 
 /**
- * Verifies one ₹5 job unlock and starts its 1-hour window.
+ * Verifies one ₹5 job unlock. The unlock is permanent for that job.
  *
  * Nothing the browser says is trusted: the order must belong to this user, the
  * amount in the pending row is 500 paise, Razorpay must confirm that exact
- * amount on that exact order, and the payment must be captured. The window is
- * stamped by the server. Replaying the same payment returns the same row
- * instead of buying a second hour.
+ * amount on that exact order, and the payment must be captured. The row is
+ * stamped 'paid' with expires_at = 'infinity', which list_visible_jobs() reads
+ * as "this job is unlocked for good". Replaying the same payment returns the
+ * same row instead of charging twice.
  */
 const JOB_UNLOCK_PRICE_PAISE = 500
-const JOB_UNLOCK_MINUTES = 60
+const JOB_UNLOCK_NEVER_EXPIRES = 'infinity'
 
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return optionsResponse()
@@ -50,7 +51,7 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({
       ok: true,
       jobId: stored.job_id,
-      expiresAt: stored.expires_at,
+      expiresAt: stored.expires_at === JOB_UNLOCK_NEVER_EXPIRES ? null : stored.expires_at,
       alreadyConfirmed: true,
     })
   }
@@ -95,7 +96,6 @@ Deno.serve(async (request: Request) => {
     }
 
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + JOB_UNLOCK_MINUTES * 60_000).toISOString()
     // Only a still-pending row can be paid, and only once: the UNIQUE
     // razorpay_payment_id constraint backs this up at the database level.
     const { data: updated, error: updateError } = await context.adminClient
@@ -104,7 +104,8 @@ Deno.serve(async (request: Request) => {
         razorpay_payment_id: paymentId,
         payment_status: 'paid',
         paid_at: now.toISOString(),
-        expires_at: expiresAt,
+        // Permanent: 'infinity' keeps the row valid without a countdown.
+        expires_at: JOB_UNLOCK_NEVER_EXPIRES,
       })
       .eq('razorpay_order_id', orderId)
       .eq('user_id', context.user.id)
@@ -118,8 +119,8 @@ Deno.serve(async (request: Request) => {
     }
 
     if (!updated) {
-      // A concurrent confirmation won the race; report its window rather than
-      // starting a second hour.
+      // A concurrent confirmation won the race; report its row rather than
+      // opening a second unlock.
       const { data: current } = await context.adminClient
         .from('job_unlocks')
         .select('job_id,expires_at,razorpay_payment_id')
@@ -127,7 +128,14 @@ Deno.serve(async (request: Request) => {
         .eq('user_id', context.user.id)
         .maybeSingle()
       if (current?.razorpay_payment_id === paymentId) {
-        return jsonResponse({ ok: true, jobId: current.job_id, expiresAt: current.expires_at, alreadyConfirmed: true })
+        const permanent = current.expires_at === JOB_UNLOCK_NEVER_EXPIRES
+        return jsonResponse({
+          ok: true,
+          jobId: current.job_id,
+          expiresAt: permanent ? null : current.expires_at,
+          permanent,
+          alreadyConfirmed: true,
+        })
       }
       return jsonResponse({ error: 'This unlock was already confirmed. Reopen the job to see it.' }, 409)
     }
@@ -135,8 +143,8 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({
       ok: true,
       jobId: updated.job_id,
-      expiresAt: updated.expires_at,
-      minutes: JOB_UNLOCK_MINUTES,
+      expiresAt: null,
+      permanent: true,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Payment verification failed.'

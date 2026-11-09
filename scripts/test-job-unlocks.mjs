@@ -4,20 +4,21 @@ import { readFile } from 'node:fs/promises'
 /**
  * The ₹5 single-job unlock, in four rules:
  *
- *   1. One payment buys ONE job for ONE hour — never a pass, never permanent,
- *      never auto-renewed.
+ *   1. One payment buys ONE job, permanently — never a pass, never a
+ *      subscription, never a repeat charge for the same vacancy.
  *   2. The price is decided on the server (500 paise), and the database refuses
  *      any other amount. The browser never sends money.
- *   3. Only a verified, captured Razorpay payment can start the hour; users can
- *      read their own rows and nothing else.
- *   4. It lives where ₹5 is possible — the website. Play's lowest in-app price
- *      in India is ₹10, so the app keeps the free video unlock and never opens
- *      Razorpay.
+ *   3. Only a verified, captured Razorpay payment can open it; users can read
+ *      their own rows and nothing else.
+ *   4. It is bought where ₹5 is possible — the website. Play's lowest in-app
+ *      price in India is ₹10, so the app keeps the free video unlock and never
+ *      opens Razorpay.
  */
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 const sql = await read('supabase/job_unlocks.sql')
+const permanentSql = await read('supabase/job_unlock_permanent.sql')
 const createFn = await read('supabase/functions/create-job-unlock-order/index.ts')
 const verifyFn = await read('supabase/functions/verify-job-unlock/index.ts')
 const buyer = await read('src/data/jobUnlock.ts')
@@ -66,14 +67,14 @@ assert.match(createFn, /user_id: context\.user\.id/, 'the order belongs to the s
 assert.match(createFn, /payment_status: 'pending'/, 'a new order reveals nothing yet')
 assert.match(createFn, /notes: \{[\s\S]*job_id: jobId/, 'the job travels with the gateway order')
 
-// 5. Verification: signature, exact amount, capture, one hour ----------------
-assert.match(verifyFn, /const JOB_UNLOCK_MINUTES = 60/, 'the window is one hour')
+// 5. Verification: signature, exact amount, capture, permanent ---------------
+assert.match(verifyFn, /const JOB_UNLOCK_NEVER_EXPIRES = 'infinity'/, 'a paid unlock never lapses')
 assert.match(verifyFn, /verifyCheckoutSignature\(secret, orderId, paymentId, signature\)/, 'the signature is verified server-side')
 assert.match(verifyFn, /payment\.amount !== JOB_UNLOCK_PRICE_PAISE/, 'a payment of any other amount is refused')
 assert.match(verifyFn, /payment\.status !== 'captured'/, 'only a captured payment starts the hour')
 assert.match(verifyFn, /\.eq\('payment_status', 'pending'\)/, 'only a pending row can be paid')
-assert.match(verifyFn, /expires_at: expiresAt/, 'the server stamps the expiry')
-assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation buys no second hour')
+assert.match(verifyFn, /expires_at: JOB_UNLOCK_NEVER_EXPIRES/, 'the server stamps the permanent unlock')
+assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation returns the same unlock')
 assert.match(verifyFn, /\.eq\('user_id', context\.user\.id\)/, 'orders are scoped to their owner')
 assert.ok(
   verifyFn.indexOf("payment_status: 'paid'") > verifyFn.indexOf('captured'),
@@ -85,7 +86,7 @@ assert.match(razorpay, /createJobUnlockOrder\(jobId: string\)/, 'the order call 
 assert.doesNotMatch(razorpay, /amount[^s][\s\S]{0,40}planId[\s\S]{0,40}jobId/i, 'no client-side pricing of unlocks')
 assert.match(buyer, /export const JOB_UNLOCK_PRICE_RUPEES = 5/, 'the label says ₹5')
 assert.match(buyer, /return !isNativeApp\(\)/, 'the paid unlock is a website feature')
-assert.match(buyer, /Play's lowest in-app price in India is ₹10/, 'the reason the app has no ₹5 product is written down')
+assert.match(buyer, /lowest in-app price in India is ₹10/, 'the reason the app has no ₹5 product is written down')
 assert.match(buyer, /'Payment cancelled\. Nothing was charged\.'/, 'a dismissed checkout says plainly that nothing was charged')
 
 // 7. The job projection carries the paid window ------------------------------
@@ -97,11 +98,19 @@ assert.match(detail, /paidUnlock\?: \{ available: boolean; busy: boolean; onBuy:
   'the sheet takes the paid unlock as a capability')
 assert.match(detail, /paidUnlock\?\.available && \(/, 'the ₹5 button appears only when it is available')
 assert.match(detail, /jobUnlockLabel\(\)/, 'the button shows the price and the window')
-assert.match(detail, /Full contact unlocked for this job/, 'an active paid window is stated with its countdown')
+assert.match(detail, /Full contact unlocked for this job/, 'an active paid unlock is stated on the sheet')
 assert.match(detail, /const fullDetails = Boolean\(job && \(unlocked \|\| paidWindow\.active\)\)/,
   'a paid window reveals the contact block, like a pass would for this sheet')
 assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app offers it only outside the app')
 assert.match(app, /await buyJobUnlock\(\{ id: job\.id, title: job\.title \}/, 'the buy runs through the verified helper')
 assert.match(app, /const fresh = await loadVisibleJobs\(\)/, 'after paying, the server projection is re-read')
 
-console.log('job unlock: ₹5 buys one job for one hour, server-priced and verified, own-row reads only, website-only — passed')
+// 9. The unlock is permanent for that job, enforced in the database ----------
+assert.match(permanentSql, /ALTER COLUMN expires_at SET DEFAULT 'infinity'/, 'new rows never lapse')
+assert.match(permanentSql, /UPDATE public\.job_unlocks[\s\S]*SET expires_at = 'infinity'/, 'already-paid unlocks stop counting down')
+assert.match(permanentSql, /CREATE TRIGGER job_unlocks_permanent/, 'the rule is enforced on every write')
+assert.match(permanentSql, /NEW\.expires_at := 'infinity'/, 'even an older caller cannot hand out an expiring unlock')
+assert.match(permanentSql, /ju\.expires_at < 'infinity'::timestamptz/, 'the app is told "no countdown", not a date')
+assert.doesNotMatch(buyer, /for 1 hour|1 hour/i, 'the ₹5 unlock is no longer described as one hour')
+
+console.log('job unlock: ₹5 buys one job for good, server-priced and verified, own-row reads only, website-only — passed')

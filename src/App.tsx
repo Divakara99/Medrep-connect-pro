@@ -454,7 +454,7 @@ export default function App() {
   }, [user, unlocked, unlockingJobId])
 
   /**
-   * ₹5 → one job's full contact for one hour (website only).
+   * ₹5 → one job's full contact, kept for that job (website only).
    *
    * The purchase is verified server-side; the app then re-reads the projection
    * so the sheet shows what the database actually allows, not what the browser
@@ -468,7 +468,7 @@ export default function App() {
       const fresh = await loadVisibleJobs()
       setJobs(fresh)
       setSelectedJob((current) => (current ? fresh.find((candidate) => candidate.id === current.id) ?? current : current))
-      showToast('Unlocked ✓ Full contact for this job is open for 1 hour')
+      showToast('Unlocked ✓ This job\'s full contact stays open from now on')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'The ₹5 unlock could not be completed.')
     } finally {

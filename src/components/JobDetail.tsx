@@ -222,7 +222,9 @@ export function JobDetail({
 
           {paidWindow.active && (
             <p className="text-center text-xs font-bold text-emerald-700">
-              Full contact unlocked for this job · {paidWindow.label} left
+              {job.jobUnlockExpiresAt
+                ? `Full contact unlocked for this job · ${paidWindow.label} left`
+                : 'Full contact unlocked for this job — it stays open'}
             </p>
           )}
           {!fullDetails ? (
@@ -242,7 +244,7 @@ export function JobDetail({
                     {paidUnlock.busy ? 'Opening secure checkout…' : `🔓 ${jobUnlockLabel()}`}
                   </Button>
                   <p className="text-center text-xs font-medium text-slate-500">
-                    ₹5 opens this one job's manager name, email and phone numbers for 1 hour. One payment — nothing renews.
+                    ₹5 opens this one job's manager name, email and phone numbers — kept for that job, not for an hour. One payment, nothing renews.
                   </p>
                 </>
               )}
@@ -262,7 +264,7 @@ export function JobDetail({
               {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}
             </Button>
           )}
-          <ShareJobButton job={job} variant="secondary" />
+          <ShareJobButton job={job} />
           <p className="text-center text-xs font-medium text-slate-500">
             Sharing sends the role, city, HQ and the Play Store link — never the company name or contact details.
           </p>

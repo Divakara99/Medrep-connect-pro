@@ -35,6 +35,7 @@ const MIGRATIONS = [
   { file: 'supabase/job_unlocks.sql', what: 'Paid ₹5 single-job unlock: 1-hour window, verified payment only, full contact for that job' },
   { file: 'supabase/job_profiles.sql', what: 'Job-seeker profiles stored online, own-row only, no browser copy' },
   { file: 'supabase/notification_state.sql', what: 'Per-account read/alert state and chime preference, own-row only' },
+  { file: 'supabase/job_unlock_permanent.sql', what: '₹5 job unlock is permanent for that job: infinity expiry, trigger-enforced' },
 ]
 
 const root = fileURLToPath(new URL('..', import.meta.url))

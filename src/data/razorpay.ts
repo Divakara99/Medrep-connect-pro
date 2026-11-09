@@ -127,15 +127,17 @@ export type JobUnlockOrder = {
 export type JobUnlockVerification = {
   ok: boolean
   jobId?: string
+  /** null when the unlock is permanent for that job (the normal case now). */
   expiresAt?: string | null
+  permanent?: boolean
   alreadyConfirmed?: boolean
   message?: string
   paymentStatus?: string
 }
 
 /**
- * One job, ₹5, one hour. The price and the window come from the Edge Function
- * and the database — this call only names the job.
+ * One job, ₹5, unlocked for good. The price comes from the Edge Function and
+ * the database — this call only names the job.
  */
 export function createJobUnlockOrder(jobId: string): Promise<JobUnlockOrder> {
   return invoke<JobUnlockOrder>('create-job-unlock-order', { jobId })

@@ -51,7 +51,7 @@ assert.match(about, /CREATOR\.contactEmail/, 'the about page gives a way to make
 assert.match(about, /APP_VERSION_LABEL/, 'the about page states the build')
 assert.match(help, /UNLOCK_WINDOW_MINUTES/, 'help states the video window from the code constant')
 assert.match(help, /JOB_UNLOCK_PRICE_RUPEES/, 'help states the per-job price from the code constant')
-assert.match(help, /JOB_UNLOCK_MINUTES/, 'help states the per-job window from the code constant')
+assert.match(help, /keeps it open for that job/, 'help says the ₹5 unlock stays open for that job')
 
 assert.match(account, /import \{ AboutPage \}/, 'Account can open About')
 assert.match(account, /import \{ HelpPage \}/, 'Account can open Help')
