@@ -4,7 +4,6 @@ import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { readPlanState } from '../data/planState'
 import { accessLabel, daysLabel, periodLabel, planTitle } from '../data/planDisplay'
-import { CREATOR } from '../data/creator'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
   createRazorpayOrder,
@@ -16,6 +15,7 @@ import {
 } from '../data/razorpay'
 import { isAndroidApp } from '../data/platform'
 import { TermsPage } from './TermsPage'
+import { PlanInfoPage } from './PlanInfoPage'
 import { buyPlanWithGooglePlay, loadPlayPrices, restorePlayPurchases } from '../data/playBilling'
 
 export function PlansScreen({
@@ -42,6 +42,8 @@ export function PlansScreen({
     [plans, selectedId],
   )
   const [showTerms, setShowTerms] = useState(false)
+  // The three reading cards live on their own page; the passes page is for choosing.
+  const [showInfo, setShowInfo] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
   // Tapped × / backdrop / phone-back while a payment was still running: ask
   // instead of doing nothing, so the sheet can never become unclosable.
@@ -314,8 +316,9 @@ export function PlansScreen({
 
   const paymentRows = payments.length > 0 ? payments : getPaymentsByUser(user.id)
 
-  // Terms are pages of text, so they open as their own page — not a sheet.
+  // Terms and the plan details are pages of text, so they open as pages — not sheets.
   if (showTerms) return <TermsPage onClose={() => setShowTerms(false)} />
+  if (showInfo) return <PlanInfoPage inApp={inApp} onClose={() => setShowInfo(false)} />
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
@@ -426,74 +429,20 @@ export function PlansScreen({
         </div>
       </Card>
 
+      {/* One line, one button. The benefits, the payment description and the
+          standard terms are reading, so they live on their own page instead of
+          pushing the passes down the screen. */}
       <Card className="p-4">
-        <div className="text-sm font-bold text-slate-900 mb-1">Plan benefits</div>
-        <ul className="text-xs text-slate-800 space-y-1 list-disc pl-5">
-          <li>Full company name, manager and contact number for every job</li>
-          <li>One-tap Apply with confirmation</li>
-          <li>Priority job alerts and pinned jobs</li>
-          <li>AI chat help and support tickets</li>
-        </ul>
-      </Card>
-
-      {inApp ? (
-        <Card className="p-4">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div className="text-sm font-bold text-slate-900">How payment works</div>
-            <Badge color="slate">Google Play Billing</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900">Plan benefits, payments &amp; terms</div>
+            <div className="text-xs font-medium text-slate-500">
+              {inApp ? 'Google Play Billing' : 'Razorpay Checkout'} · one plan per payment · no auto-renew
+            </div>
           </div>
-          <p className="text-xs text-slate-700">
-            Every plan is a one-time Google Play pass for the number of days shown. Google Play handles the payment
-            with the method on your Play account, and your access starts once our server verifies the purchase with
-            Google. Renewing buys the pass again and adds its days to your current expiry.
-          </p>
-        </Card>
-      ) : (
-        <Card className="p-4">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div className="text-sm font-bold text-slate-900">How payment works</div>
-            <Badge color="slate">Razorpay Checkout only</Badge>
-          </div>
-          <p className="text-xs text-slate-700">
-            Every plan is paid inside secure Razorpay Checkout, using whichever methods the merchant account has enabled —
-            credit/debit cards, netbanking, and UPI apps such as PhonePe, Google Pay or Paytm, plus a Razorpay QR where
-            offered. We never ask you to transfer money to a personal UPI ID or bank account, and merchant banking details
-            are never shown in the app.
-          </p>
-        </Card>
-      )}
-
-      <Card className="p-4">
-        <div className="text-sm font-bold text-slate-900 mb-1.5">Instructions & standard terms</div>
-        <div className="text-[11px] leading-relaxed text-slate-600 space-y-1">
-          {inApp ? (
-            <>
-              <p>• Pay only through Google Play Billing inside this app. No other payment channel is offered.</p>
-              <p>• Access starts after Google Play confirms the purchase and our server verifies it.</p>
-            </>
-          ) : (
-            <>
-              <p>• Pay only inside Razorpay Checkout. No other payment channel is offered.</p>
-              <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
-            </>
-          )}
-          <p>• One plan per payment. Renewals add days to your existing expiry.</p>
-          <p>• Do not share your bank PIN, OTP or passwords with anyone, including support.</p>
-          <p>
-            • Questions about a payment? Email{' '}
-            <a href={`mailto:${CREATOR.contactEmail}`} className="font-semibold text-blue-600 underline underline-offset-2">{CREATOR.contactEmail}</a>.
-          </p>
-          <p>
-            • By continuing you agree to the MedRep Connect Pro terms and conditions.{' '}
-            <button
-              type="button"
-              onClick={() => setShowTerms(true)}
-              className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-800"
-            >
-              Click here
-            </button>{' '}
-            to read the full terms.
-          </p>
+          <Button variant="secondary" className="shrink-0" onClick={() => setShowInfo(true)}>
+            Read details
+          </Button>
         </div>
       </Card>
 

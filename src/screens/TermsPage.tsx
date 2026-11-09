@@ -10,13 +10,13 @@ import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
  * pinned below it. Here the text gets the whole screen, a back arrow that means
  * "back", and the phone's back gesture for free.
  */
-export function TermsPage({ onClose }: { onClose: () => void }) {
+export function TermsPage({ onClose, backLabel = 'Back to passes' }: { onClose: () => void; backLabel?: string }) {
   return (
     <ContentPage
       title="Terms and conditions"
       subtitle={`Last updated ${TERMS_LAST_UPDATED}`}
       onClose={onClose}
-      footer={<Button className="w-full" onClick={onClose}>Back to passes</Button>}
+      footer={<Button className="w-full" onClick={onClose}>{backLabel}</Button>}
     >
       <div className="space-y-4 text-sm leading-relaxed text-slate-800">
         <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">

@@ -18,6 +18,7 @@ const page = await read('src/components/ContentPage.tsx')
 const terms = await read('src/screens/TermsPage.tsx')
 const about = await read('src/screens/AboutPage.tsx')
 const help = await read('src/screens/HelpPage.tsx')
+const planInfo = await read('src/screens/PlanInfoPage.tsx')
 const plans = await read('src/screens/PlansScreen.tsx')
 const account = await read('src/screens/AccountScreen.tsx')
 const home = await read('src/screens/HomeScreen.tsx')
@@ -30,7 +31,7 @@ assert.match(page, /--ad-reserve, 0px/, 'the native ads strip still gets its spa
 assert.match(page, /overflow-y-auto/, 'a long page scrolls on its own')
 
 // 2. The three long pieces of text all use it --------------------------------
-for (const [name, source] of [['terms', terms], ['about', about], ['help', help]]) {
+for (const [name, source] of [['terms', terms], ['about', about], ['help', help], ['plan details', planInfo]]) {
   assert.match(source, /<ContentPage/, `${name} opens as a page`)
   assert.doesNotMatch(source, /<Modal/, `${name} is not a sheet`)
   assert.match(source, /onClose=\{[^}]*\}/, `${name} can be left`)
@@ -63,6 +64,22 @@ assert.match(account, /Help &amp; how it works/, 'the Help button has a label')
 assert.match(home, /Read more about the app/, 'the founder card links to the about page')
 assert.match(home, /if \(aboutOpen\) return <AboutPage onClose=\{\(\) => setAboutOpen\(false\)\} \/>/,
   "Home's read-more opens the page")
+
+// 4b. The passes page sells nothing on the side: the three reading cards that
+// used to sit under the price boxes (benefits, how payment works, standard
+// terms) are one button away, on a page.
+assert.doesNotMatch(plans, /<div className="text-sm font-bold text-slate-900 mb-1">Plan benefits<\/div>/,
+  'plan benefits are not pasted under the boxes')
+assert.doesNotMatch(plans, /Instructions &amp; standard terms/, 'the standard terms are not pasted under the boxes')
+assert.match(plans, /Plan benefits, payments &amp; terms/, 'one compact line names the reading')
+assert.match(plans, /if \(showInfo\) return <PlanInfoPage inApp=\{inApp\} onClose=\{\(\) => setShowInfo\(false\)\} \/>/,
+  'the Read details button opens the plan info page')
+assert.match(planInfo, /Plan benefits/, 'the plan info page carries the benefits')
+assert.match(planInfo, /How payment works/, 'the plan info page carries the payment description')
+assert.match(planInfo, /Instructions & standard terms/, 'the plan info page carries the standard terms')
+assert.match(planInfo, /TermsPage onClose=\{\(\) => setShowTerms\(false\)\} backLabel="Back to plan details"/,
+  'full terms are one more step, and come back here')
+assert.match(terms, /backLabel = 'Back to passes'/, 'the terms page adapts its way back')
 
 // 5. Decision dialogs stay sheets -------------------------------------------
 assert.match(plans, /<Modal open=\{showCheckout\}/, 'confirming a plan is still a sheet')
