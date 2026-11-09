@@ -55,6 +55,25 @@ export function PlanInfoPage({ inApp, onClose }: { inApp: boolean; onClose: () =
         </section>
 
         <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+          <h2 className="font-bold text-slate-900">When a pass ends</h2>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5">
+            <li>Your pass covers the number of days shown, counted from the moment the server confirms the payment.</li>
+            <li>
+              When those days run out, the company name, manager name, email and phone numbers lock again. Vacancy
+              titles, city, HQ, salary, experience and descriptions stay visible to everyone, free.
+            </li>
+            <li>
+              Nothing is charged automatically and no plan renews by itself. Buying again adds its days to an active
+              pass, or starts a fresh one if the old pass already ended.
+            </li>
+            <li>
+              The ₹5 job unlock is separate and permanent: it stays open for that one job and is never counted down with
+              a pass.
+            </li>
+          </ul>
+        </section>
+
+        <section className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
           <h2 className="font-bold text-slate-900">Instructions & standard terms</h2>
           <ul className="mt-1.5 list-disc space-y-1 pl-5">
             {inApp ? (

@@ -20,6 +20,7 @@ const about = await read('src/screens/AboutPage.tsx')
 const help = await read('src/screens/HelpPage.tsx')
 const planInfo = await read('src/screens/PlanInfoPage.tsx')
 const plans = await read('src/screens/PlansScreen.tsx')
+const detail = await read('src/components/JobDetail.tsx')
 const account = await read('src/screens/AccountScreen.tsx')
 const home = await read('src/screens/HomeScreen.tsx')
 
@@ -81,11 +82,55 @@ assert.match(planInfo, /TermsPage onClose=\{\(\) => setShowTerms\(false\)\} back
   'full terms are one more step, and come back here')
 assert.match(terms, /backLabel = 'Back to passes'/, 'the terms page adapts its way back')
 
+// 4c. The passes page shows state, not prose. Every explanation it used to
+// paste on the page is behind a button, on its own page — including the
+// "browsing is free" paragraph, the expired-pass warning and the old direct
+// UPI transfer note.
+assert.doesNotMatch(plans, /Browsing vacancies is free/, 'the free-browsing paragraph is not pasted on the passes page')
+assert.doesNotMatch(plans, /contacts are locked until you renew/, 'the expired warning is not a paragraph on the page')
+assert.match(plans, /How passes work/, 'the header offers one button for the reading')
+assert.match(plans, /onClick=\{\(\) => setShowInfo\(true\)\}>\s*How passes work/, 'that button opens the plan details page')
+assert.match(plans, /What happens now/, 'an expired pass offers a button instead of a paragraph')
+assert.match(plans, /const \[showLegacyHelp, setShowLegacyHelp\] = useState\(false\)/, 'the UPI note has its own page state')
+assert.match(plans, /import \{ LegacyUpiPage \} from '\.\/LegacyUpiPage'/, 'the UPI page is imported')
+assert.match(plans, /if \(showLegacyHelp\) return <LegacyUpiPage onClose=\{\(\) => setShowLegacyHelp\(false\)\} \/>/,
+  'the UPI note opens as a page')
+assert.match(plans, /onClick=\{\(\) => setShowLegacyHelp\(true\)\}>\s*How this works/, 'the UPI card links to it')
+
+const legacyUpi = await read('src/screens/LegacyUpiPage.tsx')
+assert.match(legacyUpi, /<ContentPage/, 'the UPI note is a page')
+assert.doesNotMatch(legacyUpi, /<Modal/, 'the UPI note is not a sheet')
+assert.match(legacyUpi, /Who this is for/, 'the UPI page says who it is for')
+assert.match(legacyUpi, /What to enter/, 'the UPI page says what to enter')
+assert.match(legacyUpi, /Do not make a new direct transfer/, 'the UPI page warns against a new direct transfer')
+assert.match(legacyUpi, /What happens after you submit/, 'the UPI page says what happens next')
+
+assert.match(planInfo, /When a pass ends/, 'the plan page explains expiry, so "What happens now" has an answer')
+
+// No candidate-facing screen may paste a paragraph: one or two short lines at
+// most, with the rest behind a button.
+const proseViolations = (name, source) => {
+  const long = []
+  for (const match of source.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/g)) {
+    const text = match[1]
+      .replace(/\{[\s\S]*?\}/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&[a-z]+;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (text.length > 150) long.push(`${name}: ${text.slice(0, 80)}…`)
+  }
+  return long
+}
+for (const [name, source] of [['plans', plans], ['job detail', detail], ['account', account]]) {
+  const long = proseViolations(name, source)
+  assert.equal(long.length, 0, `no pasted paragraphs (${long.join(' | ')})`)
+}
+
 // 5. Decision dialogs stay sheets -------------------------------------------
 assert.match(plans, /<Modal open=\{showCheckout\}/, 'confirming a plan is still a sheet')
 const admin = await read('src/screens/AdminScreen.tsx')
 assert.match(admin, /title="Delete vacancy"/, 'deleting a vacancy is still a sheet')
-const detail = await read('src/components/JobDetail.tsx')
 assert.match(detail, /<Modal open=\{!!job\}/, 'a vacancy still opens as a sheet')
 
 console.log('content pages: terms, about and help open as their own pages with a back arrow; decisions stay sheets — passed')

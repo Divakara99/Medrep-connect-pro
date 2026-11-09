@@ -188,10 +188,7 @@ export function JobDetail({
                   <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">
-                  Company name unlocked by video ✓ — visible for {unlockWindow.label} more. Watch another video
-                  when it lapses to open it again. Manager name, email and phone numbers still wait for an
-                  active subscription. City, HQ, division, salary, experience, posted date and the description
-                  above stay visible to everyone.
+                  Company name open ✓ for {unlockWindow.label} more. Contacts still need a pass.
                 </p>
               </>
             ) : !fullDetails ? (
@@ -204,8 +201,7 @@ export function JobDetail({
                   <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">
-                  Only these five details wait for an active subscription. City, HQ, division, salary, experience,
-                  posted date and the description above stay visible to everyone.
+                  Only these five wait for a pass. Everything else is free.
                 </p>
               </>
             ) : (
@@ -255,8 +251,8 @@ export function JobDetail({
               </Button>
               <p className="text-center text-xs font-medium text-slate-500">
                 {paidUnlock?.available
-                  ? 'Or open every job with a pass. Watching the video keeps only the company name open for a few minutes.'
-                  : 'Contact details need a pass. Watching the video above keeps the company name open for a few minutes.'}
+                  ? 'Or open every job with a pass.'
+                  : 'Contact details need a pass.'}
               </p>
             </>
           ) : (

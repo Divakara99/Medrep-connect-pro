@@ -16,6 +16,7 @@ import {
 import { isAndroidApp } from '../data/platform'
 import { TermsPage } from './TermsPage'
 import { PlanInfoPage } from './PlanInfoPage'
+import { LegacyUpiPage } from './LegacyUpiPage'
 import { buyPlanWithGooglePlay, loadPlayPrices, restorePlayPurchases } from '../data/playBilling'
 
 
@@ -55,6 +56,7 @@ export function PlansScreen({
   const [showTerms, setShowTerms] = useState(false)
   // The three reading cards live on their own page; the passes page is for choosing.
   const [showInfo, setShowInfo] = useState(false)
+  const [showLegacyHelp, setShowLegacyHelp] = useState(false)
   // The one payment whose receipt is open over the page.
   const [historyPayment, setHistoryPayment] = useState<PaymentRecord | null>(null)
   const [showCheckout, setShowCheckout] = useState(false)
@@ -356,27 +358,37 @@ export function PlansScreen({
   // Terms and the plan details are pages of text, so they open as pages — not sheets.
   if (showTerms) return <TermsPage onClose={() => setShowTerms(false)} />
   if (showInfo) return <PlanInfoPage inApp={inApp} onClose={() => setShowInfo(false)} />
+  if (showLegacyHelp) return <LegacyUpiPage onClose={() => setShowLegacyHelp(false)} />
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
       {/* Deliberately plain: this page exists so a candidate can buy a pass,
           not so the product can sell one. No gradient, no badge, no hero. */}
-      <header className="space-y-1.5">
-        <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Passes</h1>
-        <p className="text-sm leading-relaxed text-slate-600">
-          Browsing vacancies is free. A pass opens the manager&apos;s name, email and phone number on every job until it
-          expires — {inApp ? 'paid with Google Play' : 'paid in secure Razorpay Checkout'}, activated only after the server verifies it.
-        </p>
-        <div className="flex flex-wrap gap-2">
+      {/* One line of state, one button for the reading. A paragraph pasted on
+          this page is exactly what the passes screen must not do: the page is
+          for choosing a pass, so the explanation lives on its own page. */}
+      <header className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Passes</h1>
+          <Button variant="secondary" className="shrink-0 px-3 py-1.5 text-sm" onClick={() => setShowInfo(true)}>
+            How passes work
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           {unlocked && activeUntil && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
             </span>
           )}
           {!unlocked && expiredPlan?.expiresAt !== undefined && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
-              Pass expired on {when(expiredPlan.expiresAt)} — contacts are locked until you renew
-            </span>
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                Expired {when(expiredPlan.expiresAt)}
+              </span>
+              <Button variant="ghost" className="px-3 py-1 text-xs" onClick={() => setShowInfo(true)}>
+                What happens now
+              </Button>
+            </>
           )}
         </div>
       </header>
@@ -550,8 +562,12 @@ export function PlansScreen({
 
       {!inApp && paymentRows.some((payment) => payment.paymentMethod === 'UPI' && payment.status === 'pending' && !payment.manualReview) && (
         <Card className="p-4 space-y-2">
-          <h2 className="font-bold text-slate-900">Earlier direct UPI transfer?</h2>
-          <p className="text-sm text-slate-700">Only if you already paid for an existing manual UPI request, select its reference and enter the bank-generated UTR. Do not make a new direct transfer. An admin must verify the bank credit before access activates.</p>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-slate-900">Earlier direct UPI transfer?</h2>
+            <Button variant="ghost" className="shrink-0 px-3 py-1 text-xs" onClick={() => setShowLegacyHelp(true)}>
+              How this works
+            </Button>
+          </div>
           <Label htmlFor="legacy-upi-order">Existing request</Label>
           <select id="legacy-upi-order" className="w-full rounded-lg border border-slate-300 p-2" value={legacyPaymentId ?? ''} onChange={(event) => { setLegacyPaymentId(event.target.value || null); setLegacyError(null) }}>
             <option value="">Select an existing request</option>
@@ -587,8 +603,7 @@ export function PlansScreen({
               <div role="alert" className="space-y-2 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-300">
                 <div className="text-sm font-bold text-amber-950">A payment is still open</div>
                 <p className="text-xs text-amber-900">
-                  If you close now, the payment can still complete on its own — reopen Plans and the pass is
-                  restored automatically. You are never charged twice for one pass.
+                  A payment already started can still finish. Reopen Plans and the pass restores.
                 </p>
                 <div className="flex gap-2">
                   <Button variant="secondary" className="flex-1" onClick={() => setCloseAsk(false)}>Keep waiting</Button>
@@ -623,14 +638,14 @@ export function PlansScreen({
                 <Button className="w-full" onClick={() => { void startRazorpayCheckout() }} disabled={processing}>
                   {processing ? 'Opening secure checkout…' : `Pay ₹${selected.price} with Razorpay`}
                 </Button>
-                <p className="text-xs text-slate-700 text-center">Cards (credit/debit), netbanking and UPI apps such as PhonePe or Google Pay are shown if enabled by Razorpay. On supported devices, choose UPI to scan a Razorpay QR if offered.</p>
+                <p className="text-xs text-slate-700 text-center">UPI, cards and netbanking appear inside Razorpay.</p>
               </>
             )}
 
             {verificationPending && (
               <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
                 <p className="text-sm font-bold text-amber-950">Payment confirmation is pending</p>
-                <p className="text-sm text-amber-900 mt-1">{inApp ? 'Do not buy again. Google Play will confirm the payment and your plan activates automatically — reopen Plans to check.' : 'Do not make another payment. We will check again automatically; the plan stays locked until Razorpay confirms capture.'}</p>
+                <p className="text-sm text-amber-900 mt-1">{inApp ? 'Do not buy again — Google Play confirms it.' : 'Do not pay again — checking automatically.'}</p>
                 {pendingCheckout && (
                   <p className="mt-2 text-xs font-mono text-amber-900 break-all">Payment ID: {pendingCheckout.razorpay_payment_id}</p>
                 )}
@@ -645,17 +660,15 @@ export function PlansScreen({
             {error && <div role="alert" className="rounded-lg bg-red-50 text-red-900 text-sm font-medium px-3 py-2 ring-1 ring-red-300">{error}</div>}
             {inApp ? (
               <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
-                <p>1. Check the plan and price, then tap Buy — Google Play shows its own secure payment sheet.</p>
-                <p>2. Approve the payment in Google Play. Never share your passwords or OTP with anyone, including support.</p>
-                <p>3. Return here and wait for confirmation. If charged but not activated, do not buy again; reopen the app and visit Plans, or contact support with your Google Play order ID (GPA…).</p>
-                <p>Access begins after Google confirms and our server verifies the purchase. Renewals add {daysLabel(selected.days)} to your existing expiry (or start now if expired).</p>
+                <p>1. Check the plan and price, then tap Buy.</p>
+                <p>2. Approve in the Google Play sheet. Never share a password or OTP.</p>
+                <p>3. Return here. If charged but not activated, do not buy again.</p>
               </div>
             ) : (
               <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
                 <p>1. Check the plan and amount, then open Razorpay Checkout.</p>
-                <p>2. In Razorpay choose a card, or UPI → PhonePe, Google Pay, another available app, or QR if offered. Approve payment only inside your bank/UPI app; never share your PIN or OTP here.</p>
-                <p>3. Return here and wait for server confirmation. If charged but not activated, do not pay again; use Check payment status or contact support with the payment ID.</p>
-                <p>Access begins after verified capture. Renewals add {daysLabel(selected.days)} to your existing expiry (or start now if expired).</p>
+                <p>2. Pay only inside Razorpay or your UPI app. Never share a PIN or OTP.</p>
+                <p>3. Return here. If charged but not activated, use Check payment status.</p>
               </div>
             )}
           </div>
