@@ -45,7 +45,7 @@ export function HelpPage({ onClose }: { onClose: () => void }) {
               for {UNLOCK_WINDOW_MINUTES} minutes, free. Watching again reopens it.
             </li>
             <li>
-              <span className="font-semibold">₹{JOB_UNLOCK_PRICE_RUPEES} for one job</span> (website) opens that
+              <span className="font-semibold">₹{JOB_UNLOCK_PRICE_RUPEES} for one job</span> (web and Android) opens that
               vacancy's full contact block and keeps it open for that job. One payment. Nothing renews.
             </li>
           </ul>

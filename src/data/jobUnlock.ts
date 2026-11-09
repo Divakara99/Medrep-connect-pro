@@ -15,16 +15,28 @@ import {
  * and the permanence (`expires_at = 'infinity'`); this module only drives
  * Razorpay Checkout and waits for the verified result.
  *
- * Platform note: Google Play's lowest in-app price in India is ₹10, so a ₹5
- * charge cannot be created as a Play product. Buying here stays on the website
- * (Razorpay/UPI), where ₹5 is a normal amount; the Android app keeps the free
- * video unlock and its Play-priced passes.
+ * One price, both places: ₹5 on medrepconnect.in and ₹5 inside the Android app.
+ *
+ * Play note, read before changing anything here: Google Play's own in-app
+ * products cannot be priced below ₹10 in India, which is why this purchase is
+ * NOT a Play product — it runs through Razorpay Checkout exactly as the website
+ * does, and Play Billing is never opened for it. Selling in-app digital content
+ * with your own payment system is only allowed on Play under the User Choice
+ * Billing programme (India). While `ANDROID_IN_APP_JOB_UNLOCK` is true the app
+ * shows this button; flip it to false to hide the ₹5 unlock inside the app
+ * again without touching anything else.
  */
 export const JOB_UNLOCK_PRICE_RUPEES = 5
 
-/** Paid unlocks are a website feature; the Play build must not open Razorpay. */
+/** The ₹5 unlock inside the Android app. Off = website only. */
+const ANDROID_IN_APP_JOB_UNLOCK = true
+
+/**
+ * Shown wherever the ₹5 unlock can be paid — the website and, while
+ * ANDROID_IN_APP_JOB_UNLOCK is on, the Android app too.
+ */
 export function paidJobUnlockAvailable(): boolean {
-  return !isNativeApp()
+  return !isNativeApp() || ANDROID_IN_APP_JOB_UNLOCK
 }
 
 export type JobUnlockPrefill = { name?: string; email?: string }
@@ -43,10 +55,6 @@ export async function buyJobUnlock(
   prefill: JobUnlockPrefill,
   onStage?: (stage: 'opening' | 'paying' | 'verifying') => void,
 ): Promise<string> {
-  if (isNativeApp()) {
-    throw new Error('The ₹5 unlock is bought on medrepconnect.in. In the app, watch the short video to see the company name.')
-  }
-
   onStage?.('opening')
   await loadRazorpayCheckout()
   const order = await createJobUnlockOrder(job.id)

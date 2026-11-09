@@ -69,6 +69,7 @@ assert.match(createFn, /notes: \{[\s\S]*job_id: jobId/, 'the job travels with th
 
 // 5. Verification: signature, exact amount, capture, permanent ---------------
 assert.match(verifyFn, /const JOB_UNLOCK_NEVER_EXPIRES = 'infinity'/, 'a paid unlock never lapses')
+assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation is not charged twice')
 assert.match(verifyFn, /verifyCheckoutSignature\(secret, orderId, paymentId, signature\)/, 'the signature is verified server-side')
 assert.match(verifyFn, /payment\.amount !== JOB_UNLOCK_PRICE_PAISE/, 'a payment of any other amount is refused')
 assert.match(verifyFn, /payment\.status !== 'captured'/, 'only a captured payment starts the hour')
@@ -85,8 +86,8 @@ assert.ok(
 assert.match(razorpay, /createJobUnlockOrder\(jobId: string\)/, 'the order call takes only a job id')
 assert.doesNotMatch(razorpay, /amount[^s][\s\S]{0,40}planId[\s\S]{0,40}jobId/i, 'no client-side pricing of unlocks')
 assert.match(buyer, /export const JOB_UNLOCK_PRICE_RUPEES = 5/, 'the label says ₹5')
-assert.match(buyer, /return !isNativeApp\(\)/, 'the paid unlock is a website feature')
-assert.match(buyer, /lowest in-app price in India is ₹10/, 'the reason the app has no ₹5 product is written down')
+assert.match(buyer, /const ANDROID_IN_APP_JOB_UNLOCK = true/, 'the ₹5 unlock is enabled inside the app')
+assert.match(buyer, /lowest in-app price in India is ₹10|priced below ₹10 in India/, 'the reason it is not a Play product is written down')
 assert.match(buyer, /'Payment cancelled\. Nothing was charged\.'/, 'a dismissed checkout says plainly that nothing was charged')
 
 // 7. The job projection carries the paid window ------------------------------
@@ -101,7 +102,7 @@ assert.match(detail, /jobUnlockLabel\(\)/, 'the button shows the price and the w
 assert.match(detail, /Full contact unlocked for this job/, 'an active paid unlock is stated on the sheet')
 assert.match(detail, /const fullDetails = Boolean\(job && \(unlocked \|\| paidWindow\.active\)\)/,
   'a paid window reveals the contact block, like a pass would for this sheet')
-assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app offers it only outside the app')
+assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app offers the ₹5 unlock wherever it can be paid')
 assert.match(app, /await buyJobUnlock\(\{ id: job\.id, title: job\.title \}/, 'the buy runs through the verified helper')
 assert.match(app, /const fresh = await loadVisibleJobs\(\)/, 'after paying, the server projection is re-read')
 
@@ -113,4 +114,4 @@ assert.match(permanentSql, /NEW\.expires_at := 'infinity'/, 'even an older calle
 assert.match(permanentSql, /ju\.expires_at < 'infinity'::timestamptz/, 'the app is told "no countdown", not a date')
 assert.doesNotMatch(buyer, /for 1 hour|1 hour/i, 'the ₹5 unlock is no longer described as one hour')
 
-console.log('job unlock: ₹5 buys one job for good, server-priced and verified, own-row reads only, website-only — passed')
+console.log('job unlock: ₹5 on web and Android buys one job for good, server-priced and verified, own-row reads only — passed')

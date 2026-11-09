@@ -101,7 +101,7 @@ export function JobDetail({
   onWatchUnlock?: (job: Job) => void
   unlockStage?: UnlockStage | null
   /**
-   * The ₹5 single-job unlock (website only — Play's lowest price is ₹10).
+   * The ₹5 single-job unlock — same price on the website and in the app.
    * `available` is false inside the app, where the rewarded video is the free
    * path and Razorpay is never opened.
    */

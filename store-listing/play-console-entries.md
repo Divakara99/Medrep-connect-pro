@@ -92,7 +92,12 @@ shows — the website price comes from the Admin → Plans table and is separate
 - Every one is a **one-time product**, not a subscription — passes add their days
   to the current expiry and nothing auto-renews.
 - Do not add a ₹5 product: Play India's minimum is ₹10. The ₹5 single-job unlock
-  is website-only (Razorpay/UPI) and must not appear in-app.
+  is not a Play product at all — the app opens Razorpay Checkout for it, on the
+  website and in the Android app alike. Under Google's payments policy that is
+  only allowed inside the app through the **User Choice Billing** programme
+  (Play Console → Monetise → Payments), so enrol there before submitting this
+  build. `ANDROID_IN_APP_JOB_UNLOCK` in `src/data/jobUnlock.ts` switches the
+  in-app ₹5 button off.
 - After changing any price, re-check the Plans screen in a **closed test** build:
   the app displays Play's `priceString`, so a stale price means Play has not
   propagated the change yet.
