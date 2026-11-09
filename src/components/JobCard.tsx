@@ -64,6 +64,9 @@ export function JobCard({
   return (
     <Card className={`lift group relative overflow-hidden ${job.pinned ? 'ring-1 ring-amber-200' : ''}`}>
       {job.pinned && <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400" />}
+      {/* Sharing sits in the card's corner so it costs no height: every card
+          keeps the same rhythm whether or not it can be shared. */}
+      <ShareJobButton job={job} icon className="absolute right-3 top-3 z-10" />
       <button onClick={onClick} className="w-full p-4 text-left">
         <div className="flex items-start gap-3">
           <div
@@ -77,17 +80,14 @@ export function JobCard({
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-[17px] font-bold leading-snug tracking-tight text-slate-900 group-hover:text-brand-800">
-                  {job.title}
-                </div>
-                <div className="mt-0.5 flex items-center gap-1 text-sm text-slate-700">
-                  <span aria-hidden className="text-brand-600">📍</span>
-                  <span className="truncate font-semibold">{job.location}</span>
-                </div>
+            <div className="min-w-0 pr-10">
+              <div className="truncate text-[17px] font-bold leading-snug tracking-tight text-slate-900 group-hover:text-brand-800">
+                {job.title}
               </div>
-              {job.pinned && <Badge color="amber">★ Pinned</Badge>}
+              <div className="mt-0.5 flex items-center gap-1 text-sm text-slate-700">
+                <span aria-hidden className="text-brand-600">📍</span>
+                <span className="truncate font-semibold">{job.location}</span>
+              </div>
             </div>
 
             {companyUnlocked && job.company ? (
@@ -104,6 +104,7 @@ export function JobCard({
 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Badge color={categoryColor[job.category] ?? 'slate'}>{job.category}</Badge>
+              {job.pinned && <Badge color="amber">★ Pinned</Badge>}
               {job.salary && <Badge color="green">{job.salary}</Badge>}
               {job.experience && <span className="rounded-full bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">{job.experience}</span>}
             </div>
@@ -155,23 +156,19 @@ export function JobCard({
         )}
       </button>
 
-      {/* The card action row. Sharing is open to everyone, free or subscribed —
-          the message carries the public details and the Play Store link, never
-          the contact block. */}
-      <div className={`flex items-center gap-2 px-4 pb-4 ${showUnlockButton ? '' : 'justify-end'}`}>
-        {showUnlockButton && (
+      {showUnlockButton && (
+        <div className="px-4 pb-4">
           <button
             type="button"
             disabled={unlockStage !== null}
             onClick={() => onWatchUnlock?.(job)}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 py-3 text-sm font-bold text-white transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 py-3 text-sm font-bold text-white transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60"
           >
             <span aria-hidden>🎬</span>
             {unlockButtonLabel(unlockStage)}
           </button>
-        )}
-        <ShareJobButton job={job} variant="ghost" compact />
-      </div>
+        </div>
+      )}
     </Card>
   )
 }

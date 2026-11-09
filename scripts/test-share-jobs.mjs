@@ -105,12 +105,17 @@ const detail = await readFile(new URL('../src/components/JobDetail.tsx', import.
 assert.ok(/<ShareJobButton job=\{job\}/.test(card), 'the card offers Share to every viewer')
 assert.ok(/<ShareJobButton job=\{job\}/.test(detail), 'the job page offers Share to every viewer')
 assert.ok(!/unlocked &&[\s\S]{0,80}<ShareJobButton/.test(card), 'Share is not gated behind the subscription')
+assert.ok(/icon className="absolute right-3 top-3/.test(card), 'the card share sits in the corner, taking no card height')
+assert.ok(!/displays the share row/.test(card) && !/justify-end">\s*\{showUnlockButton/.test(card), 'no extra action row is added to the card')
+assert.ok(/ShareJobButton job=\{job\} variant="secondary"/.test(detail), 'the job page keeps the full labelled button')
 
 // ---------- native share sheet with a copy fallback ----------
 const platform = await readFile(new URL('../src/data/jobShare.ts', import.meta.url), 'utf8')
 assert.ok(/from '@capacitor\/share'/.test(platform), 'Android uses the system share sheet')
 assert.ok(/navigator\.share/.test(platform), 'the browser uses Web Share when present')
 assert.ok(/clipboard|execCommand/.test(platform), 'without a share sheet the text is copied instead')
+assert.ok(platform.includes('wa.me/?text='), 'a desktop without Web Share goes straight to WhatsApp')
+assert.ok(/dialogTitle: 'Share this vacancy'/.test(platform), 'Android opens the system chooser directly')
 assert.ok(/cancelled/.test(platform), 'a dismissed sheet is not treated as an error')
 
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))

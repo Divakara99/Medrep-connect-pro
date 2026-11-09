@@ -12,7 +12,12 @@ import { SHARE_TITLE, shareJobText, type ShareableVacancy } from './jobShareText
 export { PLAY_STORE_URL, SHARE_TITLE, shareJobText } from './jobShareText'
 export type { ShareableVacancy } from './jobShareText'
 
-export type ShareResult = 'shared' | 'copied' | 'cancelled' | 'failed'
+export type ShareResult = 'shared' | 'whatsapp' | 'copied' | 'cancelled' | 'failed'
+
+/** WhatsApp's own share entry point, used when the device has no share sheet. */
+export function whatsappShareUrl(text: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(text)}`
+}
 
 /** Copy text without the async Clipboard API, for older WebViews. */
 function legacyCopy(text: string): boolean {
@@ -52,6 +57,8 @@ async function copyText(text: string): Promise<boolean> {
 export async function shareJob(job: ShareableVacancy): Promise<ShareResult> {
   const text = shareJobText(job)
 
+  // Android: the system chooser, listing WhatsApp, Messages and every other app
+  // on the phone. This is the path the app always takes.
   if (Capacitor.isNativePlatform()) {
     try {
       await Share.share({ title: SHARE_TITLE, text, dialogTitle: 'Share this vacancy' })
@@ -62,6 +69,7 @@ export async function shareJob(job: ShareableVacancy): Promise<ShareResult> {
       if (/cancel/i.test(message)) return 'cancelled'
     }
   } else if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    // Phones and Safari: the same chooser the app shows.
     try {
       await navigator.share({ title: SHARE_TITLE, text })
       return 'shared'
@@ -69,6 +77,13 @@ export async function shareJob(job: ShareableVacancy): Promise<ShareResult> {
       const message = error instanceof Error ? error.name + ' ' + error.message : String(error ?? '')
       if (/abort|cancel/i.test(message)) return 'cancelled'
     }
+  }
+
+  // Desktop browsers without Web Share: go straight to WhatsApp instead of
+  // making the person copy and paste.
+  if (typeof window !== 'undefined') {
+    const opened = window.open(whatsappShareUrl(text), '_blank', 'noopener,noreferrer')
+    if (opened) return 'whatsapp'
   }
 
   return (await copyText(text)) ? 'copied' : 'failed'
