@@ -38,6 +38,7 @@ const MIGRATIONS = [
   { file: 'supabase/job_unlock_permanent.sql', what: '₹5 job unlock is permanent for that job: infinity expiry, trigger-enforced' },
   { file: 'supabase/vacancy_restore.sql', what: 'Deleted vacancies keep their details, so Undo and the Deleted list can restore them' },
   { file: 'supabase/vacancy_extra_fields.sql', what: 'Administrator-defined vacancy fields are returned with the public job projection' },
+  { file: 'supabase/vacancy_fill_check.sql', what: '"Is this still open?" — the team sees the question and answers Open/Filled, stamped server-side' },
 ]
 
 const root = fileURLToPath(new URL('..', import.meta.url))

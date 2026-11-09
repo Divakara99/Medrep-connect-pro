@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { BackButton, Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
+import { BackButton, Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
@@ -9,6 +9,7 @@ import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 import { currentUser, deleteUserAccount, getUsers, grantManualAccess, refreshAdminUsers, type User } from '../data/auth'
 import {
+  CATEGORIES,
   deleteJob,
   getJobs,
   getLegacyJobs,
@@ -19,8 +20,10 @@ import {
   sortedJobs,
   togglePin,
   type DeletedVacancy,
+  setFillCheck,
   type Job,
 } from '../data/jobs'
+import { fillCheckState, fillCheckWaiting, FILL_CHECK_LABELS, fillCheckWhatsAppUrl } from '../data/fillCheck'
 import {
   deleteReasonProblem,
   paymentStatusLabel,
@@ -461,6 +464,36 @@ function VacanciesTab({ onMutate, onNotice }: {
   const [seed, setSeed] = useState<Partial<Job> | null>(null)
   // Remounts the form so a new seed takes effect.
   const [formSeq, setFormSeq] = useState(0)
+  // Finding one vacancy in the list: free text, city, category and whether the
+  // question "is this still open?" has an answer.
+  const [query, setQuery] = useState('')
+  const [city, setCity] = useState('all')
+  const [filterCategory, setFilterCategory] = useState('all')
+  const [fillFilter, setFillFilter] = useState<'all' | 'unasked' | 'asked' | 'open' | 'filled'>('all')
+  const [askingId, setAskingId] = useState<string | null>(null)
+  // What the table shows: the same rows the server returned, narrowed by the
+  // filters above it. Nothing is hidden by default.
+  const cityChoices = useMemo(
+    () => Array.from(new Set(jobs.map((job) => job.location).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [jobs],
+  )
+  const visibleJobs = useMemo(() => {
+    const text = query.trim().toLowerCase()
+    return jobs.filter((job) => {
+      if (text && !`${job.title} ${job.company} ${job.location} ${job.category} ${job.manager ?? ''} ${job.postedBy ?? ''}`.toLowerCase().includes(text)) return false
+      if (city !== 'all' && job.location !== city) return false
+      if (filterCategory !== 'all' && job.category !== filterCategory) return false
+      if (fillFilter === 'unasked' && fillCheckState(job.fillCheck) !== 'none') return false
+      if (fillFilter === 'asked' && !fillCheckWaiting(job.fillCheck)) return false
+      if (fillFilter === 'open' && fillCheckState(job.fillCheck) !== 'open') return false
+      if (fillFilter === 'filled' && fillCheckState(job.fillCheck) !== 'filled') return false
+      return true
+    })
+  }, [jobs, query, city, filterCategory, fillFilter])
+  const filtersActive = Boolean(query.trim()) || city !== 'all' || filterCategory !== 'all' || fillFilter !== 'all'
+  const waitingCount = jobs.filter((job) => fillCheckWaiting(job.fillCheck)).length
+  const filledCount = jobs.filter((job) => fillCheckState(job.fillCheck) === 'filled').length
+
   const legacyCount = getLegacyJobs().length
   const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
   const duplicateReasonProblem = deleteReasonProblem(duplicateReason)
@@ -525,6 +558,42 @@ function VacanciesTab({ onMutate, onNotice }: {
     })
     setFormSeq((value) => value + 1)
     setOpen(true)
+  }
+
+  /** Records "is this still open?" on the vacancy the team will answer. */
+  async function askTeam(target: Job) {
+    setAskingId(target.id)
+    setError(null)
+    try {
+      await setFillCheck(target.id, {
+        askedAt: Date.now(),
+        askedBy: currentUser()?.email ?? '',
+        answer: undefined,
+        answeredAt: undefined,
+        answeredBy: undefined,
+      })
+      await reload()
+      onNotice(`Asked the vacancy team about “${target.title}”. The question is at the top of their portal; the answer shows here.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The question could not be saved.')
+    } finally {
+      setAskingId(null)
+    }
+  }
+
+  /** Clears the answer once the vacancy has been dealt with. */
+  async function clearAsk(target: Job) {
+    setAskingId(target.id)
+    setError(null)
+    try {
+      await setFillCheck(target.id, null)
+      await reload()
+      onNotice(`Cleared the “still open?” question on “${target.title}”.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The question could not be cleared.')
+    } finally {
+      setAskingId(null)
+    }
   }
 
   /** Re-reads the catalogue from the database and returns what is left. */
@@ -656,6 +725,54 @@ function VacanciesTab({ onMutate, onNotice }: {
           <Button onClick={openNew}>+ Post vacancy</Button>
         </div>
       </div>
+      {/* Filters: find one vacancy without scrolling the whole catalogue, and
+          see at a glance which ones are waiting for an answer. */}
+      <Card className="space-y-2 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label="Search vacancies"
+            className="min-w-[12rem] flex-1 text-sm"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search title, company, city, manager or poster"
+          />
+          <Select aria-label="Filter by city" className="w-auto text-sm" value={city} onChange={(event) => setCity(event.target.value)}>
+            <option value="all">All cities</option>
+            {cityChoices.map((option) => <option key={option} value={option}>{option}</option>)}
+          </Select>
+          <Select aria-label="Filter by category" className="w-auto text-sm" value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
+            <option value="all">All categories</option>
+            {CATEGORIES.filter((option) => option !== 'All').map((option) => <option key={option} value={option}>{option}</option>)}
+          </Select>
+          <Select
+            aria-label="Filter by filled status"
+            className="w-auto text-sm"
+            value={fillFilter}
+            onChange={(event) => setFillFilter(event.target.value as typeof fillFilter)}
+          >
+            <option value="all">Any status</option>
+            <option value="unasked">Not asked</option>
+            <option value="asked">Waiting for reply</option>
+            <option value="open">Team says open</option>
+            <option value="filled">Team says filled</option>
+          </Select>
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              className="px-3 py-1.5 text-xs"
+              onClick={() => { setQuery(''); setCity('all'); setFilterCategory('all'); setFillFilter('all') }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+          <span>Showing {visibleJobs.length} of {jobs.length}</span>
+          {waitingCount > 0 && <Badge color="amber">{waitingCount} waiting for the team</Badge>}
+          {filledCount > 0 && <Badge color="green">{filledCount} reported filled</Badge>}
+          <span className="font-medium text-slate-500">Ask the manager on WhatsApp, or ask the vacancy team and read their answer here.</span>
+        </div>
+      </Card>
       {loading && <p role="status" className="text-xs font-semibold text-slate-500">Refreshing vacancies from the server…</p>}
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
       {legacyCount > 0 && (
@@ -676,7 +793,12 @@ function VacanciesTab({ onMutate, onNotice }: {
           <span className="text-right">Actions</span>
         </div>
         <div className="divide-y divide-slate-100">
-          {jobs.map((j) => (
+          {visibleJobs.length === 0 && (
+            <div className="px-4 py-6 text-center text-sm text-slate-600">
+              {jobs.length === 0 ? 'No active vacancies yet. Use “+ Post vacancy” to add one.' : 'No vacancy matches these filters.'}
+            </div>
+          )}
+          {visibleJobs.map((j) => (
             <div
               key={j.id}
               className="px-4 py-3 transition hover:bg-slate-50/70 sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto] sm:items-center sm:gap-3"
@@ -691,6 +813,18 @@ function VacanciesTab({ onMutate, onNotice }: {
                   {j.salary ? ` · ${j.salary}` : ''}
                   {j.postedBy ? ` · by ${j.postedBy}` : ''}
                 </div>
+                {fillCheckState(j.fillCheck) !== 'none' && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Badge color={fillCheckState(j.fillCheck) === 'filled' ? 'green' : fillCheckState(j.fillCheck) === 'open' ? 'brand' : 'amber'}>
+                      {FILL_CHECK_LABELS[fillCheckState(j.fillCheck)]}
+                    </Badge>
+                    {j.fillCheck?.answeredAt && (
+                      <span className="text-[11px] text-slate-500">
+                        {j.fillCheck.answeredBy || 'team'} · {new Date(j.fillCheck.answeredAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {/* Phone-only meta, so no column is lost on a small screen. */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
                   <Badge color="brand">{j.category}</Badge>
@@ -712,6 +846,34 @@ function VacanciesTab({ onMutate, onNotice }: {
                   title={j.pinned ? 'Unpin this vacancy' : 'Pin this vacancy to the top'}
                 >
                   {j.pinned ? '★ Unpin' : '☆ Pin'}
+                </Button>
+                <a
+                  href={fillCheckWhatsAppUrl(j)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={j.contact ? 'Ask the hiring manager on WhatsApp whether this is still open' : 'Open WhatsApp and choose who to ask'}
+                  className="inline-flex items-center rounded-xl bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-800 ring-1 ring-brand-200 transition hover:bg-brand-100"
+                >
+                  💬 Ask
+                </a>
+                <Button
+                  variant="secondary"
+                  className="px-2.5 py-1.5 text-xs"
+                  disabled={askingId === j.id}
+                  title={fillCheckWaiting(j.fillCheck)
+                    ? 'Waiting for the vacancy team — press to ask again'
+                    : fillCheckState(j.fillCheck) === 'none'
+                      ? 'Ask the vacancy team whether this job is filled'
+                      : 'Clear this question and its answer'}
+                  onClick={() => { void (fillCheckWaiting(j.fillCheck) || fillCheckState(j.fillCheck) === 'none' ? askTeam(j) : clearAsk(j)) }}
+                >
+                  {askingId === j.id
+                    ? 'Saving…'
+                    : fillCheckWaiting(j.fillCheck)
+                      ? '📩 Ask again'
+                      : fillCheckState(j.fillCheck) === 'none'
+                        ? '📩 Ask team'
+                        : '✕ Clear answer'}
                 </Button>
                 <Button variant="secondary" className="px-2.5 py-1.5 text-xs" onClick={() => openEdit(j)}>
                   ✏️ Edit

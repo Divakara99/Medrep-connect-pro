@@ -4,6 +4,7 @@ import { broadcast, publish } from './notifications'
 import { deleteReasonProblem } from './vacancyRules'
 import { matchesCity, matchesHq } from './jobFilters'
 import { cleanExtraFields, type ExtraField } from './extraFields'
+import { parseFillCheck, type FillCheck } from './fillCheck'
 
 export { EXTRA_FIELD_LIMIT, EXTRA_LABEL_MAX, EXTRA_VALUE_MAX, cleanExtraFields, extraFieldProblem } from './extraFields'
 export type { ExtraField } from './extraFields'
@@ -69,6 +70,8 @@ export type Job = {
   postedBy?: string
   /** Details beyond the fixed form, shown publicly on the vacancy. */
   extraFields?: ExtraField[]
+  /** "Is this still open?" — the ask to the team and their answer. */
+  fillCheck?: FillCheck
 }
 
 const LEGACY_JOBS_KEY = 'mrc_jobs_v1'
@@ -126,6 +129,7 @@ function parseJob(value: unknown): Job | null {
     pinned: row.pinned === true,
     postedAt: typeof row.postedAt === 'number' ? row.postedAt : 0,
     extraFields: parseExtraFields(row.extraFields),
+    fillCheck: parseFillCheck(row.fillCheck),
   }
 }
 
@@ -403,6 +407,41 @@ export async function restoreJob(id: string): Promise<string> {
   if (changed !== 1) throw new Error(`The database changed ${changed} rows for one restore. Reload the list before trying again.`)
   await loadAdminJobs().catch(() => undefined)
   return typeof previous.title === 'string' ? previous.title : ''
+}
+
+/**
+ * Writes the "is it still open?" state onto one vacancy.
+ *
+ * Not a content change, so no notification goes out and the public job
+ * projection does not carry it: only the administrator's list and the vacancy
+ * team's portal read `fillCheck`.
+ */
+export async function setFillCheck(id: string, patch: Partial<FillCheck> | null): Promise<void> {
+  if (!id) throw new Error('Choose the vacancy and try again.')
+  const { data: row, error: readError } = await supabase
+    .from('vacancies')
+    .select('id,data')
+    .eq('id', id)
+    .maybeSingle()
+  if (readError) throw new Error('That vacancy could not be read. Reload and try again.')
+  if (!row) throw new Error('That vacancy no longer exists.')
+  const current = (row.data ?? {}) as Record<string, unknown>
+  const merged: Record<string, unknown> = { ...current }
+  if (patch === null) {
+    delete merged.fillCheck
+  } else {
+    merged.fillCheck = { ...(parseFillCheck(current.fillCheck) ?? {}), ...patch }
+  }
+  const { data, error } = await supabase.from('vacancies').update({
+    data: merged,
+    synced_at: new Date().toISOString(),
+  }).eq('id', id).select('id')
+  if (error) throw new Error('That vacancy could not be updated. Check permissions and try again.')
+  if (!Array.isArray(data) || data.length !== 1) {
+    throw new Error('The database did not update that vacancy. Reload the list and try again.')
+  }
+  const updated = parseJob({ ...merged, id })
+  if (updated) jobs = jobs.map((job) => job.id === id ? updated : job)
 }
 
 export async function togglePin(id: string, pinned: boolean): Promise<Job> {

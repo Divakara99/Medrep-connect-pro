@@ -2,6 +2,7 @@ import { hasAdminRole, supabase } from './supabase'
 import { notifyDevices } from './push'
 import type { Job } from './jobs'
 import { deleteReasonProblem, type ActorRole, type AuditRow } from './vacancyRules'
+import { parseFillCheck, type FillCheck } from './fillCheck'
 
 /**
  * Vacancy team: login accounts that only post and delete vacancies, and the
@@ -24,6 +25,8 @@ export type TeamVacancy = {
   vacancyCount?: string
   postedAt: number
   postedBy: string
+  /** Set when the administrator asks whether this vacancy is still open. */
+  fillCheck?: FillCheck
 }
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string }
@@ -188,7 +191,7 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
 export async function teamListVacancies(): Promise<TeamVacancy[]> {
   const { data, error } = await supabase.rpc('employee_list_vacancies')
   if (error) throw new Error(error.message || 'Vacancies could not be loaded.')
-  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string }[])
+  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string; fillCheck?: unknown }[])
     .map((row) => ({
       id: row.id,
       title: row.title,
@@ -200,7 +203,20 @@ export async function teamListVacancies(): Promise<TeamVacancy[]> {
       vacancyCount: row.vacancyCount,
       postedAt: Number(row.postedAt) || 0,
       postedBy: row.postedBy ?? '',
+      fillCheck: parseFillCheck(row.fillCheck),
     }))
+}
+
+/**
+ * Answers the administrator's "is this still open?" question. The database
+ * stamps who answered and when, so the reply cannot be forged from the browser.
+ */
+export async function teamAnswerFillCheck(id: string, answer: 'open' | 'filled'): Promise<Result> {
+  if (!id) return { ok: false, error: 'Choose the vacancy and try again.' }
+  if (answer !== 'open' && answer !== 'filled') return { ok: false, error: 'Answer Open or Filled.' }
+  const { error } = await supabase.rpc('employee_answer_fill_check', { p_id: id, p_answer: answer })
+  if (error) return { ok: false, error: error.message || 'The answer could not be saved.' }
+  return { ok: true }
 }
 
 export async function teamDeleteVacancy(id: string, reason: string): Promise<Result> {
