@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { UnlockStage } from '../data/adConfig'
 import { Badge, Button, Card, EmptyState, Input, Select } from '../components/ui'
 import { CreatorCredit } from '../components/CreatorCredit'
+import { AboutPage } from './AboutPage'
 import { JobCard } from '../components/JobCard'
 import { CATEGORIES, filterJobs, jobStats, sortedJobs, type Job, type JobCategory } from '../data/jobs'
 import type { User } from '../data/auth'
@@ -32,6 +33,7 @@ export function HomeScreen({
   const [experience, setExperience] = useState('All')
   const [salary, setSalary] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const unlocked = isSubscribed(user)
 
   const stats = useMemo(() => jobStats(jobs), [jobs])
@@ -78,6 +80,8 @@ export function HomeScreen({
     (location.trim() ? 1 : 0)
 
   const firstName = user.name.trim().split(' ')[0] || 'there'
+
+  if (aboutOpen) return <AboutPage onClose={() => setAboutOpen(false)} />
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-4">
@@ -240,6 +244,13 @@ export function HomeScreen({
           <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">App created by</div>
           <div className="mt-1 text-lg font-extrabold tracking-tight text-slate-900">Mr. {CREATOR.name}</div>
           <div className="text-sm font-semibold text-brand-700">{CREATOR.role}</div>
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            className="mt-2 text-xs font-bold text-brand-700 underline underline-offset-4"
+          >
+            Read more about the app
+          </button>
         </div>
         <p className="mt-3 text-center text-xs text-slate-500">MedRep Connect Pro · {CREATOR.tagline}</p>
       </footer>

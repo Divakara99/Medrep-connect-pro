@@ -4,7 +4,6 @@ import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { readPlanState } from '../data/planState'
 import { accessLabel, daysLabel, periodLabel, planTitle } from '../data/planDisplay'
-import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
 import { CREATOR } from '../data/creator'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
@@ -16,6 +15,7 @@ import {
   type RazorpayCheckoutResponse,
 } from '../data/razorpay'
 import { isAndroidApp } from '../data/platform'
+import { TermsPage } from './TermsPage'
 import { buyPlanWithGooglePlay, loadPlayPrices, restorePlayPurchases } from '../data/playBilling'
 
 export function PlansScreen({
@@ -313,6 +313,9 @@ export function PlansScreen({
   }
 
   const paymentRows = payments.length > 0 ? payments : getPaymentsByUser(user.id)
+
+  // Terms are pages of text, so they open as their own page — not a sheet.
+  if (showTerms) return <TermsPage onClose={() => setShowTerms(false)} />
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
@@ -649,23 +652,6 @@ export function PlansScreen({
         )}
       </Modal>
 
-      <Modal open={showTerms} onClose={() => setShowTerms(false)} title="Terms and conditions">
-        <div className="space-y-4 text-sm text-slate-800 leading-relaxed">
-          <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-900">
-            Draft — final wording is pending owner approval. Items in [square brackets] are completed before publication.
-          </p>
-          <p className="text-xs text-slate-500">Last updated {TERMS_LAST_UPDATED}. These terms apply to every MedRep Connect Pro user.</p>
-          {TERMS_SECTIONS.map((section, index) => (
-            <section key={section.title} className="space-y-1.5">
-              <h3 className="font-bold text-slate-900">{index + 1}. {section.title}</h3>
-              {section.paragraphs.map((text) => (
-                <p key={text}>{text}</p>
-              ))}
-            </section>
-          ))}
-        </div>
-        <Button className="w-full mt-5" onClick={() => setShowTerms(false)}>Close</Button>
-      </Modal>
     </div>
   )
 }

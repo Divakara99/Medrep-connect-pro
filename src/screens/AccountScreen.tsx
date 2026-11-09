@@ -4,6 +4,8 @@ import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
 import { MyRequests } from '../components/MyRequests'
 import { ApplicationsScreen } from './ApplicationsScreen'
+import { AboutPage } from './AboutPage'
+import { HelpPage } from './HelpPage'
 import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
@@ -36,6 +38,8 @@ export function AccountScreen({
   // "My applications" opens as its own page over this one, so the phone's back
   // button (and its Back button) return here.
   const [applicationsOpen, setApplicationsOpen] = useState(false)
+  // Long text gets a page of its own; the card stays a summary.
+  const [infoPage, setInfoPage] = useState<'about' | 'help' | null>(null)
   /**
    * Hidden ad diagnostics (Android only), opened by tapping the version badge
    * five times.
@@ -73,6 +77,9 @@ export function AccountScreen({
     }
     taps.timer = window.setTimeout(() => { taps.count = 0 }, 1500)
   }
+
+  if (infoPage === 'about') return <AboutPage onClose={() => setInfoPage(null)} />
+  if (infoPage === 'help') return <HelpPage onClose={() => setInfoPage(null)} />
 
   if (applicationsOpen) {
     return (
@@ -176,6 +183,17 @@ export function AccountScreen({
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
             <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
+        </div>
+        {/* The paragraphs behind this card live on their own pages. */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <Button variant="secondary" className="w-full justify-start" onClick={() => setInfoPage('about')}>
+            <span aria-hidden="true">ℹ️</span>
+            <span>About MedRep Connect Pro</span>
+          </Button>
+          <Button variant="secondary" className="w-full justify-start" onClick={() => setInfoPage('help')}>
+            <span aria-hidden="true">❓</span>
+            <span>Help &amp; how it works</span>
+          </Button>
         </div>
       </Card>
 
