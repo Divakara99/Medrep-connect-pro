@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Badge, Button, Input, Label, Modal, Select, Textarea } from './ui'
 import { addJob, CATEGORIES, descriptionPoints, updateJob, type Job } from '../data/jobs'
+import { cleanExtraFields, extraFieldProblem, EXTRA_FIELD_LIMIT, type ExtraField } from '../data/extraFields'
 import { findConfidentialContact } from '../data/jobDescription'
 import { digitsOnly, hasNonPhoneCharacters, mobileNumberProblem, MOBILE_DIGITS, MOBILE_MAX_DIGITS, MAX_HQ_TEXT_LENGTH, headquartersProblem, normalizeIndianMobile, parseHeadquarters, serializeHeadquarters } from '../data/vacancyRules'
 import { teamPostVacancy } from '../data/vacancyTeam'
-import { extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
+import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
 import { readVacancyImageText } from '../data/vacancyOcr'
 import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplicateCheck, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
 
@@ -90,7 +91,17 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
   const [extractError, setExtractError] = useState<string | null>(null)
   const [extractNotice, setExtractNotice] = useState<string | null>(null)
   // Values found in the pasted text, waiting for the admin to choose them.
-  const [review, setReview] = useState<{ fields: VacancyExtraction; picked: Partial<Record<keyof VacancyExtraction, boolean>> } | null>(null)
+  // Details with no field of their own — created by a paste, or added here.
+  const [extraFields, setExtraFields] = useState<ExtraField[]>(() => start?.extraFields ?? [])
+  // Every extracted value is editable before it is filled: OCR and pasted
+  // vacancy text are rarely perfect, and correcting it here is faster than
+  // filling the field and editing it afterwards.
+  type ReviewExtra = ExtraField & { checked: boolean }
+  const [review, setReview] = useState<{
+    fields: VacancyExtraction
+    picked: Partial<Record<keyof VacancyExtraction, boolean>>
+    extras: ReviewExtra[]
+  } | null>(null)
   const [duplicatePrompt, setDuplicatePrompt] = useState<{ result: VacancyDuplicateCheck; approvalKey: string } | null>(null)
   const [approvedDuplicateReview, setApprovedDuplicateReview] = useState<string | null>(null)
 
@@ -220,9 +231,16 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       filled += 1
     }
     applyExtractedFields(chosen)
+    const chosenExtras = review.extras
+      .filter((extra) => extra.checked)
+      .map(({ label, value }) => ({ label, value }))
+    if (chosenExtras.length > 0) {
+      setExtraFields((current) => cleanExtraFields([...current, ...chosenExtras]))
+      filled += chosenExtras.length
+    }
     setReview(null)
     setExtractNotice(filled > 0
-      ? `Filled ${filled} field${filled === 1 ? '' : 's'} from the pasted text. Check each value before Final Submit.`
+      ? `Filled ${filled} detail${filled === 1 ? '' : 's'} from the pasted text. Check each value before Final Submit.`
       : 'Nothing was filled. Tick at least one value first.')
   }
 
@@ -255,7 +273,8 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
         const value = extracted[key]
         return typeof value === 'string' && value.trim().length > 0
       })
-      if (found.length === 0) {
+      const unknown = extractExtraFields(rawText)
+      if (found.length === 0 && unknown.length === 0) {
         setExtractNotice('No fields were confidently detected. Read the text above and type the vacancy details yourself.')
         return
       }
@@ -263,8 +282,16 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       // start unticked, so a paste can never overwrite their work.
       const picked: Partial<Record<keyof VacancyExtraction, boolean>> = {}
       for (const { key } of found) picked[key] = !draftValue(key).trim()
-      setReview({ fields: extracted, picked })
-      setExtractNotice(`Found ${found.length} value${found.length === 1 ? '' : 's'}. Nothing is filled yet — tick the ones that belong in this vacancy.`)
+      // Lines the fixed form has no field for ("Joining: Immediate") become
+      // extra details of this vacancy, ticked by default and editable below.
+      const extras = extractExtraFields(rawText)
+        .filter((extra) => !extraFields.some((current) => current.label.toLowerCase() === extra.label.toLowerCase()))
+        .map((extra) => ({ ...extra, checked: true }))
+      setReview({ fields: extracted, picked, extras })
+      setExtractNotice(
+        `Found ${found.length} value${found.length === 1 ? '' : 's'}${extras.length > 0 ? ` and ${extras.length} extra detail${extras.length === 1 ? '' : 's'}` : ''}.`
+        + ' Nothing is filled yet — tick what belongs in this vacancy, and correct any value that was read wrongly.',
+      )
     } catch (cause) {
       setExtractError(cause instanceof Error ? cause.message : 'Could not read the vacancy source.')
     } finally {
@@ -299,6 +326,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
     setAgeLimit(job?.ageLimit ?? '')
     setVacancyCount(job?.vacancyCount ?? '')
     setDescription(job?.description ?? '')
+    setExtraFields(start?.extraFields ?? [])
     setPinned(job?.pinned ?? false)
     setError(null)
     setContactError(null)
@@ -366,9 +394,9 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
         const result = await teamPostVacancy(fields)
         if (!result.ok) throw new Error(result.error)
       } else if (job) {
-        await updateJob(job.id, { ...fields, pinned })
+        await updateJob(job.id, { ...fields, pinned, extraFields: cleanExtraFields(extraFields) })
       } else {
-        await addJob({ ...fields, pinned })
+        await addJob({ ...fields, pinned, extraFields: cleanExtraFields(extraFields) })
       }
       if (!job) resetDraft()
       onSaved()
@@ -437,33 +465,112 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
               <div className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
                 <div className="text-sm font-bold text-slate-900">Choose what to fill</div>
                 <p className="text-xs text-slate-600">
-                  Only the ticked values are written into the form. Fields you have already typed start unticked, and HQ text
-                  fills the first HQ box without adding new ones.
+                  Values are editable — correct anything the paste or scan read wrongly. Only the ticked ones are written
+                  into the form. Fields you have already typed start unticked, and HQ text fills the first HQ box without
+                  adding new ones.
                 </p>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {EXTRACTED_FIELDS.map(({ key, label }) => {
                     const value = review.fields[key]
                     if (typeof value !== 'string' || !value.trim()) return null
                     const checked = review.picked[key] === true
                     const typed = draftValue(key).trim().length > 0
+                    const long = key === 'description'
                     return (
-                      <label key={key} className="flex items-start gap-2 rounded-lg bg-slate-50 p-2 text-xs">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={checked}
-                          onChange={(event) => setReview((current) => current
-                            ? { ...current, picked: { ...current.picked, [key]: event.target.checked } }
-                            : current)}
-                        />
-                        <span className="min-w-0">
-                          <span className="font-bold text-slate-800">{label}</span>
-                          {typed && <span className="ml-1 font-semibold text-amber-700">· replaces what you typed</span>}
-                          <span className="mt-0.5 block break-words text-slate-600">{value.slice(0, 160)}</span>
-                        </span>
-                      </label>
+                      <div key={key} className={`rounded-lg p-2 ring-1 ${checked ? 'bg-slate-50 ring-slate-200' : 'bg-white ring-slate-100'}`}>
+                        <label className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            onChange={(event) => setReview((current) => current
+                              ? { ...current, picked: { ...current.picked, [key]: event.target.checked } }
+                              : current)}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="text-xs font-bold text-slate-800">{label}</span>
+                            {typed && <span className="ml-1 text-[11px] font-semibold text-amber-700">· replaces what you typed</span>}
+                          </span>
+                        </label>
+                        {long
+                          ? <Textarea
+                              aria-label={`${label} found in the pasted text`}
+                              rows={3}
+                              className="mt-1.5 w-full text-xs"
+                              value={value}
+                              onChange={(event) => setReview((current) => current
+                                ? { ...current, fields: { ...current.fields, [key]: event.target.value } }
+                                : current)}
+                            />
+                          : <Input
+                              aria-label={`${label} found in the pasted text`}
+                              className="mt-1.5 w-full text-xs"
+                              value={value}
+                              onChange={(event) => setReview((current) => current
+                                ? { ...current, fields: { ...current.fields, [key]: event.target.value } }
+                                : current)}
+                            />}
+                      </div>
                     )
                   })}
+
+                  {review.extras.length > 0 && (
+                    <div className="space-y-2 rounded-lg bg-amber-50/60 p-2 ring-1 ring-amber-200">
+                      <div className="text-xs font-bold text-amber-950">
+                        Extra details — new fields for this vacancy
+                      </div>
+                      <p className="text-[11px] font-medium text-amber-900">
+                        These lines had no field of their own. Ticked ones are added to the vacancy as their own fields,
+                        and everyone can read them. Phone numbers and emails are never accepted here.
+                      </p>
+                      {review.extras.map((extra, index) => {
+                        const problem = extraFieldProblem(extra.label, extra.value)
+                        return (
+                          <div key={`${extra.label}-${index}`} className="rounded-lg bg-white p-2 ring-1 ring-amber-200">
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={extra.checked}
+                                onChange={(event) => setReview((current) => current
+                                  ? { ...current, extras: current.extras.map((item, itemIndex) => itemIndex === index ? { ...item, checked: event.target.checked } : item) }
+                                  : current)}
+                              />
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <Input
+                                  aria-label="Field name"
+                                  className="w-full text-xs font-bold"
+                                  value={extra.label}
+                                  onChange={(event) => setReview((current) => current
+                                    ? { ...current, extras: current.extras.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) }
+                                    : current)}
+                                />
+                                <Input
+                                  aria-label={`${extra.label || 'Field'} value`}
+                                  className="w-full text-xs"
+                                  value={extra.value}
+                                  onChange={(event) => setReview((current) => current
+                                    ? { ...current, extras: current.extras.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item) }
+                                    : current)}
+                                />
+                                {extra.checked && problem && <div className="text-[11px] font-semibold text-red-700">{problem}</div>}
+                              </div>
+                              <button
+                                type="button"
+                                aria-label="Remove this field"
+                                className="mt-1 text-xs font-bold text-slate-500 hover:text-red-700"
+                                onClick={() => setReview((current) => current
+                                  ? { ...current, extras: current.extras.filter((_, itemIndex) => itemIndex !== index) }
+                                  : current)}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button type="button" variant="secondary" className="flex-1" onClick={() => setReview(null)}>
@@ -473,7 +580,8 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                     type="button"
                     className="flex-1"
                     onClick={applyReviewedFields}
-                    disabled={!EXTRACTED_FIELDS.some(({ key }) => review.picked[key] === true)}
+                    disabled={!EXTRACTED_FIELDS.some(({ key }) => review.picked[key] === true)
+                      && !review.extras.some((extra) => extra.checked)}
                   >
                     Fill selected values
                   </Button>
@@ -669,9 +777,74 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
             </div>
           )}
         </div>
+        {mode !== 'team' && (
+          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-bold text-slate-900">Extra details</div>
+                <div className="text-xs text-slate-600">
+                  Any field this form does not have — “Territory”, “Joining date”, “Two-wheeler”. Each becomes its own
+                  line on the vacancy and is public. {extraFields.length}/{EXTRA_FIELD_LIMIT} used.
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-3 py-1.5 text-xs"
+                disabled={extraFields.length >= EXTRA_FIELD_LIMIT}
+                onClick={() => setExtraFields((current) => [...current, { label: '', value: '' }])}
+              >
+                ＋ Add field
+              </Button>
+            </div>
+            {extraFields.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {extraFields.map((field, index) => {
+                  const problem = extraFieldProblem(field.label, field.value)
+                  const complete = field.label.trim().length > 0 || field.value.trim().length > 0
+                  return (
+                    <div key={index} className="rounded-lg bg-white p-2 ring-1 ring-slate-200">
+                      <div className="flex items-start gap-2">
+                        <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                          <Input
+                            aria-label={`Extra field ${index + 1} name`}
+                            className="w-full text-xs font-bold"
+                            placeholder="Field name"
+                            value={field.label}
+                            maxLength={40}
+                            onChange={(event) => setExtraFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))}
+                          />
+                          <Input
+                            aria-label={`Extra field ${index + 1} value`}
+                            className="w-full text-xs"
+                            placeholder="Value"
+                            value={field.value}
+                            maxLength={200}
+                            onChange={(event) => setExtraFields((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="shrink-0 px-2.5 py-1.5 text-xs"
+                          aria-label={`Remove ${field.label || 'this field'}`}
+                          onClick={() => setExtraFields((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                      {complete && problem && <div className="mt-1 text-[11px] font-semibold text-red-700">{problem}</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <p className="text-sm font-medium text-slate-700">
           <span className="font-bold">Public to every signed-in user:</span> title, category, city, salary, experience,
-          qualification, age limit, number of vacancies, posted date, HQ entries, division, and the description above.
+          qualification, age limit, number of vacancies, posted date, HQ entries, division, the description above, and
+          every extra detail added here.
           <span className="font-bold"> Locked until an active subscription:</span> company name, manager name, manager
           email, contact number (ABM/ASM), and the optional +91 manager alternate number. Free users see blurred
           placeholders only — those values are never sent to them.

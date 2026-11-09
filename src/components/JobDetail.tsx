@@ -155,6 +155,23 @@ export function JobDetail({
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
+          {(job.extraFields?.length ?? 0) > 0 && (
+            <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">More details</div>
+                <Badge color="slate">Public</Badge>
+              </div>
+              <dl className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {(job.extraFields ?? []).map((field) => (
+                  <div key={field.label} className="min-w-0 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-slate-200">
+                    <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{field.label}</dt>
+                    <dd className="break-words text-sm font-semibold text-slate-900">{field.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
           <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Job description</div>

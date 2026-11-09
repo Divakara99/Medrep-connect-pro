@@ -1,4 +1,5 @@
 import type { JobCategory } from './jobs'
+import { cleanExtraFields, type ExtraField } from './extraFields.ts'
 
 export type VacancyExtraction = Partial<{
   title: string
@@ -402,4 +403,46 @@ export function vacancyDraftFingerprint(fields: Record<string, unknown>): string
     const value = typeof fields[key] === 'string' ? fields[key] as string : ''
     return value.toLowerCase().replace(/\s+/g, ' ').trim()
   }))
+}
+
+/** Labels the fixed form already owns; a line using one of these is not extra. */
+const KNOWN_EXTRA_LABELS = /^(?:company|company\s+name|employer|division|vacancy\s+area|area|location|territory|work\s+location|posting\s+area|headquarters|head\s+office|hqs?|experience|work\s+experience|salary|annual\s+package|package|ctc|pay|qualification|qualifications|education|age|age\s+limit|no\.?\s*of\s+vacancies|number\s+of\s+vacancies|vacancies|openings|positions|job\s+title|title|designation|role|position|manager|manager\s+name|hiring\s+manager|reporting\s+manager|contact|contact\s+person|contact\s+name|contact\s+details|contact\s+number|hr|hr\s+contact|hr\s+manager|recruiter|mobile|mob|phone|tel|telephone|email|e-?mail|whatsapp|description|job\s+description|job\s+profile|role\s+description|job\s+summary|summary|responsibilities|key\s+responsibilities|roles?\s+and\s+responsibilities|duties|alternate|alternate\s+number|alternative|secondary|additional|interested\s+candidates|apply|apply\s+to|note|notes)$/i
+
+/**
+ * Any "Label: value" line the fixed form has no field for — "Territory: Hubballi
+ * North", "Joining: Immediate", "Two-wheeler: Required". The administrator ticks
+ * the ones to keep, and each becomes an extra field on the vacancy.
+ *
+ * Contact details never qualify: every extra field is public, so a line whose
+ * value carries a phone number or an email address is dropped, together with the
+ * long prose lines that a description already covers.
+ */
+export function extractExtraFields(source: string): ExtraField[] {
+  const lines = cleanLines(source)
+  const found: ExtraField[] = []
+  const seenLabels = new Set<string>()
+
+  for (const line of lines) {
+    const match = line.match(/^([\p{L}][\p{L} \p{M}&/().'-]{1,48}?)\s*[:：]\s*(.{1,200})$/u)
+    if (!match) continue
+    const label = cleanValue(match[1])
+    const value = cleanValue(match[2])
+    if (!label || !value) continue
+    if (KNOWN_EXTRA_LABELS.test(label)) continue
+    // A sentence is prose, not a field: six words is already a description.
+    if (label.split(/\s+/).length > 4) continue
+    if (value.split(/\s+/).length > 14) continue
+    if (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(value)) continue
+    if (/\+?\d[\d\s().-]{7,}\d/.test(value)) continue
+    const key = label.toLowerCase()
+    if (seenLabels.has(key)) continue
+    seenLabels.add(key)
+    found.push({
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      value,
+    })
+  }
+
+  // One cap, one shape: the same rules the form saves by.
+  return cleanExtraFields(found)
 }

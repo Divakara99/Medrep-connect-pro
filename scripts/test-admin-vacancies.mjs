@@ -104,7 +104,7 @@ assert.match(admin, /deleteReasonProblem\(duplicateReason\)/, 'duplicate removal
 // ------------------------------------------------------- pasted text is opt-in
 const form = await read('src/components/VacancyForm.tsx')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
-assert.match(form, /setReview\(\{ fields: extracted, picked \}\)/, 'the reader only lists what it found')
+assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')
 assert.match(form, /function applyReviewedFields\(\)/, 'only ticked values are written')
 assert.match(form, /const next = current\.length > 0 \? \[\.\.\.current\] : \[''\]/, 'HQ text never adds a new HQ box')

@@ -3,6 +3,10 @@ import { supabase } from './supabase'
 import { broadcast, publish } from './notifications'
 import { deleteReasonProblem } from './vacancyRules'
 import { matchesCity, matchesHq } from './jobFilters'
+import { cleanExtraFields, type ExtraField } from './extraFields'
+
+export { EXTRA_FIELD_LIMIT, EXTRA_LABEL_MAX, EXTRA_VALUE_MAX, cleanExtraFields, extraFieldProblem } from './extraFields'
+export type { ExtraField } from './extraFields'
 
 export { cityOptions, hqOptions } from './jobFilters'
 
@@ -63,6 +67,8 @@ export type Job = {
   pinned?: boolean
   postedAt: number
   postedBy?: string
+  /** Details beyond the fixed form, shown publicly on the vacancy. */
+  extraFields?: ExtraField[]
 }
 
 const LEGACY_JOBS_KEY = 'mrc_jobs_v1'
@@ -119,7 +125,20 @@ function parseJob(value: unknown): Job | null {
     vacancyCount: typeof row.vacancyCount === 'string' ? row.vacancyCount : undefined,
     pinned: row.pinned === true,
     postedAt: typeof row.postedAt === 'number' ? row.postedAt : 0,
+    extraFields: parseExtraFields(row.extraFields),
   }
+}
+
+/** Reads stored extra fields, dropping anything malformed or too long. */
+function parseExtraFields(value: unknown): ExtraField[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const fields = cleanExtraFields(value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      label: typeof item.label === 'string' ? item.label : '',
+      value: typeof item.value === 'string' ? item.value : '',
+    })))
+  return fields.length > 0 ? fields : undefined
 }
 
 export async function loadVisibleJobs(): Promise<Job[]> {
@@ -179,6 +198,7 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
 const CONTENT_FIELDS: (keyof Job)[] = [
   'title', 'company', 'manager', 'contact', 'managerAltPhone', 'managerEmail',
   'location', 'hq', 'division', 'category', 'salary', 'experience', 'qualification', 'ageLimit', 'vacancyCount', 'description',
+  'extraFields',
 ]
 
 export async function updateJob(id: string, patch: Partial<Job>, options?: { silent?: boolean }): Promise<Job> {
