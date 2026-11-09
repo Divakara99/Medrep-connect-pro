@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Job } from '../data/jobs'
-import { shareJob, shareJobByMessage } from '../data/jobShare'
+import { shareJob, shareJobByMessage, shareJobText, whatsappShareUrl } from '../data/jobShare'
 import { Button } from './ui'
 
-type Notice = 'shared' | 'whatsapp' | 'messages' | 'failed' | null
+type Notice = 'shared' | 'whatsapp' | 'messages' | 'blocked' | 'failed' | null
 
 /** The Android share glyph: three dots joined by lines. */
 function ShareGlyph({ className = 'h-4 w-4' }: { className?: string }) {
@@ -109,6 +109,20 @@ export function ShareJobButton({
             : notice === 'messages'
               ? 'Opened your Messages app — send the message there.'
               : 'Shared — nobody gets the contact details, only the vacancy.'}
+        </p>
+      )}
+      {notice === 'blocked' && (
+        <p className="mt-1.5 text-center text-xs font-semibold text-slate-600">
+          Your browser blocked the new tab.{' '}
+          <a
+            href={whatsappShareUrl(shareJobText(job))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold text-brand-700 underline"
+          >
+            Open WhatsApp
+          </a>
+          {' '}to send it.
         </p>
       )}
       {notice === 'failed' && (

@@ -19,7 +19,7 @@ import { SHARE_TITLE, shareJobText, type ShareableVacancy } from './jobShareText
 export { PLAY_STORE_URL, SHARE_TITLE, shareJobText } from './jobShareText'
 export type { ShareableVacancy } from './jobShareText'
 
-export type ShareResult = 'shared' | 'whatsapp' | 'messages' | 'cancelled' | 'failed'
+export type ShareResult = 'shared' | 'whatsapp' | 'messages' | 'cancelled' | 'blocked' | 'failed'
 
 /** WhatsApp's own share entry point — works on a phone and in WhatsApp Web. */
 export function whatsappShareUrl(text: string): string {
@@ -32,14 +32,17 @@ export function smsShareUrl(text: string): string {
 }
 
 /**
- * Send the reader somewhere they can actually share: try a new tab first (so
- * the app stays open behind it), then this tab if the popup was blocked.
- * Returns false only when neither could be attempted.
+ * Hand the link to another app.
+ *
+ * Inside the Android app, `_system` opens WhatsApp or Messages without touching
+ * the WebView. On the web the link opens in a NEW tab and never replaces the
+ * app: navigating the current tab would take the whole page away from MedRep
+ * Pro — and inside an embedded preview that tab is refused by WhatsApp, leaving
+ * a blank screen. A blocked popup therefore reports `false`; the button then
+ * shows a plain link the reader can tap.
  */
 function openExternal(url: string): boolean {
   if (typeof window === 'undefined') return false
-  // Inside the Android app the WebView must not navigate itself: `_system`
-  // hands the link to the phone, which opens WhatsApp or Messages properly.
   if (Capacitor.isNativePlatform()) {
     try {
       window.open(url, '_system')
@@ -49,14 +52,7 @@ function openExternal(url: string): boolean {
     }
   }
   try {
-    const opened = window.open(url, '_blank', 'noopener,noreferrer')
-    if (opened) return true
-  } catch {
-    // Popup blocked — fall through to navigating this tab.
-  }
-  try {
-    window.location.href = url
-    return true
+    return Boolean(window.open(url, '_blank', 'noopener,noreferrer'))
   } catch {
     return false
   }
@@ -97,13 +93,14 @@ export async function shareJob(job: ShareableVacancy): Promise<ShareResult> {
     }
   }
 
-  // A desktop browser without Web Share: open WhatsApp directly.
+  // A desktop browser without Web Share: open WhatsApp in a new tab. If the
+  // browser blocks that tab, the caller shows a link instead of navigating away.
   if (openExternal(whatsappShareUrl(text))) return 'whatsapp'
 
-  return 'failed'
+  return 'blocked'
 }
 
-/** WhatsApp blocked? Try the phone's Messages app before giving up. */
+/** The Messages app, for anyone who does not use WhatsApp. */
 export function shareJobByMessage(job: ShareableVacancy): ShareResult {
-  return openExternal(smsShareUrl(shareJobText(job))) ? 'messages' : 'failed'
+  return openExternal(smsShareUrl(shareJobText(job))) ? 'messages' : 'blocked'
 }
