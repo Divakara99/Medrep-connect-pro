@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Job } from '../data/jobs'
-import { shareJob } from '../data/jobShare'
+import { shareJob, shareJobByMessage } from '../data/jobShare'
 import { Button } from './ui'
 
-type Notice = 'shared' | 'whatsapp' | 'copied' | 'failed' | null
+type Notice = 'shared' | 'whatsapp' | 'messages' | 'failed' | null
 
 /** The Android share glyph: three dots joined by lines. */
 function ShareGlyph({ className = 'h-4 w-4' }: { className?: string }) {
@@ -62,7 +62,10 @@ export function ShareJobButton({
     if (busy) return
     setBusy(true)
     try {
-      const result = await shareJob(job)
+      // WhatsApp or the system chooser first; if neither could open, fall
+      // straight through to the Messages app. The text is never copied.
+      let result = await shareJob(job)
+      if (result === 'failed') result = shareJobByMessage(job)
       if (result === 'cancelled') return
       setNotice(result)
       if (timer.current !== null) window.clearTimeout(timer.current)
@@ -97,18 +100,20 @@ export function ShareJobButton({
         aria-label="Share this vacancy on WhatsApp or another app"
       >
         <ShareGlyph />
-        <span>{notice === 'copied' ? 'Copied — paste it anywhere' : 'Share this vacancy'}</span>
+        <span>Share this vacancy</span>
       </Button>
-      {(notice === 'shared' || notice === 'whatsapp') && (
+      {(notice === 'shared' || notice === 'whatsapp' || notice === 'messages') && (
         <p className="mt-1.5 text-center text-xs font-semibold text-emerald-700">
           {notice === 'whatsapp'
             ? 'Opened WhatsApp — send the message there.'
-            : 'Shared — the contact details stay in the app.'}
+            : notice === 'messages'
+              ? 'Opened your Messages app — send the message there.'
+              : 'Shared — nobody gets the contact details, only the vacancy.'}
         </p>
       )}
       {notice === 'failed' && (
         <p className="mt-1.5 text-center text-xs font-semibold text-rose-600">
-          Could not open a sharing app on this device. Try again from your phone.
+          No sharing app could be opened on this device. Try again from the phone.
         </p>
       )}
     </div>
