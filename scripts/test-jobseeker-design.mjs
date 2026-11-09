@@ -75,6 +75,11 @@ assert.match(css, /background-clip: text/, 'the gradient wordmark survives on ev
 assert.match(css, /prefers-reduced-motion/, 'motion is still reduced when the device asks for it')
 assert.match(ui, /hero-mesh|rounded-3xl/, 'the shared card sets the surface radius')
 assert.match(ui, /focus:ring-4/, 'fields keep a visible focus ring')
+// Every button owns a surface colour: white-on-white read as plain text.
+assert.match(ui, /secondary:\s*\n\s*'bg-brand-50 text-brand-800 ring-1 ring-brand-200/, 'quiet buttons are tinted, not blank')
+assert.doesNotMatch(ui, /secondary:\s*\n\s*'bg-white/, 'no white-on-white secondary button')
+assert.match(ui, /ghost:\s*\n\s*'bg-slate-100 text-slate-700/, 'ghost buttons also carry a surface')
+assert.match(ui, /bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200/, 'the back arrow is tinted to match')
 assert.match(ui, /--ad-reserve, 0px/, 'sheets still clear the native ads banner')
 
 // 5. Screens use the hero block rather than ad-hoc gradients ------------------

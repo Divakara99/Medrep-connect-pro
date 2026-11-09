@@ -200,7 +200,7 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
             aria-haspopup="dialog"
             aria-expanded={adminMenuOpen}
             onClick={() => setAdminMenuOpen(true)}
-            className="w-10 h-10 shrink-0 rounded-xl bg-white ring-1 ring-slate-200 hover:bg-slate-50 text-slate-700 grid place-items-center transition active:scale-95"
+            className="w-10 h-10 shrink-0 rounded-xl bg-slate-100 ring-1 ring-slate-200 hover:bg-slate-200 text-slate-700 grid place-items-center transition active:scale-95"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h16" />

@@ -23,9 +23,13 @@ export function Button({
   const styles: Record<string, string> = {
     primary:
       'bg-gradient-to-b from-brand-500 to-brand-700 text-white ring-1 ring-brand-700/30 shadow-[0_12px_26px_-14px_rgba(29,78,216,0.95)] hover:to-brand-800',
+    // Every button carries its own surface colour. A white button on a white
+    // card reads as plain text — the user asked for a background that matches
+    // the product, so the quiet variants are tinted rather than blank.
     secondary:
-      'bg-white text-slate-800 ring-1 ring-slate-200 shadow-[0_6px_18px_-14px_rgba(15,23,42,0.6)] hover:bg-slate-50 hover:ring-slate-300',
-    ghost: 'bg-transparent text-slate-700 hover:bg-slate-900/[0.06]',
+      'bg-brand-50 text-brand-800 ring-1 ring-brand-200 shadow-[0_6px_18px_-16px_rgba(29,78,216,0.7)] hover:bg-brand-100 hover:ring-brand-300',
+    ghost:
+      'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80 hover:bg-slate-200 hover:text-slate-900',
     danger:
       'bg-gradient-to-b from-rose-500 to-rose-600 text-white ring-1 ring-rose-700/30 shadow-[0_12px_26px_-16px_rgba(225,29,72,0.9)] hover:to-rose-700',
     accent:
@@ -99,7 +103,7 @@ export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; l
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-white/90 px-3 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-white hover:ring-slate-300 active:scale-95"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-200 hover:ring-slate-300 active:scale-95"
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
         <path d="M15 18l-6-6 6-6" />
