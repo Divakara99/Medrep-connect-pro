@@ -365,7 +365,21 @@ export function PlansScreen({
             return (
               <div
                 key={plan.id}
-                className={`flex flex-col rounded-2xl border p-3 transition ${
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                // The whole box is the target: tapping the price, the days or
+                // anywhere else selects this pass. Clicking it again does not
+                // start a payment — checkout stays on the button, so a mis-tap
+                // can never charge anyone.
+                onClick={() => { if (!isSelected) selectPlan(plan.id) }}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  if (!isSelected) selectPlan(plan.id)
+                }}
+                className={`flex cursor-pointer flex-col rounded-2xl border p-3 transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-100 ${
                   isSelected ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-200' : 'border-slate-200 bg-white hover:border-slate-300'
                 }`}
               >
@@ -394,7 +408,12 @@ export function PlansScreen({
                 <Button
                   variant={isSelected ? 'primary' : 'secondary'}
                   className="mt-3 w-full px-2 py-1.5 text-sm"
-                  onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
+                  onClick={(event) => {
+                    // Handled here, not twice through the box.
+                    event.stopPropagation()
+                    if (isSelected) openCheckout(plan)
+                    else selectPlan(plan.id)
+                  }}
                 >
                   {isSelected ? (unlocked ? 'Renew' : isExpired ? 'Renew' : 'Continue') : 'Select'}
                 </Button>

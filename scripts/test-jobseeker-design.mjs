@@ -53,8 +53,14 @@ assert.match(plans, /One payment · no auto-renew/, 'the list states the terms i
 
 // Each pass is its own plain box: a bordered card in a grid, not a divided list.
 assert.match(plans, /grid grid-cols-2 gap-3 p-3 sm:grid-cols-3/, 'passes sit in a simple box grid')
-assert.match(plans, /flex flex-col rounded-2xl border p-3/, 'every pass is a plain bordered box')
+assert.match(plans, /flex cursor-pointer flex-col rounded-2xl border p-3/, 'every pass is a plain bordered box')
 assert.doesNotMatch(plans, /divide-y divide-slate-100/, 'the single divided list is gone')
+// The whole box is the tap target — not just the small button — but tapping a
+// box that is already selected never starts a payment.
+assert.match(plans, /role="button"[\s\S]{0,220}aria-pressed=\{isSelected\}/, 'each pass box is itself a button')
+assert.match(plans, /onClick=\{\(\) => \{ if \(!isSelected\) selectPlan\(plan\.id\) \}\}/, 'tapping anywhere on a box selects that pass')
+assert.match(plans, /if \(event\.key !== 'Enter' && event\.key !== ' '\) return/, 'the box keyboard-selects with Enter and Space')
+assert.match(plans, /event\.stopPropagation\(\)/, 'the Select button does not double-fire through the box')
 
 // 3. The account page names what a pass is for, quietly -----------------------
 assert.match(account, /Passes &amp; pricing/, 'passes are one tap away in Account')
