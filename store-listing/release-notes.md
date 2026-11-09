@@ -9,6 +9,28 @@ Plain text is rejected with:
 The listing carries two languages, so paste one block per language. Each block
 must be under 500 characters — the text below is ~400.
 
+## 1.0.5 — English (India)
+
+```
+<en-IN>
+• Share any vacancy to WhatsApp in one tap — the message carries the role, city and the Play Store link, never the company name or contact details.
+• Unlock one vacancy's manager contact for ₹5. One payment, no countdown, nothing renews.
+• Jobs can be filtered by city and HQ, and your profile now saves to your account.
+• Passes are plain price boxes; the details open on their own page.
+</en-IN>
+```
+
+## 1.0.5 — Hindi
+
+```
+<hi-IN>
+• किसी भी नौकरी को एक टैप में WhatsApp पर शेयर करें — संदेश में पद, शहर और Play Store लिंक जाता है, कंपनी का नाम या संपर्क नहीं।
+• ₹5 में एक नौकरी का मैनेजर संपर्क खोलें। एक ही भुगतान, कोई समय-सीमा नहीं, कोई नवीनीकरण नहीं।
+• नौकरियाँ शहर और HQ से छाँटें, और आपकी प्रोफ़ाइल अब आपके अकाउंट में सेव होती है।
+• पास अब सादे प्राइस बॉक्स हैं; पूरी जानकारी अपने अलग पेज पर खुलती है।
+</hi-IN>
+```
+
 ## 1.0.4 — English (India)
 
 ```
