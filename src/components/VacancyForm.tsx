@@ -36,34 +36,48 @@ const EXTRACTED_FIELDS: { key: keyof VacancyExtraction; label: string }[] = [
   { key: 'description', label: 'Job description' },
 ]
 
-export function VacancyForm({ job, open, onClose, onSaved, mode = 'admin' }: { job: Job | null; open: boolean; onClose: () => void; onSaved: () => void; mode?: 'admin' | 'team' }) {
-  const [title, setTitle] = useState(job?.title ?? '')
-  const [company, setCompany] = useState(job?.company ?? '')
-  const [manager, setManager] = useState(job?.manager ?? '')
+/**
+ * `seed` fills a brand-new form (no id) with values that came from somewhere
+ * else — the activity log of a deleted vacancy that has no body left to
+ * restore. It never edits an existing vacancy: that is what `job` is for.
+ */
+export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' }: {
+  job: Job | null
+  seed?: Partial<Job>
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+  mode?: 'admin' | 'team'
+}) {
+  // A saved vacancy wins over a seed; both are read-only starting values.
+  const start = job ?? seed ?? null
+  const [title, setTitle] = useState(start?.title ?? '')
+  const [company, setCompany] = useState(start?.company ?? '')
+  const [manager, setManager] = useState(start?.manager ?? '')
   // Mobile fields hold digits only — any formatting already on an older
   // vacancy is dropped here, so what is saved is always a clean number.
-  const [contact, setContact] = useState(() => digitsOnly(job?.contact ?? ''))
-  const [managerAltPhone, setManagerAltPhone] = useState(() => normalizeIndianMobile(job?.managerAltPhone ?? ''))
+  const [contact, setContact] = useState(() => digitsOnly(start?.contact ?? ''))
+  const [managerAltPhone, setManagerAltPhone] = useState(() => normalizeIndianMobile(start?.managerAltPhone ?? ''))
   // Shown inside the field itself (red border + red text), never in a list
   // below the form.
   const [contactError, setContactError] = useState<string | null>(null)
   const [altPhoneError, setAltPhoneError] = useState<string | null>(null)
-  const [managerEmail, setManagerEmail] = useState(job?.managerEmail ?? '')
-  const [location, setLocation] = useState(job?.location ?? '')
+  const [managerEmail, setManagerEmail] = useState(start?.managerEmail ?? '')
+  const [location, setLocation] = useState(start?.location ?? '')
   const [hqEntries, setHqEntries] = useState(() => {
-    const savedEntries = parseHeadquarters(job?.hq)
+    const savedEntries = parseHeadquarters(start?.hq)
     return savedEntries.length > 0 ? savedEntries : ['']
   })
   const [hqError, setHqError] = useState<string | null>(null)
-  const [division, setDivision] = useState(job?.division ?? '')
-  const [category, setCategory] = useState<Exclude<Job['category'], 'All'>>(job?.category ?? 'MR')
-  const [salary, setSalary] = useState(job?.salary ?? '')
-  const [experience, setExperience] = useState(job?.experience ?? '')
-  const [qualification, setQualification] = useState(job?.qualification ?? '')
-  const [ageLimit, setAgeLimit] = useState(job?.ageLimit ?? '')
-  const [vacancyCount, setVacancyCount] = useState(job?.vacancyCount ?? '')
-  const [description, setDescription] = useState(job?.description ?? '')
-  const [pinned, setPinned] = useState(job?.pinned ?? false)
+  const [division, setDivision] = useState(start?.division ?? '')
+  const [category, setCategory] = useState<Exclude<Job['category'], 'All'>>((start?.category as Exclude<Job['category'], 'All'> | undefined) ?? 'MR')
+  const [salary, setSalary] = useState(start?.salary ?? '')
+  const [experience, setExperience] = useState(start?.experience ?? '')
+  const [qualification, setQualification] = useState(start?.qualification ?? '')
+  const [ageLimit, setAgeLimit] = useState(start?.ageLimit ?? '')
+  const [vacancyCount, setVacancyCount] = useState(start?.vacancyCount ?? '')
+  const [description, setDescription] = useState(start?.description ?? '')
+  const [pinned, setPinned] = useState(start?.pinned ?? false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [sourceMode, setSourceMode] = useState<'image' | 'text'>('image')

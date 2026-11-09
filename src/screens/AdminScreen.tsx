@@ -455,6 +455,12 @@ function VacanciesTab({ onMutate, onNotice }: {
   const [deleted, setDeleted] = useState<DeletedVacancy[]>([])
   const [deletedOpen, setDeletedOpen] = useState(false)
   const [undoBusyId, setUndoBusyId] = useState<string | null>(null)
+  // Which deleted vacancy is expanded into a readable preview.
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  // Values carried into the "post it again" form when a tombstone has no body.
+  const [seed, setSeed] = useState<Partial<Job> | null>(null)
+  // Remounts the form so a new seed takes effect.
+  const [formSeq, setFormSeq] = useState(0)
   const legacyCount = getLegacyJobs().length
   const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
   const duplicateReasonProblem = deleteReasonProblem(duplicateReason)
@@ -487,8 +493,17 @@ function VacanciesTab({ onMutate, onNotice }: {
     setUndoBusyId(target.id)
     void (async () => {
       try {
-        await restoreJob(target.id)
-        onNotice(`Restored “${target.title}”. It is live in the app again.`)
+        const restoredTitle = await restoreJob(target.id)
+        // The catalogue and the bin are both re-read: a restore that only
+        // changed the banner would leave the admin looking at the same list.
+        const [list] = await Promise.all([
+          reload().catch(() => null),
+          refreshDeleted(),
+        ])
+        setPreviewId(null)
+        onNotice(
+          `Restored “${restoredTitle || target.title}”. It is live in the app again${list ? ` — ${list.length} vacancies published` : ''}.`,
+        )
         onMutate()
       } catch (cause) {
         onNotice(cause instanceof Error ? cause.message : 'The vacancy could not be restored.', 'warn')
@@ -496,6 +511,20 @@ function VacanciesTab({ onMutate, onNotice }: {
         setUndoBusyId(null)
       }
     })()
+  }
+
+  /** Opens the post form with what the activity log remembers, for a tombstone
+   *  that has no body left to restore. */
+  function postAgain(item: DeletedVacancy) {
+    setEditing(null)
+    setSeed({
+      title: item.title === 'Deleted vacancy' ? '' : item.title,
+      company: item.company,
+      location: item.location,
+      category: (item.category || 'MR') as Job['category'],
+    })
+    setFormSeq((value) => value + 1)
+    setOpen(true)
   }
 
   /** Re-reads the catalogue from the database and returns what is left. */
@@ -593,14 +622,19 @@ function VacanciesTab({ onMutate, onNotice }: {
 
   function openNew() {
     setEditing(null)
+    setSeed(null)
+    setFormSeq((value) => value + 1)
     setOpen(true)
   }
   function openEdit(j: Job) {
     setEditing(j)
+    setSeed(null)
+    setFormSeq((value) => value + 1)
     setOpen(true)
   }
   function onSaved() {
     setOpen(false)
+    setSeed(null)
     onNotice(editing ? `Saved changes to “${editing.title}”.` : 'Vacancy posted.')
     onMutate()
   }
@@ -691,8 +725,9 @@ function VacanciesTab({ onMutate, onNotice }: {
         </div>
       </Card>
 
-      {/* The bin. A delete can always be undone, so a wrong tap (or a whole
-          run of duplicates) is recoverable without re-typing the vacancy. */}
+      {/* The bin. Every delete is listed, can be read in full, and can be
+          brought back — except the tombstones from before the row was kept,
+          which say so instead of offering an Undo that cannot work. */}
       {deleted.length > 0 && (
         <Card className="overflow-hidden p-0">
           <button
@@ -701,41 +736,117 @@ function VacanciesTab({ onMutate, onNotice }: {
             aria-expanded={deletedOpen}
             className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-slate-50"
           >
-            <span className="text-sm font-bold text-slate-900">🗑 Deleted ({deleted.length})</span>
-            <span className="text-xs font-semibold text-slate-500">{deletedOpen ? 'Hide' : 'Show · undo a delete'}</span>
+            <span className="text-sm font-bold text-slate-900">🗑 Deleted vacancies ({deleted.length})</span>
+            <span className="text-xs font-semibold text-slate-500">
+              {deletedOpen ? 'Hide' : `Show · ${deleted.filter((item) => item.recoverable).length} can be restored`}
+            </span>
           </button>
           {deletedOpen && (
             <div className="divide-y divide-slate-100 border-t border-slate-100">
-              {deleted.map((item) => (
-                <div key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
-                    {(item.company || item.location) && (
-                      <div className="truncate text-xs text-slate-600">{[item.company, item.location].filter(Boolean).join(' · ')}</div>
-                    )}
-                    <div className="text-xs text-slate-500">
-                      {item.deletedAt
-                        ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
-                        : 'Deleted'}
-                      {' · '}{item.deleteReason || 'No reason recorded'}
+              {deleted.map((item) => {
+                const open = previewId === item.id
+                return (
+                  <div key={item.id} className="px-4 py-3">
+                    <div className="flex flex-wrap items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
+                        <div className="truncate text-xs text-slate-600">
+                          {[item.company, item.location, item.category].filter(Boolean).join(' · ') || 'No details recorded'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {item.deletedAt
+                            ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
+                            : 'Deleted'}
+                          {' · '}{item.deleteReason || 'No reason recorded'}
+                          {item.deletedBy ? ` · by ${item.deletedBy}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          variant="ghost"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => setPreviewId(open ? null : item.id)}
+                        >
+                          {open ? 'Hide' : '👁 Preview'}
+                        </Button>
+                        {item.recoverable ? (
+                          <Button
+                            variant="secondary"
+                            className="px-3 py-1.5 text-xs"
+                            disabled={undoBusyId === item.id}
+                            onClick={() => undoDelete(item)}
+                          >
+                            {undoBusyId === item.id ? 'Restoring…' : '↩ Restore'}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            className="px-3 py-1.5 text-xs"
+                            onClick={() => postAgain(item)}
+                          >
+                            Post it again
+                          </Button>
+                        )}
+                      </div>
                     </div>
+
+                    {open && (
+                      <div className="mt-2 space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                        <dl className="grid grid-cols-2 gap-2 text-xs">
+                          {[
+                            ['Title', item.title],
+                            ['Company', item.company],
+                            ['City', item.location],
+                            ['Category', item.category],
+                            ['Salary', item.salary ?? ''],
+                            ['Experience', item.experience ?? ''],
+                            ['Qualification', item.qualification ?? ''],
+                            ['Age limit', item.ageLimit ?? ''],
+                            ['Vacancies', item.vacancyCount ?? ''],
+                            ['Posted', item.postedAt ? new Date(item.postedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : ''],
+                          ]
+                            .filter(([, value]) => Boolean(value))
+                            .map(([label, value]) => (
+                              <div key={label} className="min-w-0">
+                                <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</dt>
+                                <dd className="truncate font-semibold text-slate-900">{value}</dd>
+                              </div>
+                            ))}
+                        </dl>
+                        {item.description && (
+                          <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-xs text-slate-700 ring-1 ring-slate-200">
+                            {item.description}
+                          </p>
+                        )}
+                        {item.recoverable ? (
+                          <p className="text-xs font-semibold text-emerald-800">
+                            Everything above is still stored. Restore puts it back exactly as it was.
+                          </p>
+                        ) : (
+                          <p className="text-xs font-semibold text-amber-900">
+                            {item.detailsFromAudit
+                              ? 'Only the deletion was recorded for this vacancy — the rest was never kept, so it cannot be restored. “Post it again” opens the form with the title, company, city and category from the activity log.'
+                              : 'Only the deletion was recorded for this vacancy, so it cannot be restored. “Post it again” opens a fresh form.'}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    variant="secondary"
-                    className="shrink-0 px-3 py-1.5 text-sm"
-                    disabled={undoBusyId === item.id}
-                    onClick={() => undoDelete(item)}
-                  >
-                    {undoBusyId === item.id ? 'Restoring…' : '↩ Undo'}
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Card>
       )}
 
-      <VacancyForm key={editing?.id ?? 'new'} job={editing} open={open} onClose={() => setOpen(false)} onSaved={onSaved} />
+      <VacancyForm
+        key={`${editing?.id ?? 'new'}-${formSeq}`}
+        job={editing}
+        seed={seed ?? undefined}
+        open={open}
+        onClose={() => { setOpen(false); setSeed(null) }}
+        onSaved={onSaved}
+      />
 
       <Modal open={!!deleteTarget} onClose={() => { setDeleteTarget(null); setDeleteReason('') }} title="Delete vacancy">
         {deleteTarget && (

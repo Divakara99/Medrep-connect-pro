@@ -114,9 +114,9 @@ assert.doesNotMatch(form, /if \(fields\.hq\?\.trim\(\)\) \{\s*const entries = pa
 // The panel offers Undo twice: in the banner right after a delete, and per row
 // in the Deleted list.
 assert.match(admin, /label: '↩ Undo', run: \(\) => undoDelete\(target\)/, 'the delete banner carries an Undo action')
-assert.match(admin, /Deleted \(\{deleted\.length\}\)/, 'the Vacancies tab lists what was deleted')
-assert.match(admin, /\{undoBusyId === item\.id \? 'Restoring…' : '↩ Undo'\}/, 'each deleted vacancy has its own Undo')
-assert.match(admin, /await restoreJob\(target\.id\)/, 'Undo restores through the database helper')
+assert.match(admin, /Deleted vacancies \(\{deleted\.length\}\)/, 'the Vacancies tab lists what was deleted')
+assert.match(admin, /\{undoBusyId === item\.id \? 'Restoring…' : '↩ Restore'\}/, 'each deleted vacancy has its own Restore')
+assert.match(admin, /const restoredTitle = await restoreJob\(target\.id\)/, 'Undo restores through the database helper')
 assert.match(admin, /action\?: \{ label: string; run: \(\) => void \}/, 'the notice can carry one action')
 
 // ------------------------------------------------- the list reads as a table
