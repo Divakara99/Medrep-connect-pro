@@ -4,6 +4,8 @@ import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
 import { MyRequests } from '../components/MyRequests'
 import { ApplicationsScreen } from './ApplicationsScreen'
+import { AboutPage } from './AboutPage'
+import { HelpPage } from './HelpPage'
 import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
@@ -20,6 +22,7 @@ export function AccountScreen({
   onProfileSaved,
   onResumeChange,
   onBrowseJobs,
+  onViewPasses,
 }: {
   user: User
   onLogout: () => void
@@ -27,12 +30,16 @@ export function AccountScreen({
   onProfileSaved: (profile: Profile) => void
   onResumeChange: (resume: ResumeRecord | null) => void
   onBrowseJobs: () => void
+  /** Passes live one tap away, quietly — the account page is not a shop window. */
+  onViewPasses: () => void
 }) {
   const unlocked = isSubscribed(user)
   const editorRef = useRef<ProfileEditorHandle>(null)
   // "My applications" opens as its own page over this one, so the phone's back
   // button (and its Back button) return here.
   const [applicationsOpen, setApplicationsOpen] = useState(false)
+  // Long text gets a page of its own; the card stays a summary.
+  const [infoPage, setInfoPage] = useState<'about' | 'help' | null>(null)
   /**
    * Hidden ad diagnostics (Android only), opened by tapping the version badge
    * five times.
@@ -71,6 +78,9 @@ export function AccountScreen({
     taps.timer = window.setTimeout(() => { taps.count = 0 }, 1500)
   }
 
+  if (infoPage === 'about') return <AboutPage onClose={() => setInfoPage(null)} />
+  if (infoPage === 'help') return <HelpPage onClose={() => setInfoPage(null)} />
+
   if (applicationsOpen) {
     return (
       <ApplicationsScreen
@@ -82,12 +92,12 @@ export function AccountScreen({
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-24 space-y-4">
-      <Card className="p-4 flex items-center gap-3">
-        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white grid place-items-center text-xl font-bold">
+      <Card className="hairline flex items-center gap-3.5 bg-gradient-to-br from-white to-brand-50/60 p-4">
+        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-700 text-2xl font-extrabold text-white shadow-[0_16px_30px_-18px_rgba(29,78,216,0.95)] ring-1 ring-white/50">
           {user.name.slice(0, 1).toUpperCase()}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-extrabold text-slate-900 truncate">{user.name}</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-lg font-extrabold tracking-tight text-slate-900">{user.name}</div>
           <div className="text-xs text-slate-500 truncate">{user.email}</div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge color="brand">Job Seeker</Badge>
@@ -101,7 +111,7 @@ export function AccountScreen({
       </Card>
 
       <Card className="p-4">
-        <h2 className="font-bold text-slate-900">Subscription validity</h2>
+        <h2 className="font-bold text-slate-900">Contact access</h2>
         {unlocked && user.subscribedUntil ? (
           <>
             {/* The validity date itself is shown in green so it is unmissable. */}
@@ -113,7 +123,9 @@ export function AccountScreen({
             </p>
           </>
         ) : (
-          <p className="text-xs text-slate-700 mt-1">{isAndroidApp() ? 'No active plan. Choose a plan to see pricing and pay with Google Play.' : 'No active plan. Choose a plan to see pricing and pay inside Razorpay Checkout.'}</p>
+          <p className="text-sm text-slate-600 mt-1">
+            Browsing vacancies is free for everyone. A pass is only needed for the manager&apos;s name, email and phone number.
+          </p>
         )}
       </Card>
 
@@ -138,6 +150,18 @@ export function AccountScreen({
         </Button>
       </Card>
 
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-slate-900">Passes &amp; pricing</div>
+          <div className="text-xs text-slate-600">
+            {isAndroidApp() ? 'Google Play prices, shown when you choose a pass.' : 'Razorpay / UPI prices, shown when you choose a pass.'}
+          </div>
+        </div>
+        <Button variant="secondary" className="shrink-0" onClick={onViewPasses}>
+          🎫 View passes
+        </Button>
+      </Card>
+
       <MyRequests />
 
       {/* About card: same brand mark that ships as the PWA icon, plus the
@@ -159,6 +183,17 @@ export function AccountScreen({
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
             <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
+        </div>
+        {/* The paragraphs behind this card live on their own pages. */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <Button variant="secondary" className="w-full justify-start" onClick={() => setInfoPage('about')}>
+            <span aria-hidden="true">ℹ️</span>
+            <span>About MedRep Connect Pro</span>
+          </Button>
+          <Button variant="secondary" className="w-full justify-start" onClick={() => setInfoPage('help')}>
+            <span aria-hidden="true">❓</span>
+            <span>Help &amp; how it works</span>
+          </Button>
         </div>
       </Card>
 

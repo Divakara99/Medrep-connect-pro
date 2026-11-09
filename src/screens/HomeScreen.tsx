@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react'
 import type { UnlockStage } from '../data/adConfig'
-import { Badge, Button, Card, Input, Select } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Select } from '../components/ui'
 import { CreatorCredit } from '../components/CreatorCredit'
+import { AboutPage } from './AboutPage'
 import { JobCard } from '../components/JobCard'
-import { CATEGORIES, filterJobs, jobStats, sortedJobs, type Job, type JobCategory } from '../data/jobs'
+import { CATEGORIES, cityOptions, filterJobs, hqOptions, jobStats, sortedJobs, type Job, type JobCategory } from '../data/jobs'
 import type { User } from '../data/auth'
 import { isSubscribed } from '../data/auth'
 import { CREATOR } from '../data/creator'
 
 const EXP_OPTIONS = ['All', 'Fresher', '0–2 years', '2–5 years', '5+ years']
-const SALARY_OPTIONS = ['All', 'Under ₹2 LPA', '₹2–4 LPA', '₹4–7 LPA', '₹7–12 LPA', '₹12 LPA+']
 
 export function HomeScreen({
   user,
@@ -27,17 +27,25 @@ export function HomeScreen({
   unlockStage?: UnlockStage | null
 }) {
   const [query, setQuery] = useState('')
-  const [location, setLocation] = useState('')
+  const [city, setCity] = useState('All')
+  const [hq, setHq] = useState('All')
   const [category, setCategory] = useState<JobCategory>('All')
   const [experience, setExperience] = useState('All')
-  const [salary, setSalary] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const unlocked = isSubscribed(user)
 
   const stats = useMemo(() => jobStats(jobs), [jobs])
+  const cities = useMemo(() => cityOptions(jobs), [jobs])
+  const headquarters = useMemo(() => hqOptions(jobs), [jobs])
 
   const list = useMemo(() => {
-    let filtered = filterJobs(jobs, { query, category, location })
+    let filtered = filterJobs(jobs, {
+      query,
+      category,
+      city: city === 'All' ? '' : city,
+      hq: hq === 'All' ? '' : hq,
+    })
     if (experience !== 'All') {
       filtered = filtered.filter((j) => {
         const e = (j.experience || '').toLowerCase()
@@ -48,159 +56,213 @@ export function HomeScreen({
         return true
       })
     }
-    if (salary !== 'All') {
-      filtered = filtered.filter((j) => {
-        const s = j.salary || ''
-        // crude LPA-based parse
-        const nums = s.replace(/[^\d.\-–]/g, '').split(/[-–]/).map(Number).filter((n) => !isNaN(n))
-        if (nums.length === 0) return false
-        const min = Math.min(...nums)
-        const max = Math.max(...nums)
-        if (salary === 'Under ₹2 LPA') return max < 2
-        if (salary === '₹2–4 LPA') return max >= 2 && min < 4
-        if (salary === '₹4–7 LPA') return max >= 4 && min < 7
-        if (salary === '₹7–12 LPA') return max >= 7 && min < 12
-        if (salary === '₹12 LPA+') return max >= 12
-        return true
-      })
-    }
     return sortedJobs(filtered)
-  }, [jobs, query, category, location, experience, salary])
+  }, [jobs, query, category, experience, city, hq])
 
   function clearFilters() {
-    setQuery(''); setLocation(''); setCategory('All'); setExperience('All'); setSalary('All')
+    setQuery(''); setCity('All'); setHq('All'); setCategory('All'); setExperience('All')
   }
 
   const activeFilterCount =
     (category !== 'All' ? 1 : 0) +
     (experience !== 'All' ? 1 : 0) +
-    (salary !== 'All' ? 1 : 0) +
-    (location.trim() ? 1 : 0)
+    (city !== 'All' ? 1 : 0) +
+    (hq !== 'All' ? 1 : 0)
+
+  const firstName = user.name.trim().split(' ')[0] || 'there'
+
+  if (aboutOpen) return <AboutPage onClose={() => setAboutOpen(false)} />
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-4">
-      {/* Hero — compact blue card (kept at half height; name highlighted) */}
-      <Card className="p-3 bg-gradient-to-br from-brand-600 to-brand-800 text-white border-0 relative overflow-hidden">
-        <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-white/5 blur-2xl" />
-        <div className="flex items-center justify-between gap-2 relative flex-wrap">
-          <div className="text-[9px] font-bold uppercase tracking-widest text-brand-100">India's 1st Pharma-Job Network</div>
+    <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-4">
+      {/* Hero — one deep gradient block with the greeting, the live counts and
+          the founder credit, so the first screen answers "what is this?" at a
+          glance. No plan promotion here: the feed is about jobs. */}
+      <section className="hero-mesh hairline relative overflow-hidden rounded-[28px] px-5 py-5 text-white shadow-[0_28px_60px_-34px_rgba(23,37,84,0.95)]">
+        <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full border border-white/15" />
+        <div aria-hidden className="pointer-events-none absolute -right-6 -top-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
+
+        <div className="relative flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90 ring-1 ring-white/25">
+            <span aria-hidden>✦</span> India&apos;s pharma job network
+          </span>
           <CreatorCredit variant="dark" size="sm" />
         </div>
-        <h1 className="text-lg sm:text-xl font-extrabold mt-1 leading-tight">
-          Hello,{' '}
-          <mark className="bg-amber-300 text-slate-900 rounded-md px-1.5 py-0.5 font-extrabold">
-            {user.name.split(' ')[0]}
-          </mark>{' '}
-          👋
-        </h1>
-        <p className="text-[11px] sm:text-xs text-brand-100/90 mt-1 leading-snug">
-          Find your next MR / ABM role — MR vacancies pinned first, plus multi-industry jobs across India.
-        </p>
-        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[10px] font-semibold text-brand-100">
-          <span className="rounded-full bg-white/10 px-2 py-1 ring-1 ring-white/20">{stats.total} live jobs</span>
-          <span className="rounded-full bg-white/10 px-2 py-1 ring-1 ring-white/20">{stats.mr} MR roles</span>
-          <span className="rounded-full bg-white/10 px-2 py-1 ring-1 ring-white/20">{stats.pinned} pinned</span>
-        </div>
-      </Card>
 
-      {/* Search */}
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <Input
-            className="min-w-0 flex-1"
-            placeholder="Search job title, company, skill…"
+        <h1 className="relative mt-3 text-2xl font-extrabold leading-tight sm:text-3xl">
+          Hi{' '}
+          <span className="rounded-xl bg-amber-300 px-2 py-0.5 text-slate-900 shadow-sm">{firstName}</span>{' '}
+          <span aria-hidden>👋</span>
+        </h1>
+        <p className="relative mt-1.5 max-w-md text-sm leading-relaxed text-white/80">
+          MR and ABM roles come first, then genuine openings of every kind across India.
+        </p>
+
+        <div className="relative mt-4 grid grid-cols-3 gap-2">
+          {[
+            { value: stats.total, label: 'live jobs' },
+            { value: stats.mr, label: 'MR roles' },
+            { value: stats.pinned, label: 'pinned' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-2xl bg-white/10 px-3 py-2 ring-1 ring-white/20 backdrop-blur-sm">
+              <div className="text-xl font-extrabold leading-none">{item.value}</div>
+              <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/75">{item.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Search + filters live in one floating sheet. */}
+      <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-2 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.6)]">
+        <div className="flex items-center gap-1.5">
+          <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-700">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.2-3.2" />
+            </svg>
+          </span>
+          <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search role, company, city…"
+            aria-label="Search vacancies"
+            className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-base font-medium text-slate-900 outline-none placeholder:text-slate-400"
           />
-          <Button variant="secondary" className="shrink-0" onClick={() => setShowFilters((v) => !v)}>
-            🎛 Filters{activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold">{activeFilterCount}</span>}
+          <Button
+            variant={showFilters || activeFilterCount > 0 ? 'primary' : 'secondary'}
+            className="shrink-0 px-3"
+            aria-expanded={showFilters}
+            onClick={() => setShowFilters((v) => !v)}
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 5h16l-6.4 7.5V19l-3.2 1.6v-8.1L4 5Z" />
+            </svg>
+            <span className="hidden sm:inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-extrabold text-brand-700">
+                {activeFilterCount}
+              </span>
+            )}
           </Button>
         </div>
+
         {showFilters && (
-          <Card className="p-3 space-y-2 animate-fade-in">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <Input placeholder="Location (city)" value={location} onChange={(e) => setLocation(e.target.value)} />
-              </div>
-              <div>
-                <Select value={category} onChange={(e) => setCategory(e.target.value as JobCategory)}>
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </Select>
-              </div>
-              <div>
-                <Select value={experience} onChange={(e) => setExperience(e.target.value)}>
-                  {EXP_OPTIONS.map((e) => <option key={e} value={e}>Exp: {e}</option>)}
-                </Select>
-              </div>
-              <div>
-                <Select value={salary} onChange={(e) => setSalary(e.target.value)}>
-                  {SALARY_OPTIONS.map((s) => <option key={s} value={s}>Salary: {s}</option>)}
-                </Select>
-              </div>
+          <div className="mt-2 space-y-3 border-t border-slate-100 px-1 pb-1 pt-3 animate-fade-in">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Select aria-label="Filter by city" value={city} onChange={(e) => setCity(e.target.value)}>
+                <option value="All">City: All</option>
+                {cities.map((c) => <option key={c} value={c}>City: {c}</option>)}
+              </Select>
+              <Select aria-label="Filter by HQ" value={hq} onChange={(e) => setHq(e.target.value)}>
+                <option value="All">HQ: All</option>
+                {headquarters.map((h) => <option key={h} value={h}>HQ: {h}</option>)}
+              </Select>
+              <Select aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value as JobCategory)}>
+                {CATEGORIES.map((c) => <option key={c} value={c}>Category: {c}</option>)}
+              </Select>
+              <Select aria-label="Filter by experience" value={experience} onChange={(e) => setExperience(e.target.value)}>
+                {EXP_OPTIONS.map((e) => <option key={e} value={e}>Exp: {e}</option>)}
+              </Select>
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="ghost" onClick={clearFilters}>Clear all</Button>
+            {cities.length === 0 && headquarters.length === 0 && (
+              <p className="px-1 text-xs font-semibold text-slate-500">
+                City and HQ choices appear once vacancies are published.
+              </p>
+            )}
+            <div className="flex justify-end">
+              <Button variant="ghost" className="px-3 py-1.5 text-sm" onClick={clearFilters}>Clear all</Button>
             </div>
-          </Card>
+          </div>
         )}
       </div>
 
       {/* Category chips */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {CATEGORIES.map((c) => {
           const active = category === c
           return (
             <button
               key={c}
               onClick={() => setCategory(c)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
+              aria-pressed={active}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition ${
                 active
-                  ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/30'
-                  : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50'
+                  ? 'bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-[0_10px_22px_-14px_rgba(29,78,216,0.95)] ring-1 ring-brand-700/30'
+                  : 'bg-white/90 text-slate-700 ring-1 ring-slate-200 hover:bg-white hover:ring-slate-300'
               }`}
             >
-              {c === 'MR' && '💊 '}
-              {c === 'ABM' && '🎯 '}
-              {c === 'All' && '🌐 '}
+              {c === 'MR' && <span aria-hidden>💊 </span>}
+              {c === 'ABM' && <span aria-hidden>🎯 </span>}
+              {c === 'All' && <span aria-hidden>🌐 </span>}
               {c}
             </button>
           )
         })}
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-900">
-          {category === 'All' ? 'MR-first feed' : `${category} jobs`}
-        </h2>
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-extrabold tracking-tight text-slate-900">
+            {category === 'All' ? 'Recommended for you' : `${category} openings`}
+          </h2>
+          <p className="text-xs font-semibold text-slate-500">
+            {category === 'All' ? 'MR roles pinned first' : 'Newest first'}
+          </p>
+        </div>
         <Badge color="brand">{list.length} roles</Badge>
       </div>
 
       <div className="space-y-3">
         {list.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-slate-500">
-            {jobs.length === 0 ? 'No vacancies published yet. Please check back later.' : 'No jobs match your filters.'}
-            <div className="mt-2">
+          <Card className="p-6">
+            <EmptyState
+              icon="🗂"
+              title={jobs.length === 0 ? 'No vacancies published yet' : 'Nothing matches these filters'}
+              subtitle={jobs.length === 0 ? 'New openings are posted every week — check back soon.' : 'Try a wider city, HQ, category or experience.'}
+            />
+            <div className="flex justify-center">
               <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
             </div>
           </Card>
         ) : (
-          list.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockStage={unlockingJobId === j.id ? unlockStage : null} />)
+          list.map((j) => (
+            <JobCard
+              key={j.id}
+              job={j}
+              unlocked={unlocked}
+              onClick={() => onOpenJob(j)}
+              onWatchUnlock={onWatchUnlock}
+              unlockStage={unlockingJobId === j.id ? unlockStage : null}
+            />
+          ))
         )}
       </div>
 
-      {/* Footer credit — prominent but quiet: a single amber band at the end of
-          the feed, repeated nowhere else on this screen. */}
-      <footer className="pt-3 pb-2">
-        <div className="rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 ring-1 ring-amber-200 px-4 py-3 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">App created by</div>
-          <div className="mt-0.5 text-base sm:text-lg font-extrabold text-slate-900">
-            Mr. {CREATOR.name}
-          </div>
-          <div className="text-[11px] font-semibold text-amber-800 mt-0.5">{CREATOR.role}</div>
+      {/* Founder credit — one quiet card at the end of the feed. */}
+      <footer className="pt-2">
+        <div className="rounded-3xl bg-white/80 px-4 py-4 text-center ring-1 ring-slate-200/80 backdrop-blur-sm">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">App created by</div>
+          <div className="mt-1 text-lg font-extrabold tracking-tight text-slate-900">Mr. {CREATOR.name}</div>
+          <div className="text-sm font-semibold text-brand-700">{CREATOR.role}</div>
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            className="mt-2 text-xs font-bold text-brand-700 underline underline-offset-4"
+          >
+            Read more about the app
+          </button>
         </div>
-        <p className="mt-2 text-center text-[11px] text-slate-400">
-          MedRep Connect Pro · {CREATOR.tagline}
-        </p>
+        <p className="mt-3 text-center text-xs text-slate-500">MedRep Connect Pro · {CREATOR.tagline}</p>
       </footer>
     </div>
   )

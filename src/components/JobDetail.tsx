@@ -6,7 +6,9 @@ import { normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
-import { useUnlockWindow } from './useUnlockWindow'
+import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
+import { jobUnlockLabel } from '../data/jobUnlock'
+import { ShareJobButton } from './ShareJobButton'
 
 function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
   const email = (job.managerEmail || '').trim()
@@ -36,14 +38,14 @@ function SensitiveValue({ label, value, plus = false }: { label: string; value: 
   const [revealed, setRevealed] = useState(false)
   if (!value) {
     return (
-      <div className="rounded-xl ring-1 ring-slate-200 p-3">
+      <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
         <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
         <div className="text-sm font-semibold text-slate-400">—</div>
       </div>
     )
   }
   return (
-    <div className="rounded-xl ring-1 ring-slate-200 p-3">
+    <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
       <button
         type="button"
@@ -87,6 +89,7 @@ export function JobDetail({
   onApply,
   onWatchUnlock,
   unlockStage = null,
+  paidUnlock,
 }: {
   job: Job | null
   /** Subscription flag ONLY — a company unlock must never set this. */
@@ -97,11 +100,21 @@ export function JobDetail({
   /** Android app, free users only: rewarded video for the company name. */
   onWatchUnlock?: (job: Job) => void
   unlockStage?: UnlockStage | null
+  /**
+   * The ₹5 single-job unlock — same price on the website and in the app.
+   * `available` is false inside the app, where the rewarded video is the free
+   * path and Razorpay is never opened.
+   */
+  paidUnlock?: { available: boolean; busy: boolean; onBuy: (job: Job) => void }
 }) {
   // Per-job company unlock (rewarded video), separate from subscription — and
   // time-limited, so it is re-checked against the clock while the sheet is open.
   const unlockWindow = useUnlockWindow(job ?? { companyUnlocked: false, unlockExpiresAt: undefined })
   const companyUnlocked = Boolean(job && (unlocked || unlockWindow.active))
+  // The paid ₹5 window reveals the whole contact block for this one job, so it
+  // behaves like a pass for this sheet — and only for this sheet.
+  const paidWindow = usePaidUnlockWindow(job ?? { jobUnlocked: false, jobUnlockExpiresAt: undefined })
+  const fullDetails = Boolean(job && (unlocked || paidWindow.active))
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
   const hqItems = job ? parseHeadquarters(job.hq) : []
@@ -142,7 +155,7 @@ export function JobDetail({
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
-          <div className="rounded-xl ring-1 ring-slate-200 p-3">
+          <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Job description</div>
               <Badge color="slate">Public</Badge>
@@ -161,11 +174,11 @@ export function JobDetail({
             )}
           </div>
 
-          <div className="rounded-xl ring-1 ring-slate-200 p-3">
+          <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               Hiring company & contact
             </div>
-            {!unlocked && companyUnlocked ? (
+            {!fullDetails && companyUnlocked ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <SensitiveValue label="Company name" value={job.company} />
@@ -175,13 +188,10 @@ export function JobDetail({
                   <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">
-                  Company name unlocked by video ✓ — visible for {unlockWindow.label} more. Watch another video
-                  when it lapses to open it again. Manager name, email and phone numbers still wait for an
-                  active subscription. City, HQ, division, salary, experience, posted date and the description
-                  above stay visible to everyone.
+                  Company name open ✓ for {unlockWindow.label} more. Contacts still need a pass.
                 </p>
               </>
-            ) : !unlocked ? (
+            ) : !fullDetails ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <LockedValue label="Company name" placeholder="Hidden Pharma Pvt Ltd" />
@@ -191,8 +201,7 @@ export function JobDetail({
                   <LockedValue label="Manager alternate number" placeholder="+91 80000 00000" />
                 </div>
                 <p className="mt-2 text-xs text-slate-600">
-                  Only these five details wait for an active subscription. City, HQ, division, salary, experience,
-                  posted date and the description above stay visible to everyone.
+                  Only these five wait for a pass. Everything else is free.
                 </p>
               </>
             ) : (
@@ -207,22 +216,54 @@ export function JobDetail({
             )}
           </div>
 
-          {!unlocked ? (
+          {paidWindow.active && (
+            <p className="text-center text-xs font-bold text-emerald-700">
+              {job.jobUnlockExpiresAt
+                ? `Full contact unlocked for this job · ${paidWindow.label} left`
+                : 'Full contact unlocked for this job — it stays open'}
+            </p>
+          )}
+          {!fullDetails ? (
             <>
               {!companyUnlocked && onWatchUnlock && (
                 <Button className="w-full" variant="secondary" disabled={unlockStage !== null} onClick={() => onWatchUnlock(job)}>
                   {unlockButtonLabel(unlockStage)}
                 </Button>
               )}
-              <Button className="w-full" variant="accent" onClick={onSubscribe}>
-                💎 Subscribe to unlock & apply
+              {paidUnlock?.available && (
+                <>
+                  <Button
+                    className="w-full"
+                    disabled={paidUnlock.busy}
+                    onClick={() => paidUnlock.onBuy(job)}
+                  >
+                    {paidUnlock.busy ? 'Opening secure checkout…' : `🔓 ${jobUnlockLabel()}`}
+                  </Button>
+                  <p className="text-center text-xs font-medium text-slate-500">
+                    ₹5 opens this one job's manager name, email and phone numbers — kept for that job, not for an hour. One payment, nothing renews.
+                  </p>
+                </>
+              )}
+              {/* Quiet by design: a pass is one way to see the contact, not
+                  the pitch of the screen. The job itself is the subject. */}
+              <Button className="w-full" variant="secondary" onClick={onSubscribe}>
+                🔓 Unlock manager contact
               </Button>
+              <p className="text-center text-xs font-medium text-slate-500">
+                {paidUnlock?.available
+                  ? 'Or open every job with a pass.'
+                  : 'Contact details need a pass.'}
+              </p>
             </>
           ) : (
             <Button className="w-full" onClick={() => onApply(job)}>
               {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}
             </Button>
           )}
+          <ShareJobButton job={job} />
+          <p className="text-center text-xs font-medium text-slate-500">
+            Sharing sends the role, city, HQ and the Play Store link — never the company name or contact details.
+          </p>
           <Button variant="ghost" className="w-full" onClick={onClose}>
             Close
           </Button>
@@ -234,7 +275,7 @@ export function JobDetail({
 
 function Field({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) {
   return (
-    <div className="rounded-xl ring-1 ring-slate-200 p-3">
+    <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
       <div className={`text-sm font-semibold text-slate-900 ${multiline ? 'whitespace-pre-line break-words' : 'truncate'}`}>{value}</div>
     </div>

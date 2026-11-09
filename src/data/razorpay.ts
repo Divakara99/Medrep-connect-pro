@@ -113,6 +113,44 @@ export function verifyRazorpayPayment(input: RazorpayCheckoutResponse): Promise<
   })
 }
 
+export type JobUnlockOrder = {
+  ok: true
+  jobId: string
+  jobTitle: string
+  orderId: string
+  amount: number
+  currency: 'INR'
+  keyId: string
+  minutes: number
+}
+
+export type JobUnlockVerification = {
+  ok: boolean
+  jobId?: string
+  /** null when the unlock is permanent for that job (the normal case now). */
+  expiresAt?: string | null
+  permanent?: boolean
+  alreadyConfirmed?: boolean
+  message?: string
+  paymentStatus?: string
+}
+
+/**
+ * One job, ₹5, unlocked for good. The price comes from the Edge Function and
+ * the database — this call only names the job.
+ */
+export function createJobUnlockOrder(jobId: string): Promise<JobUnlockOrder> {
+  return invoke<JobUnlockOrder>('create-job-unlock-order', { jobId })
+}
+
+export function verifyJobUnlock(input: RazorpayCheckoutResponse): Promise<JobUnlockVerification> {
+  return invoke<JobUnlockVerification>('verify-job-unlock', {
+    orderId: input.razorpay_order_id,
+    paymentId: input.razorpay_payment_id,
+    signature: input.razorpay_signature,
+  })
+}
+
 // Only for legacy manual requests already created before direct UPI was retired.
 export async function submitManualUpiUtr(paymentRecordId: string, utr: string): Promise<void> {
   const result = await invoke<{ ok: boolean; pendingVerification: boolean }>('submit-upi-utr', {

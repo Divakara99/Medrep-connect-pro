@@ -1,7 +1,10 @@
-import { read, remove, write } from './storage'
+import { read, remove } from './storage'
 import { supabase } from './supabase'
 import { broadcast, publish } from './notifications'
 import { deleteReasonProblem } from './vacancyRules'
+import { matchesCity, matchesHq } from './jobFilters'
+
+export { cityOptions, hqOptions } from './jobFilters'
 
 export type JobCategory =
   | 'MR' | 'ABM' | 'Part-time' | 'E-commerce' | 'Finance' | 'Banking'
@@ -36,6 +39,13 @@ export type Job = {
    * display — list_visible_jobs() is what actually decides.
    */
   unlockExpiresAt?: string | null
+  /**
+   * Paid ₹5 single-job unlock: the whole contact block for THIS vacancy, for
+   * the hour the server stamped. Set by list_visible_jobs() only while the
+   * window runs; the app mirrors it, it never decides it.
+   */
+  jobUnlocked?: boolean
+  jobUnlockExpiresAt?: string | null
   manager?: string
   contact?: string
   managerAltPhone?: string // optional local 10-digit Indian mobile, shown with a +91 prefix
@@ -65,14 +75,9 @@ export function clearJobs(): void { ++generation; jobs = [] }
 // an admin device it can instead be explicitly reviewed and imported once.
 export function purgeLegacyJobs(): void {
   remove(LEGACY_JOBS_KEY)
-  // Old local job alerts could include company names. Keep other notices but
-  // purge those historic alerts when a normal user signs in.
-  const notifications = read<unknown>('mrc_notifications_v1', [])
-  if (Array.isArray(notifications)) {
-    write('mrc_notifications_v1', notifications.filter((notice) =>
-      notice && typeof notice === 'object' && notice.type !== 'job',
-    ))
-  }
+  // Notifications no longer live in the browser at all; delete the old feed,
+  // which could contain company names, when a normal user signs in.
+  remove('mrc_notifications_v1')
 }
 export function getLegacyJobs(): Job[] {
   const saved = read<unknown>(LEGACY_JOBS_KEY, [])
@@ -96,6 +101,8 @@ function parseJob(value: unknown): Job | null {
     company: typeof row.company === 'string' ? row.company : '',
     companyUnlocked: row.companyUnlocked === true,
     unlockExpiresAt: typeof row.unlockExpiresAt === 'string' ? row.unlockExpiresAt : undefined,
+    jobUnlocked: row.jobUnlocked === true,
+    jobUnlockExpiresAt: typeof row.jobUnlockExpiresAt === 'string' ? row.jobUnlockExpiresAt : undefined,
     manager: typeof row.manager === 'string' ? row.manager : undefined,
     contact: typeof row.contact === 'string' ? row.contact : undefined,
     managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,
@@ -194,13 +201,103 @@ export async function deleteJob(id: string, reason: string): Promise<void> {
   // Every deletion needs a reason; the audit log keeps it with the vacancy.
   const problem = deleteReasonProblem(reason)
   if (problem) throw new Error(problem)
-  // Tombstone rather than delete so a stale client cannot resurrect a row.
-  const { error } = await supabase.from('vacancies').update({
-    data: { deleted: true, deletedAt: Date.now(), deleteReason: reason.trim() },
+  if (!id) throw new Error('Choose the vacancy to delete and try again.')
+  // Only a vacancy this admin can actually see may be deleted, so a stale id
+  // can never reach the database.
+  const previous = jobs.find((job) => job.id === id)
+  if (!previous) throw new Error('That vacancy is not in the current list. Reload and try again.')
+  // Tombstone rather than delete so a stale client cannot resurrect a row. The
+  // rest of the row is kept: the activity log stays readable and a restored
+  // vacancy comes back whole.
+  const { data, error } = await supabase.from('vacancies').update({
+    data: { ...previous, id, deleted: true, deletedAt: Date.now(), deleteReason: reason.trim() },
     synced_at: new Date().toISOString(),
-  }).eq('id', id).select('id').single()
+  }).eq('id', id).select('id')
   if (error) throw new Error('Vacancy could not be deleted. Check permissions and try again.')
+  // The update is scoped to one primary key, so exactly one row must come back.
+  // Anything else is reported instead of silently hiding the list.
+  const changed = Array.isArray(data) ? data.length : 0
+  if (changed !== 1) {
+    throw new Error(changed === 0
+      ? 'That vacancy no longer exists. Reload the list to see the current vacancies.'
+      : `The database changed ${changed} rows for a single delete. No other vacancy was removed here — reload and check the list before deleting again.`)
+  }
   jobs = jobs.filter((job) => job.id !== id)
+}
+
+/**
+ * What the admin needs to see in the bin: enough to recognise the vacancy and
+ * decide whether to bring it back. Older tombstones (from before the row was
+ * kept) may only have an id, so every field falls back safely.
+ */
+export type DeletedVacancy = {
+  id: string
+  title: string
+  company: string
+  location: string
+  deletedAt: number
+  deleteReason: string
+}
+
+export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
+  const { data, error } = await supabase
+    .from('vacancies')
+    .select('id,data')
+    .order('synced_at', { ascending: false })
+    .limit(500)
+  if (error) throw new Error('Deleted vacancies could not be loaded.')
+  return ((data ?? []) as { id: string; data: unknown }[])
+    .filter((row) => (row.data as { deleted?: boolean } | null)?.deleted === true)
+    .map((row) => {
+      const from = (row.data ?? {}) as Record<string, unknown>
+      return {
+        id: row.id,
+        title: typeof from.title === 'string' && from.title.trim() ? from.title : 'Deleted vacancy',
+        company: typeof from.company === 'string' ? from.company : '',
+        location: typeof from.location === 'string' ? from.location : '',
+        deletedAt: typeof from.deletedAt === 'number' ? from.deletedAt : 0,
+        deleteReason: typeof from.deleteReason === 'string' ? from.deleteReason : '',
+      }
+    })
+}
+
+/**
+ * Undo a delete: the tombstone is cleared and the vacancy becomes live again,
+ * with everything else about it untouched. Scoped to one primary key and
+ * verified like deleteJob, so a restore can only ever bring back one row.
+ */
+export async function restoreJob(id: string): Promise<void> {
+  if (!id) throw new Error('Choose the vacancy to restore and try again.')
+  const { data: row, error: readError } = await supabase
+    .from('vacancies')
+    .select('id,data')
+    .eq('id', id)
+    .maybeSingle()
+  if (readError) throw new Error('That vacancy could not be read. Reload and try again.')
+  if (!row) throw new Error('That vacancy no longer exists.')
+  const previous = (row.data ?? {}) as Record<string, unknown>
+  if (previous.deleted !== true) throw new Error('That vacancy is already live.')
+  // A tombstone written by an older build kept only the id, so it has nothing
+  // to bring back. Say so instead of restoring an empty card.
+  if (typeof previous.title !== 'string' || !previous.title.trim()
+    || typeof previous.location !== 'string' || !previous.location.trim()
+    || typeof previous.category !== 'string') {
+    throw new Error('This vacancy was deleted before its details were kept, so it cannot be restored. Post it again instead.')
+  }
+  const restored: Record<string, unknown> = { ...previous }
+  delete restored.deleted
+  delete restored.deletedAt
+  delete restored.deleteReason
+  restored.restoredAt = Date.now()
+  const { data, error } = await supabase.from('vacancies').update({
+    data: restored,
+    synced_at: new Date().toISOString(),
+  }).eq('id', id).select('id')
+  if (error) throw new Error('The vacancy could not be restored. Check permissions and try again.')
+  const changed = Array.isArray(data) ? data.length : 0
+  if (changed !== 1) throw new Error(`The database changed ${changed} rows for one restore. Reload the list before trying again.`)
+  // The list is re-read from the server by the panel; nothing is trusted here.
+  await loadAdminJobs().catch(() => undefined)
 }
 
 export async function togglePin(id: string, pinned: boolean): Promise<Job> {
@@ -220,10 +317,12 @@ export function sortedJobs(jobs: Job[]): Job[] {
 
 export function filterJobs(
   jobs: Job[],
-  opts: { query?: string; category?: JobCategory; location?: string },
+  opts: { query?: string; category?: JobCategory; location?: string; city?: string; hq?: string },
 ): Job[] {
   const q = opts.query?.trim().toLowerCase()
   const loc = opts.location?.trim().toLowerCase()
+  const city = opts.city?.trim().toLowerCase()
+  const hq = opts.hq?.trim().toLowerCase()
   return jobs.filter((j) => {
     if (opts.category && opts.category !== 'All' && j.category !== opts.category) return false
     if (q) {
@@ -231,15 +330,13 @@ export function filterJobs(
       if (!hay.includes(q)) return false
     }
     if (loc && !j.location.toLowerCase().includes(loc)) return false
+    // A vacancy may name more than one working city or HQ, so match any entry.
+    if (!matchesCity(j, city ?? '')) return false
+    if (!matchesHq(j, hq ?? '')) return false
     return true
   })
 }
 
-/**
- * Job descriptions are entered one point per line and rendered as • bullets.
- * A bullet typed by the admin at the start of a line — "(+)", "•", "*" or "-"
- * — is tolerated and stripped here, so a line is never shown with two bullets.
- */
 export function descriptionPoints(description?: string): string[] {
   return (description || '')
     .split(/\r?\n|•/)

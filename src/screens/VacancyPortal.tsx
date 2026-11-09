@@ -64,9 +64,9 @@ export function VacancyPortal({ onExit }: { onExit: () => void }) {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-4 py-3">
+    <div className="min-h-[100dvh]">
+      <header className="glass-bar sticky top-0 z-20 border-b border-white/60">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <BackButton onClick={onExit} label="Sign out of the employee portal" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2"><Wordmark size="text-sm" /><Badge color="green">Vacancy team</Badge></div>

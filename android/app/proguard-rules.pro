@@ -39,6 +39,8 @@
 -keep class ee.forgr.** { *; }
 # App plugin (back button / app state).
 -keep class com.capacitorjs.plugins.app.** { *; }
+# Share plugin (system share sheet for passing a vacancy on).
+-keep class com.capacitorjs.plugins.share.** { *; }
 
 # --------------------------------------------------------------- Google Mobile Ads ---
 -keep class com.google.android.gms.ads.** { *; }

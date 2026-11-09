@@ -9,6 +9,26 @@ Plain text is rejected with:
 The listing carries two languages, so paste one block per language. Each block
 must be under 500 characters — the text below is ~400.
 
+## 1.0.4 — English (India)
+
+```
+<en-IN>
+• Filter jobs by city and HQ, and pick the experience you have. The salary filter has been removed.
+• Your profile now saves to your account, so it is there on any phone you sign in with.
+• Small fixes to notifications and the sign-in screen.
+</en-IN>
+```
+
+## 1.0.4 — Hindi
+
+```
+<hi-IN>
+• अब नौकरियाँ शहर और HQ से छाँटें, साथ में अपना अनुभव चुनें। सैलरी फ़िल्टर हटा दिया गया है।
+• आपकी प्रोफ़ाइल अब आपके अकाउंट में सेव होती है, इसलिए किसी भी फ़ोन पर उपलब्ध रहती है।
+• नोटिफ़िकेशन और साइन-इन स्क्रीन में छोटे सुधार।
+</hi-IN>
+```
+
 ## 1.0.3 — English (India)
 
 ```

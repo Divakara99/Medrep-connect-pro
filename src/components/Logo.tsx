@@ -32,8 +32,8 @@ export function Wordmark({ size = 'text-lg' }: { size?: string }) {
       <Logo size={36} />
       <div className="leading-tight min-w-0">
         {/* Mobile requirement: the app name stays on ONE line, tagline below. */}
-        <div className={`font-extrabold text-slate-900 whitespace-nowrap ${size}`}>
-          MedRep <span className="text-brand-600">Connect Pro</span>
+        <div className={`whitespace-nowrap font-extrabold text-slate-900 ${size}`}>
+          MedRep <span className="gradient-text">Connect Pro</span>
         </div>
         <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">
           Pharma &amp; Jobs Hub

@@ -3,9 +3,7 @@ import { Badge, Button, Card, Input, Label, Modal } from '../components/ui'
 import { getPaymentsByUser, refreshPayments, type PaymentRecord } from '../data/payments'
 import { getPlans, refreshPlans, type Plan } from '../data/plans'
 import { readPlanState } from '../data/planState'
-import { accessLabel, daysLabel, periodLabel, planTitle } from '../data/planDisplay'
-import { TERMS_LAST_UPDATED, TERMS_SECTIONS } from '../data/terms'
-import { CREATOR } from '../data/creator'
+import { accessLabel, daysLabel, paymentDayLabel, paymentDayStart, paymentStatusLabel, periodLabel, planTitle } from '../data/planDisplay'
 import { isSubscribed, refreshCurrentSubscription, type User } from '../data/auth'
 import {
   createRazorpayOrder,
@@ -16,7 +14,21 @@ import {
   type RazorpayCheckoutResponse,
 } from '../data/razorpay'
 import { isAndroidApp } from '../data/platform'
+import { TermsPage } from './TermsPage'
+import { PlanInfoPage } from './PlanInfoPage'
+import { LegacyUpiPage } from './LegacyUpiPage'
 import { buyPlanWithGooglePlay, loadPlayPrices, restorePlayPurchases } from '../data/playBilling'
+
+
+/** One labelled line inside a receipt. */
+function ReceiptField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-2.5">
+      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className={`break-words font-semibold text-slate-900 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>{value}</dd>
+    </div>
+  )
+}
 
 export function PlansScreen({
   user,
@@ -42,6 +54,11 @@ export function PlansScreen({
     [plans, selectedId],
   )
   const [showTerms, setShowTerms] = useState(false)
+  // The three reading cards live on their own page; the passes page is for choosing.
+  const [showInfo, setShowInfo] = useState(false)
+  const [showLegacyHelp, setShowLegacyHelp] = useState(false)
+  // The one payment whose receipt is open over the page.
+  const [historyPayment, setHistoryPayment] = useState<PaymentRecord | null>(null)
   const [showCheckout, setShowCheckout] = useState(false)
   // Tapped × / backdrop / phone-back while a payment was still running: ask
   // instead of doing nothing, so the sheet can never become unclosable.
@@ -314,23 +331,67 @@ export function PlansScreen({
 
   const paymentRows = payments.length > 0 ? payments : getPaymentsByUser(user.id)
 
+  /**
+   * History, read the way a bank statement reads: newest day first, one
+   * heading per day with that day's total, then one row per payment. The old
+   * table had to be scrolled sideways on a phone and gave no sense of when
+   * things happened.
+   */
+  const historyGroups = useMemo(() => {
+    const byDay = new Map<number, PaymentRecord[]>()
+    for (const payment of paymentRows) {
+      const key = paymentDayStart(payment.createdAt)
+      const list = byDay.get(key)
+      if (list) list.push(payment)
+      else byDay.set(key, [payment])
+    }
+    return [...byDay.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([dayStart, items]) => ({
+        dayStart,
+        label: paymentDayLabel(dayStart),
+        items: [...items].sort((a, b) => b.createdAt - a.createdAt),
+        total: items.reduce((sum, payment) => sum + (payment.status === 'success' ? payment.amount : 0), 0),
+      }))
+  }, [paymentRows])
+
+  // Terms and the plan details are pages of text, so they open as pages — not sheets.
+  if (showTerms) return <TermsPage onClose={() => setShowTerms(false)} />
+  if (showInfo) return <PlanInfoPage inApp={inApp} onClose={() => setShowInfo(false)} />
+  if (showLegacyHelp) return <LegacyUpiPage onClose={() => setShowLegacyHelp(false)} />
+
   return (
     <div className="max-w-3xl mx-auto px-4 pb-6 pt-4 space-y-5">
-      <Card className="p-3 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-brand-800">Subscription</div>
-        <h1 className="text-base font-extrabold text-slate-900 leading-tight">Unlock company details and apply</h1>
-        <p className="text-xs text-slate-700 mt-0.5">{inApp ? 'Pay with Google Play. Access starts once the server verifies your purchase.' : 'Pay inside secure Razorpay Checkout. Access starts once the server verifies payment.'}</p>
-        {unlocked && activeUntil && (
-          <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-950 bg-emerald-100 px-2.5 py-1 rounded-full ring-1 ring-emerald-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
-          </div>
-        )}
-        {!unlocked && expiredPlan?.expiresAt !== undefined && (
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-950 ring-1 ring-amber-300">
-            Pass expired on {when(expiredPlan.expiresAt)} — company details are locked until you renew
-          </div>
-        )}
-      </Card>
+      {/* Deliberately plain: this page exists so a candidate can buy a pass,
+          not so the product can sell one. No gradient, no badge, no hero. */}
+      {/* One line of state, one button for the reading. A paragraph pasted on
+          this page is exactly what the passes screen must not do: the page is
+          for choosing a pass, so the explanation lives on its own page. */}
+      <header className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Passes</h1>
+          <Button variant="secondary" className="shrink-0 px-3 py-1.5 text-sm" onClick={() => setShowInfo(true)}>
+            How passes work
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {unlocked && activeUntil && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 pulse-dot" /> Active until {activeUntil}
+            </span>
+          )}
+          {!unlocked && expiredPlan?.expiresAt !== undefined && (
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
+                Expired {when(expiredPlan.expiresAt)}
+              </span>
+              <Button variant="ghost" className="px-3 py-1 text-xs" onClick={() => setShowInfo(true)}>
+                What happens now
+              </Button>
+            </>
+          )}
+        </div>
+      </header>
 
       {catalogError && (
         <div role="alert" className="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm font-semibold text-amber-900">
@@ -338,177 +399,175 @@ export function PlansScreen({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {plans.map((plan) => {
-          const isSelected = selected.id === plan.id
-          // Marked active/purchased: the plan the server ledger says is
-          // covering the subscription right now, or the one bought in this
-          // session a moment ago.
-          const isActive = activePlan?.planId === plan.id
-          const activeExpiry = isActive ? activePlan.expiresAt : undefined
-          // Ran out: no green badge, an amber Expired badge and a renewal.
-          const isExpired = !isActive && expiredPlan?.planId === plan.id
-          const boughtAt = purchasedPlans.get(plan.id)
-          return (
-            <Card
-              key={plan.id}
-              onClick={() => selectPlan(plan.id)}
-              className={`p-4 relative cursor-pointer transition ${isActive ? 'ring-2 ring-emerald-500 ring-offset-2 bg-gradient-to-br from-emerald-50 to-white' : isSelected ? 'ring-2 ring-brand-600 ring-offset-2 bg-gradient-to-br from-brand-50 to-indigo-50' : 'hover:ring-1 hover:ring-brand-300'} ${plan.popular && !isSelected && !isActive ? 'bg-gradient-to-br from-white to-brand-50' : ''}`}
-            >
-              {isActive && <div className="absolute -top-2 right-3"><Badge color="green">✓ Active</Badge></div>}
-              {isExpired && <div className="absolute -top-2 right-3"><Badge color="amber">Expired</Badge></div>}
-              {!isActive && isSelected && <div className="absolute -top-2 right-3"><Badge color="brand">Selected</Badge></div>}
-              {!isActive && !isSelected && plan.popular && <div className="absolute -top-2 right-3"><Badge color="brand">Most popular</Badge></div>}
-              {!isActive && !isExpired && boughtAt !== undefined && <div className="absolute -top-2 left-3"><Badge color="slate">Purchased</Badge></div>}
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-bold text-slate-900">{planTitle(plan.title)}</div>
-                <div className="text-2xl font-extrabold text-brand-800">{inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}</div>
-              </div>
-              <div className="text-sm font-semibold text-slate-700 mt-0.5">
-                {periodLabel(plan.days)}
-              </div>
-              <div className="text-sm text-slate-800 mt-2">{plan.tagline}</div>
-              {isActive && activeExpiry !== undefined && (
-                <div className="mt-2 text-sm font-extrabold text-emerald-700">Active until {when(activeExpiry)}</div>
-              )}
-              {isExpired && expiredPlan?.expiresAt !== undefined && (
-                <div className="mt-2 text-sm font-extrabold text-amber-800">
-                  Expired on {when(expiredPlan.expiresAt)} — renew to unlock company details again
-                </div>
-              )}
-              {!isActive && !isExpired && boughtAt !== undefined && (
-                <div className="mt-2 text-xs font-semibold text-slate-600">
-                  {boughtAt > Date.now() ? `Purchased earlier · access till ${when(boughtAt)}` : `Purchased earlier · expired ${when(boughtAt)}`}
-                </div>
-              )}
-              <Button
-                variant={isSelected ? 'primary' : 'secondary'}
-                className="w-full mt-3"
-                onClick={() => (isSelected ? openCheckout(plan) : selectPlan(plan.id))}
+      {/* Simple price boxes: one per pass, in a plain grid. No badges are used
+          to push a plan — only the states a buyer needs (Active/Expired). */}
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div className="text-sm font-bold text-slate-900">Choose a pass</div>
+          <div className="text-xs font-medium text-slate-500">One payment · no auto-renew</div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3">
+          {plans.map((plan) => {
+            const isSelected = selected.id === plan.id
+            // Marked active/purchased: the plan the server ledger says is
+            // covering the subscription right now, or the one bought in this
+            // session a moment ago.
+            const isActive = activePlan?.planId === plan.id
+            const activeExpiry = isActive ? activePlan.expiresAt : undefined
+            // Ran out: no green badge, an amber Expired badge and a renewal.
+            const isExpired = !isActive && expiredPlan?.planId === plan.id
+            const boughtAt = purchasedPlans.get(plan.id)
+            return (
+              <div
+                key={plan.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                // The whole box is the target: tapping the price, the days or
+                // anywhere else selects this pass. Clicking it again does not
+                // start a payment — checkout stays on the button, so a mis-tap
+                // can never charge anyone.
+                onClick={() => { if (!isSelected) selectPlan(plan.id) }}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  if (!isSelected) selectPlan(plan.id)
+                }}
+                className={`flex cursor-pointer flex-col rounded-2xl border p-3 transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-100 ${
+                  isSelected ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-200' : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
               >
-                {isSelected ? (unlocked ? 'Extend / Renew' : isExpired ? 'Renew this plan' : 'Choose plan') : 'Select plan'}
-              </Button>
-            </Card>
-          )
-        })}
-      </div>
-
-      <Card className="p-4">
-        <div className="text-sm font-bold text-slate-900 mb-1">Plan benefits</div>
-        <ul className="text-xs text-slate-800 space-y-1 list-disc pl-5">
-          <li>Full company name, manager and contact number for every job</li>
-          <li>One-tap Apply with confirmation</li>
-          <li>Priority job alerts and pinned jobs</li>
-          <li>AI chat help and support tickets</li>
-        </ul>
-      </Card>
-
-      {inApp ? (
-        <Card className="p-4">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div className="text-sm font-bold text-slate-900">How payment works</div>
-            <Badge color="slate">Google Play Billing</Badge>
-          </div>
-          <p className="text-xs text-slate-700">
-            Every plan is a one-time Google Play pass for the number of days shown. Google Play handles the payment
-            with the method on your Play account, and your access starts once our server verifies the purchase with
-            Google. Renewing buys the pass again and adds its days to your current expiry.
-          </p>
-        </Card>
-      ) : (
-        <Card className="p-4">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-            <div className="text-sm font-bold text-slate-900">How payment works</div>
-            <Badge color="slate">Razorpay Checkout only</Badge>
-          </div>
-          <p className="text-xs text-slate-700">
-            Every plan is paid inside secure Razorpay Checkout, using whichever methods the merchant account has enabled —
-            credit/debit cards, netbanking, and UPI apps such as PhonePe, Google Pay or Paytm, plus a Razorpay QR where
-            offered. We never ask you to transfer money to a personal UPI ID or bank account, and merchant banking details
-            are never shown in the app.
-          </p>
-        </Card>
-      )}
-
-      <Card className="p-4">
-        <div className="text-sm font-bold text-slate-900 mb-1.5">Instructions & standard terms</div>
-        <div className="text-[11px] leading-relaxed text-slate-600 space-y-1">
-          {inApp ? (
-            <>
-              <p>• Pay only through Google Play Billing inside this app. No other payment channel is offered.</p>
-              <p>• Access starts after Google Play confirms the purchase and our server verifies it.</p>
-            </>
-          ) : (
-            <>
-              <p>• Pay only inside Razorpay Checkout. No other payment channel is offered.</p>
-              <p>• Access starts after the payment is verified by the server (Razorpay capture confirmed before your plan unlocks).</p>
-            </>
-          )}
-          <p>• One plan per payment. Renewals add days to your existing expiry.</p>
-          <p>• Do not share your bank PIN, OTP or passwords with anyone, including support.</p>
-          <p>
-            • Questions about a payment? Email{' '}
-            <a href={`mailto:${CREATOR.contactEmail}`} className="font-semibold text-blue-600 underline underline-offset-2">{CREATOR.contactEmail}</a>.
-          </p>
-          <p>
-            • By continuing you agree to the MedRep Connect Pro terms and conditions.{' '}
-            <button
-              type="button"
-              onClick={() => setShowTerms(true)}
-              className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-800"
-            >
-              Click here
-            </button>{' '}
-            to read the full terms.
-          </p>
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{periodLabel(plan.days)}</div>
+                <div className="mt-1 text-2xl font-extrabold leading-none tabular-nums text-slate-900">
+                  {inApp ? playPrices.get(plan.id) ?? `₹${plan.price}` : `₹${plan.price}`}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {isActive && <Badge color="green">Active</Badge>}
+                  {isExpired && <Badge color="amber">Expired</Badge>}
+                  {!isActive && isSelected && <Badge color="brand">Selected</Badge>}
+                  {!isActive && !isExpired && boughtAt !== undefined && <Badge color="slate">Purchased</Badge>}
+                </div>
+                {plan.tagline && <div className="mt-1.5 line-clamp-2 text-xs text-slate-600">{plan.tagline}</div>}
+                {isActive && activeExpiry !== undefined && (
+                  <div className="mt-1.5 text-xs font-bold text-emerald-700">Until {when(activeExpiry)}</div>
+                )}
+                {isExpired && expiredPlan?.expiresAt !== undefined && (
+                  <div className="mt-1.5 text-xs font-bold text-amber-800">Expired {when(expiredPlan.expiresAt)}</div>
+                )}
+                {!isActive && !isExpired && boughtAt !== undefined && (
+                  <div className="mt-1.5 text-xs font-medium text-slate-500">
+                    {boughtAt > Date.now() ? `Till ${when(boughtAt)}` : `Ended ${when(boughtAt)}`}
+                  </div>
+                )}
+                <Button
+                  variant={isSelected ? 'primary' : 'secondary'}
+                  className="mt-3 w-full px-2 py-1.5 text-sm"
+                  onClick={(event) => {
+                    // Handled here, not twice through the box.
+                    event.stopPropagation()
+                    if (isSelected) openCheckout(plan)
+                    else selectPlan(plan.id)
+                  }}
+                >
+                  {isSelected ? (unlocked ? 'Renew' : isExpired ? 'Renew' : 'Continue') : 'Select'}
+                </Button>
+              </div>
+            )
+          })}
         </div>
       </Card>
 
+      {/* One line, one button. The benefits, the payment description and the
+          standard terms are reading, so they live on their own page instead of
+          pushing the passes down the screen. */}
       <Card className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900">Plan benefits, payments &amp; terms</div>
+            <div className="text-xs font-medium text-slate-500">
+              {inApp ? 'Google Play Billing' : 'Razorpay Checkout'} · one plan per payment · no auto-renew
+            </div>
+          </div>
+          <Button variant="secondary" className="shrink-0" onClick={() => setShowInfo(true)}>
+            Read details
+          </Button>
+        </div>
+      </Card>
+
+      {/* Payment history, date by date. Each day gets a heading and a total;
+          each payment is a row with its own receipt. */}
+      <Card className="p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-bold text-slate-900">Payment history</div>
-          <Badge color="slate">{paymentRows.length} records</Badge>
+          <Badge color="slate">
+            {paymentRows.length} {paymentRows.length === 1 ? 'record' : 'records'}
+          </Badge>
         </div>
         {paymentRows.length === 0 ? (
-          <div className="text-sm text-slate-700">No payments yet.</div>
+          <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+            No payments yet. Your first pass will appear here with its date, amount and receipt.
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[480px]">
-              <thead className="text-slate-700 text-left">
-                <tr>
-                  <th className="py-1 pr-2">Date</th>
-                  <th className="py-1 pr-2">Plan</th>
-                  <th className="py-1 pr-2">Reference</th>
-                  <th className="py-1 pr-2">UTR</th>
-                  <th className="py-1 pr-2">Amount</th>
-                  <th className="py-1 pr-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentRows.map((payment) => (
-                  <tr key={payment.id} className="border-t border-slate-200">
-                    <td className="py-2 pr-2 text-slate-700">{new Date(payment.createdAt).toLocaleDateString()}</td>
-                    <td className="py-2 pr-2 font-semibold text-slate-900">{payment.planTitle ?? payment.planId}</td>
-                    <td className="py-2 pr-2 font-mono text-slate-800">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
-                    <td className="py-2 pr-2 font-mono text-slate-800">{payment.utr || '—'}</td>
-                    <td className="py-2 pr-2 font-bold text-slate-900">₹{payment.amount}</td>
-                    <td className="py-2 pr-2">
-                      <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
-                        {payment.manualReview ? 'Awaiting UPI verification' : payment.status === 'success' ? 'Paid' : payment.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            {historyGroups.map((group) => (
+              <div key={group.dayStart}>
+                <div className="flex items-baseline justify-between gap-2 px-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{group.label}</div>
+                  <div className="text-[11px] font-semibold tabular-nums text-slate-400">
+                    {group.items.length} {group.items.length === 1 ? 'payment' : 'payments'} · ₹{group.total} paid
+                  </div>
+                </div>
+                <div className="mt-1.5 space-y-2">
+                  {group.items.map((payment) => (
+                    <div key={payment.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-bold text-slate-900">
+                            {planTitle(payment.planTitle ?? payment.planId)}
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-slate-500">
+                            {new Date(payment.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {payment.planDays ? ` · ${daysLabel(payment.planDays)}` : ''}
+                            {payment.paymentMethod ? ` · ${payment.paymentMethod}` : ''}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-base font-extrabold tabular-nums text-slate-900">₹{payment.amount}</div>
+                          <Badge color={payment.status === 'success' ? 'green' : payment.status === 'pending' ? 'amber' : 'red'}>
+                            {paymentStatusLabel(payment.status, payment.manualReview)}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          className="px-2.5 py-1.5 text-xs"
+                          onClick={() => setHistoryPayment(payment)}
+                        >
+                          🧾 Receipt
+                        </Button>
+                        {payment.refundStatus && payment.refundStatus !== 'none' && (
+                          <span className="text-xs font-semibold text-slate-600">Refund {payment.refundStatus}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>
 
       {!inApp && paymentRows.some((payment) => payment.paymentMethod === 'UPI' && payment.status === 'pending' && !payment.manualReview) && (
         <Card className="p-4 space-y-2">
-          <h2 className="font-bold text-slate-900">Earlier direct UPI transfer?</h2>
-          <p className="text-sm text-slate-700">Only if you already paid for an existing manual UPI request, select its reference and enter the bank-generated UTR. Do not make a new direct transfer. An admin must verify the bank credit before access activates.</p>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-slate-900">Earlier direct UPI transfer?</h2>
+            <Button variant="ghost" className="shrink-0 px-3 py-1 text-xs" onClick={() => setShowLegacyHelp(true)}>
+              How this works
+            </Button>
+          </div>
           <Label htmlFor="legacy-upi-order">Existing request</Label>
           <select id="legacy-upi-order" className="w-full rounded-lg border border-slate-300 p-2" value={legacyPaymentId ?? ''} onChange={(event) => { setLegacyPaymentId(event.target.value || null); setLegacyError(null) }}>
             <option value="">Select an existing request</option>
@@ -544,8 +603,7 @@ export function PlansScreen({
               <div role="alert" className="space-y-2 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-300">
                 <div className="text-sm font-bold text-amber-950">A payment is still open</div>
                 <p className="text-xs text-amber-900">
-                  If you close now, the payment can still complete on its own — reopen Plans and the pass is
-                  restored automatically. You are never charged twice for one pass.
+                  A payment already started can still finish. Reopen Plans and the pass restores.
                 </p>
                 <div className="flex gap-2">
                   <Button variant="secondary" className="flex-1" onClick={() => setCloseAsk(false)}>Keep waiting</Button>
@@ -580,14 +638,14 @@ export function PlansScreen({
                 <Button className="w-full" onClick={() => { void startRazorpayCheckout() }} disabled={processing}>
                   {processing ? 'Opening secure checkout…' : `Pay ₹${selected.price} with Razorpay`}
                 </Button>
-                <p className="text-xs text-slate-700 text-center">Cards (credit/debit), netbanking and UPI apps such as PhonePe or Google Pay are shown if enabled by Razorpay. On supported devices, choose UPI to scan a Razorpay QR if offered.</p>
+                <p className="text-xs text-slate-700 text-center">UPI, cards and netbanking appear inside Razorpay.</p>
               </>
             )}
 
             {verificationPending && (
               <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-300">
                 <p className="text-sm font-bold text-amber-950">Payment confirmation is pending</p>
-                <p className="text-sm text-amber-900 mt-1">{inApp ? 'Do not buy again. Google Play will confirm the payment and your plan activates automatically — reopen Plans to check.' : 'Do not make another payment. We will check again automatically; the plan stays locked until Razorpay confirms capture.'}</p>
+                <p className="text-sm text-amber-900 mt-1">{inApp ? 'Do not buy again — Google Play confirms it.' : 'Do not pay again — checking automatically.'}</p>
                 {pendingCheckout && (
                   <p className="mt-2 text-xs font-mono text-amber-900 break-all">Payment ID: {pendingCheckout.razorpay_payment_id}</p>
                 )}
@@ -602,39 +660,65 @@ export function PlansScreen({
             {error && <div role="alert" className="rounded-lg bg-red-50 text-red-900 text-sm font-medium px-3 py-2 ring-1 ring-red-300">{error}</div>}
             {inApp ? (
               <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
-                <p>1. Check the plan and price, then tap Buy — Google Play shows its own secure payment sheet.</p>
-                <p>2. Approve the payment in Google Play. Never share your passwords or OTP with anyone, including support.</p>
-                <p>3. Return here and wait for confirmation. If charged but not activated, do not buy again; reopen the app and visit Plans, or contact support with your Google Play order ID (GPA…).</p>
-                <p>Access begins after Google confirms and our server verifies the purchase. Renewals add {daysLabel(selected.days)} to your existing expiry (or start now if expired).</p>
+                <p>1. Check the plan and price, then tap Buy.</p>
+                <p>2. Approve in the Google Play sheet. Never share a password or OTP.</p>
+                <p>3. Return here. If charged but not activated, do not buy again.</p>
               </div>
             ) : (
               <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-800 space-y-1">
                 <p>1. Check the plan and amount, then open Razorpay Checkout.</p>
-                <p>2. In Razorpay choose a card, or UPI → PhonePe, Google Pay, another available app, or QR if offered. Approve payment only inside your bank/UPI app; never share your PIN or OTP here.</p>
-                <p>3. Return here and wait for server confirmation. If charged but not activated, do not pay again; use Check payment status or contact support with the payment ID.</p>
-                <p>Access begins after verified capture. Renewals add {daysLabel(selected.days)} to your existing expiry (or start now if expired).</p>
+                <p>2. Pay only inside Razorpay or your UPI app. Never share a PIN or OTP.</p>
+                <p>3. Return here. If charged but not activated, use Check payment status.</p>
               </div>
             )}
           </div>
         )}
       </Modal>
 
-      <Modal open={showTerms} onClose={() => setShowTerms(false)} title="Terms and conditions">
-        <div className="space-y-4 text-sm text-slate-800 leading-relaxed">
-          <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-900">
-            Draft — final wording is pending owner approval. Items in [square brackets] are completed before publication.
-          </p>
-          <p className="text-xs text-slate-500">Last updated {TERMS_LAST_UPDATED}. These terms apply to every MedRep Connect Pro user.</p>
-          {TERMS_SECTIONS.map((section, index) => (
-            <section key={section.title} className="space-y-1.5">
-              <h3 className="font-bold text-slate-900">{index + 1}. {section.title}</h3>
-              {section.paragraphs.map((text) => (
-                <p key={text}>{text}</p>
-              ))}
-            </section>
-          ))}
-        </div>
-        <Button className="w-full mt-5" onClick={() => setShowTerms(false)}>Close</Button>
+
+      {/* A receipt is a decision-free read of one payment: a sheet is fine, and
+          it keeps the reference copyable without leaving the page. */}
+      <Modal
+        open={!!historyPayment}
+        onClose={() => setHistoryPayment(null)}
+        title="Payment receipt"
+      >
+        {historyPayment && (
+          <div className="space-y-3 text-sm">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Plan</div>
+              <div className="text-base font-extrabold text-slate-900">
+                {planTitle(historyPayment.planTitle ?? historyPayment.planId)}
+              </div>
+              <div className="text-xs text-slate-600">
+                {new Date(historyPayment.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                {historyPayment.planDays ? ` · ${daysLabel(historyPayment.planDays)}` : ''}
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-2">
+              <ReceiptField label="Amount" value={`₹${historyPayment.amount}`} />
+              <ReceiptField label="Status" value={paymentStatusLabel(historyPayment.status, historyPayment.manualReview)} />
+              <ReceiptField label="Method" value={historyPayment.paymentMethod ?? '—'} />
+              <ReceiptField label="Reference" value={historyPayment.gatewayPaymentId ?? historyPayment.txRef ?? '—'} mono />
+              <ReceiptField label="UTR" value={historyPayment.utr || '—'} mono />
+              <ReceiptField
+                label="Access until"
+                value={historyPayment.expiresAt
+                  ? new Date(historyPayment.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+                  : '—'}
+              />
+            </dl>
+            {historyPayment.refundStatus && historyPayment.refundStatus !== 'none' && (
+              <p className="text-xs font-semibold text-slate-600">
+                Refund {historyPayment.refundStatus}{historyPayment.refundRef ? ` · ${historyPayment.refundRef}` : ''}
+              </p>
+            )}
+            <p className="text-xs text-slate-500">
+              Keep the reference when writing to support. We never ask for a bank PIN, UPI PIN or OTP.
+            </p>
+            <Button className="w-full" onClick={() => setHistoryPayment(null)}>Close</Button>
+          </div>
+        )}
       </Modal>
     </div>
   )

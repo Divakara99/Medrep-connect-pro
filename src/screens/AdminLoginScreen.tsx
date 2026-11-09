@@ -63,24 +63,27 @@ export function AdminLoginScreen({
   }
 
   return (
-    <main className="min-h-[100dvh] bg-gradient-to-b from-indigo-100 via-white to-white flex flex-col">
+    <main className="flex min-h-[100dvh] flex-col">
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
-          <header className="flex flex-col items-center mb-6">
-            <Logo size={64} />
-            <div className="mt-3 text-center">
-              <h1 className="text-2xl font-extrabold text-slate-900">
-                MedRep <span className="text-brand-700">Connect Pro</span>
+          <header className="mb-6 flex flex-col items-center">
+            <div className="hairline grid h-20 w-20 place-items-center rounded-[26px] bg-white shadow-[0_22px_44px_-24px_rgba(29,78,216,0.75)] ring-1 ring-white/70">
+              <Logo size={64} />
+            </div>
+            <div className="mt-4 text-center">
+              <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-slate-900">
+                MedRep <span className="gradient-text">Connect Pro</span>
               </h1>
-              <p className="text-sm text-slate-700 mt-1">Restricted administrator access</p>
-              <span className="inline-flex mt-2 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-900 ring-1 ring-indigo-300">
+              <p className="mt-1 text-sm font-medium text-slate-600">Restricted administrator access</p>
+              <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-indigo-900 ring-1 ring-indigo-200">
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
                 Admin portal · {APP_VERSION_LABEL}
               </span>
             </div>
             <div className="mt-4"><CreatorCredit variant="solid" /></div>
           </header>
 
-          <Card className="p-5">
+          <Card className="hairline p-5 backdrop-blur-sm">
             <h2 className="text-lg font-bold text-slate-900 mb-4">
               {activeMode === 'signin' ? 'Admin sign in' : activeMode === 'forgot' ? 'Reset admin password' : 'Choose a new password'}
             </h2>

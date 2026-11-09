@@ -3,7 +3,7 @@ import { hasAdminRole, hasVacancyRole, supabase } from './supabase'
 import { adminMfaRequired, isMfaVerifiedSession } from './mfa'
 import { MIN_STAFF_PASSWORD_LENGTH, MIN_USER_PASSWORD_LENGTH, passwordLengthError } from './passwordRules'
 import { passwordResetRedirectTo } from './platform'
-import { read, remove, write } from './storage'
+import { remove } from './storage'
 
 export type User = {
   id: string
@@ -32,7 +32,6 @@ export type AuthSnapshot = {
   mfaRequired?: boolean
 }
 
-const USERS_CACHE_KEY = 'mrc_admin_users_cache_v1'
 const USER_STATE_KEY = 'mrc_user_state_v1'
 const LEGACY_USERS_KEY = 'mrc_users_v1'
 const LEGACY_SESSION_KEY = 'mrc_session_v1'
@@ -42,7 +41,11 @@ const LEGACY_SESSION_KEY = 'mrc_session_v1'
 remove(LEGACY_USERS_KEY)
 remove(LEGACY_SESSION_KEY)
 remove(USER_STATE_KEY)
-remove(USERS_CACHE_KEY)
+// The admin account list used to be cached in the browser; it is fetched from
+// public.user_accounts on demand and kept in memory for this session only.
+remove('mrc_admin_users_cache_v1')
+
+let adminUsersCache: User[] = []
 
 let activeUser: User | null = null
 
@@ -167,7 +170,7 @@ export function onAuthStateChange(
 }
 
 export function getUsers(): User[] {
-  return read<User[]>(USERS_CACHE_KEY, [])
+  return adminUsersCache
 }
 
 export async function refreshAdminUsers(): Promise<User[]> {
@@ -202,7 +205,7 @@ export async function refreshAdminUsers(): Promise<User[]> {
     subscribedUntil: row.subscribed_until ? new Date(row.subscribed_until).getTime() : undefined,
     isAdmin: row.is_admin,
   }))
-  write(USERS_CACHE_KEY, users)
+  adminUsersCache = users
   return users
 }
 
@@ -412,13 +415,13 @@ export async function deleteUserAccount(userId: string): Promise<{ ok: true } | 
     return { ok: false, error: error.message }
   }
 
-  write(USERS_CACHE_KEY, getUsers().filter((user) => user.id !== userId))
+  adminUsersCache = getUsers().filter((user) => user.id !== userId)
   return { ok: true }
 }
 
 export async function logout(): Promise<void> {
   activeUser = null
-  remove(USERS_CACHE_KEY)
+  adminUsersCache = []
   await supabase.auth.signOut()
 }
 

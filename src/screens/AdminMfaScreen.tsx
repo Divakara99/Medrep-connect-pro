@@ -110,7 +110,7 @@ export function AdminMfaScreen({ onVerified, onExit }: { onVerified: () => void;
   }
 
   return (
-    <main className="min-h-[100dvh] bg-gradient-to-b from-indigo-50 to-white px-4 py-8 grid place-items-center">
+    <main className="grid min-h-[100dvh] place-items-center px-4 py-8">
       <Card className="w-full max-w-md p-6 space-y-5">
         <div className="flex flex-col items-center text-center gap-2">
           <Logo size={56} />

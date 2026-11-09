@@ -18,7 +18,7 @@ const javascript = ts.transpileModule(source, {
 }).outputText
 const file = join(process.env.TMPDIR || '/tmp', `mrc-plandisplay-${process.pid}.mjs`)
 await writeFile(file, javascript)
-const { planTitle, daysLabel, accessLabel, periodLabel } = await import(pathToFileURL(file).href)
+const { planTitle, daysLabel, accessLabel, periodLabel, paymentDayStart, paymentDayLabel, paymentStatusLabel } = await import(pathToFileURL(file).href)
 
 // The live row that reads badly today.
 assert.equal(planTitle('1 Days Trial'), '1 Day Trial')
@@ -48,4 +48,30 @@ assert.equal(periodLabel(30), '1 month')
 assert.equal(periodLabel(90), '3 months')
 assert.equal(periodLabel(365), '1 year')
 
-console.log('plan display: singular title, no "1 days", day/month/year labels correct')
+// Payment history reads date by date: the heading must be the day the payment
+// happened in local time, and "Today"/"Yesterday" must not drift.
+const now = new Date(2026, 10, 9, 9, 35).getTime()   // 9 Nov 2026, 09:35 local
+assert.equal(paymentDayLabel(paymentDayStart(now), now), 'Today')
+assert.equal(paymentDayLabel(paymentDayStart(new Date(2026, 10, 8, 23, 55).getTime()), now), 'Yesterday')
+assert.equal(paymentDayLabel(paymentDayStart(new Date(2026, 10, 7, 12, 0).getTime()), now), '7 Nov 2026')
+// Late-night and just-after-midnight payments are different days.
+assert.notEqual(
+  paymentDayStart(new Date(2026, 10, 8, 23, 55).getTime()),
+  paymentDayStart(new Date(2026, 10, 9, 0, 5).getTime()),
+  '23:55 and 00:05 belong to different days',
+)
+
+assert.equal(paymentStatusLabel('success'), 'Paid')
+assert.equal(paymentStatusLabel('pending'), 'Pending')
+assert.equal(paymentStatusLabel('failed'), 'Failed')
+assert.equal(paymentStatusLabel('rejected'), 'Rejected')
+assert.equal(paymentStatusLabel('pending', true), 'Awaiting UPI verification', 'a manual UPI review says so')
+
+const plansScreen = await readFile(new URL('../src/screens/PlansScreen.tsx', import.meta.url), 'utf8')
+assert.doesNotMatch(plansScreen, /<table/, 'payment history is no longer a sideways-scrolling table')
+assert.match(plansScreen, /historyGroups\.map/, 'history is grouped day by day')
+assert.match(plansScreen, /🧾 Receipt/, 'each payment has a receipt button')
+assert.match(plansScreen, /title="Payment receipt"/, 'the receipt opens from the row')
+assert.match(plansScreen, /paymentDayLabel\(dayStart\)/, 'day headings come from the shared helper')
+
+console.log('plan display: singular title, no "1 days", day/month/year labels correct, history grouped by day with receipts')

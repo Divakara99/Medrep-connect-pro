@@ -10,6 +10,12 @@ verify_jwt = true
 [functions.verify-razorpay-payment]
 verify_jwt = true
 
+[functions.create-job-unlock-order]
+verify_jwt = true
+
+[functions.verify-job-unlock]
+verify_jwt = true
+
 [functions.create-upi-intent]
 verify_jwt = true
 

@@ -39,7 +39,7 @@ export function ApplicationsScreen({ onClose, onBrowseJobs }: { onClose: () => v
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh])
 
   return (
-    <div className="fixed inset-0 z-40 bg-slate-50 overflow-y-auto">
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50/95 backdrop-blur-sm">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <BackButton onClick={onClose} label="Back to account" />

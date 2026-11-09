@@ -1,7 +1,7 @@
 import type { Job } from './jobs'
 import type { User } from './auth'
 import type { ResumeRecord } from './resume'
-import { getProfile, profileCompletionIssues, type Profile } from './profile'
+import { profileCompletionIssues, refreshProfile, type Profile } from './profile'
 import { CREATOR } from './creator'
 import { mirror, supabase } from './supabase'
 
@@ -153,7 +153,7 @@ export async function openApplication(
   job: Job,
   resume?: ResumeRecord | null,
 ): Promise<OpenApplicationResult> {
-  const profile = getProfile(user.email)
+  const profile = await refreshProfile(user.email)
   const missingProfileDetails = profileCompletionIssues(profile, user.phone)
   if (missingProfileDetails.length > 0) {
     return {

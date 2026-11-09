@@ -70,6 +70,22 @@ Run each file once, top to bottom (all are safe to re-run):
    `confirm_google_play_subscription_payment()` /
    `mark_google_play_purchase_finalised()` /
    `handle_google_play_voided_purchase()`.
+3. `supabase/job_unlocks.sql` — the **₹5 single-job unlock**, then
+   `supabase/job_unlock_permanent.sql`. Creates `job_unlocks`
+   (`amount_paise = 500` CHECK, `razorpay_order_id`/`razorpay_payment_id`
+   UNIQUE, users read own rows only) and replaces `list_visible_jobs()` so a
+   paid row reveals the same five confidential fields a pass does, for that one
+   job. The second file makes the unlock permanent (`expires_at = 'infinity'`,
+   enforced by a trigger) and makes the projection report no expiry. Run both
+   **after** `company_unlocks.sql`.
+
+   The ₹5 price is the same on the website and in the app. It is **not** a Play
+   product (Play India's floor is ₹10): the app opens Razorpay Checkout, exactly
+   as the website does, and never touches Play Billing for it. Selling in-app
+   digital content with your own payment system is allowed on Play only under
+   the **User Choice Billing** programme (India) — enrol there before shipping
+   this to production. `ANDROID_IN_APP_JOB_UNLOCK` in `src/data/jobUnlock.ts`
+   hides the in-app button again if you need to.
 
 ### 2b. Edge Functions — deploy
 
@@ -78,7 +94,24 @@ supabase link --project-ref lmhmbrusjizncumrufsx   # once
 supabase functions deploy admob-reward-verification   --project-ref lmhmbrusjizncumrufsx  # JWT check OFF (set in supabase/config.toml)
 supabase functions deploy verify-google-play-purchase --project-ref lmhmbrusjizncumrufsx  # JWT check ON
 supabase functions deploy admin-manage-employees      --project-ref lmhmbrusjizncumrufsx  # redeploy: team-password minimum is now 6
+supabase functions deploy create-job-unlock-order      --project-ref lmhmbrusjizncumrufsx  # ₹5 job unlock: prices the order at 500 paise
+supabase functions deploy verify-job-unlock            --project-ref lmhmbrusjizncumrufsx  # verifies signature + capture, stamps 1 hour
 ```
+
+> The ₹5 unlock reuses the existing `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`
+> secrets — nothing new to set.
+>
+> **Already deployed** to `lmhmbrusjizncumrufsx` (project "Medrep connect pro",
+> 8 Nov): the `job_unlocks` table with RLS and the new `list_visible_jobs()`,
+> plus both functions (`create-job-unlock-order`, `verify-job-unlock`, JWT on).
+> Those two were published through the Supabase connector, which only accepts a
+> single `index.ts`, so the live copies inline the `_shared/*` helpers. The repo
+> copies stay the source of truth and behave identically — a later
+> `supabase functions deploy` replaces the live copy with the module version,
+> which is fine and preferred. Inside the Android app it is deliberately not
+> sold: Google Play's lowest in-app price in India is ₹10, so the app keeps the
+> free rewarded-video unlock and never opens Razorpay (the website does both).
+
 
 Set the secrets from the CLI if you prefer:
 

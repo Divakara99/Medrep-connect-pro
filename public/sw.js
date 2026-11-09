@@ -4,7 +4,7 @@
 // behind an older cached index.html after a page refresh.
 // Bump the cache name whenever the shell changes, so installed clients drop the
 // previous bundle instead of keeping a stale login screen.
-const CACHE = 'mrc-v8'
+const CACHE = 'mrc-v9'
 const CORE = [
   './',
   './index.html',
