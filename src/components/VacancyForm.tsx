@@ -284,9 +284,13 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       for (const { key } of found) picked[key] = !draftValue(key).trim()
       // Lines the fixed form has no field for ("Joining: Immediate") become
       // extra details of this vacancy, ticked by default and editable below.
-      const extras = extractExtraFields(rawText)
-        .filter((extra) => !extraFields.some((current) => current.label.toLowerCase() === extra.label.toLowerCase()))
-        .map((extra) => ({ ...extra, checked: true }))
+      // The team portal posts through a database function with a fixed shape,
+      // so extra fields are offered to administrators only.
+      const extras = mode === 'team'
+        ? []
+        : extractExtraFields(rawText)
+          .filter((extra) => !extraFields.some((current) => current.label.toLowerCase() === extra.label.toLowerCase()))
+          .map((extra) => ({ ...extra, checked: true }))
       setReview({ fields: extracted, picked, extras })
       setExtractNotice(
         `Found ${found.length} value${found.length === 1 ? '' : 's'}${extras.length > 0 ? ` and ${extras.length} extra detail${extras.length === 1 ? '' : 's'}` : ''}.`
