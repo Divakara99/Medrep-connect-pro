@@ -29,7 +29,7 @@
     "test:jobseeker-design": "node scripts/test-jobseeker-design.mjs",
     "test:job-unlocks": "node scripts/test-job-unlocks.mjs",
     "test:content-pages": "node scripts/test-content-pages.mjs",
-    "test": "npm run test:android && npm run test:security && npm run test:password-rules && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:profile && npm run test:descriptions && npm run test:support && npm run test:notification-privacy && npm run test:refund-check && npm run test:vacancy-team && npm run test:vacancy-rules && npm run test:vacancy-extraction && npm run test:admin-vacancies && npm run test:jobseeker-design && npm run test:job-unlocks && npm run test:content-pages && npm run test:tutorial && npm run test:plan-state && npm run test:store-messages && npm run test:plan-display && npm run test:legal-pages && npm run test:keyboard-layout && npm run test:android-shell && npm run test:navigation && npm run test:pull-refresh && npm run test:no-local-cache && npm run test:job-filters && npm run test:share-jobs && npm run test:boot-guard && npm run test:dev-preview && npm run test:push && npm run test:vacancy-restore && npm run test:vacancy-extra-fields && npm run test:fill-check && npm run test:admin-messaging",
+    "test": "npm run test:android && npm run test:security && npm run test:password-rules && npm run test:billing && npm run test:resumes && npm run test:applications && npm run test:profile && npm run test:descriptions && npm run test:support && npm run test:notification-privacy && npm run test:refund-check && npm run test:vacancy-team && npm run test:vacancy-rules && npm run test:vacancy-extraction && npm run test:admin-vacancies && npm run test:jobseeker-design && npm run test:job-unlocks && npm run test:content-pages && npm run test:tutorial && npm run test:plan-state && npm run test:store-messages && npm run test:plan-display && npm run test:legal-pages && npm run test:keyboard-layout && npm run test:android-shell && npm run test:navigation && npm run test:pull-refresh && npm run test:no-local-cache && npm run test:job-filters && npm run test:share-jobs && npm run test:boot-guard && npm run test:dev-preview && npm run test:push && npm run test:vacancy-restore && npm run test:vacancy-extra-fields && npm run test:fill-check && npm run test:admin-messaging && npm run test:typography",
     "preview": "vite preview",
     "android:add": "cap add android",
     "android:sync": "npm run build && cap sync android",
@@ -58,7 +58,8 @@
     "test:vacancy-restore": "node scripts/test-vacancy-restore.mjs",
     "test:vacancy-extra-fields": "node scripts/test-vacancy-extra-fields.mjs",
     "test:fill-check": "node scripts/test-fill-check.mjs",
-    "test:admin-messaging": "node scripts/test-admin-messaging.mjs"
+    "test:admin-messaging": "node scripts/test-admin-messaging.mjs",
+    "test:typography": "node scripts/test-typography.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.2.1",
@@ -78,6 +79,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",
     "@electric-sql/pglite": "^0.5.8",
+    "@fontsource-variable/montserrat": "^5.3.0",
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

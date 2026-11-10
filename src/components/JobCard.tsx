@@ -1,6 +1,7 @@
-import { Badge, Card } from './ui'
+import { Card } from './ui'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
-import { descriptionPoints, type Job } from '../data/jobs'
+import type { Job } from '../data/jobs'
+import { salaryParts } from '../data/salaryText'
 import { normalizeIndianMobile } from '../data/vacancyRules'
 import { useUnlockWindow } from './useUnlockWindow'
 import { ShareJobButton } from './ShareJobButton'
@@ -14,10 +15,58 @@ function timeAgo(ts: number): string {
   return `${days}d ago`
 }
 
-function postedOn(ts: number): string {
-  if (!ts) return ''
-  return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+/* ------------------------------- icons ---------------------------------- */
+/* Small line icons instead of emoji: they stay sharp at any size, keep one
+   stroke weight across the card and never depend on the phone's emoji font. */
+
+function BuildingIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M4 21V5.5A1.5 1.5 0 0 1 5.5 4h5A1.5 1.5 0 0 1 12 5.5V21" />
+      <path d="M12 10h6.5A1.5 1.5 0 0 1 20 11.5V21" />
+      <path d="M2.5 21h19" />
+      <path d="M6.8 8h2.4M6.8 12h2.4M6.8 16h2.4M15.2 14h1.6M15.2 17.5h1.6" />
+    </svg>
+  )
 }
+
+function LockIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    </svg>
+  )
+}
+
+function MoneyIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="2.5" y="6.5" width="19" height="11" rx="2.5" />
+      <circle cx="12" cy="12" r="2.4" />
+      <path d="M6 10v4M18 10v4" />
+    </svg>
+  )
+}
+
+function PinIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M12 21s-6.2-5.7-6.2-10.2a6.2 6.2 0 1 1 12.4 0C18.2 15.3 12 21 12 21z" />
+      <circle cx="12" cy="10.6" r="2.3" />
+    </svg>
+  )
+}
+
+function ChevronIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M9.5 5.5 16 12l-6.5 6.5" />
+    </svg>
+  )
+}
+
+/* -------------------------------- card ---------------------------------- */
 
 export function JobCard({
   job,
@@ -44,120 +93,99 @@ export function JobCard({
   const unlockWindow = useUnlockWindow(job)
   const companyUnlocked = unlocked || unlockWindow.active
   const showUnlockButton = !unlocked && !unlockWindow.active && Boolean(onWatchUnlock)
-  const categoryColor: Record<string, 'brand' | 'amber' | 'green' | 'purple' | 'red' | 'slate'> = {
-    MR: 'brand',
-    ABM: 'purple',
-    Healthcare: 'green',
-    FMCG: 'amber',
-    'Part-time': 'slate',
-    'E-commerce': 'amber',
-    Finance: 'green',
-    Banking: 'green',
-    IT: 'purple',
-    Insurance: 'red',
-    Field: 'slate',
-  }
+  const salary = salaryParts(job.salary)
 
-  const initials = companyUnlocked && job.company ? job.company.slice(0, 2).toUpperCase() : '🔒'
-  const preview = descriptionPoints(job.description).slice(0, 2)
+  const status = unlocked
+    ? { label: '✓ Unlocked', tone: 'bg-emerald-50 text-emerald-800 ring-emerald-200' }
+    : companyUnlocked
+      ? { label: `✓ Company unlocked · ${unlockWindow.label} left`, tone: 'bg-emerald-50 text-emerald-800 ring-emerald-200' }
+      : { label: 'Contact locked', tone: 'bg-slate-100 text-slate-600 ring-slate-200' }
 
   return (
-    <Card className={`lift group relative overflow-hidden ${job.pinned ? 'ring-1 ring-amber-200' : ''}`}>
-      {job.pinned && <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400" />}
-      {/* Sharing sits in the card's corner so it costs no height: every card
-          keeps the same rhythm whether or not it can be shared. */}
-      <ShareJobButton job={job} icon className="absolute right-3 top-3 z-10" />
-      <button onClick={onClick} className="w-full p-4 text-left">
+    <Card
+      className={`group overflow-hidden rounded-[26px] border-[#e9edf6] bg-white shadow-[0_16px_34px_-26px_rgba(23,34,94,0.55)] ${
+        job.pinned ? 'ring-1 ring-amber-200' : ''
+      }`}
+    >
+      <button type="button" onClick={onClick} className="w-full px-4 pb-4 pt-4 text-left">
         <div className="flex items-start gap-3">
+          {/* One tile, like the reference: the employer mark. When the company
+              is still locked there is nothing to show, so it is a lock. */}
           <div
-            className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-sm font-extrabold text-white shadow-[0_10px_22px_-14px_rgba(29,78,216,0.95)] ring-1 ring-white/40 ${
-              companyUnlocked
-                ? 'bg-gradient-to-br from-brand-500 to-indigo-700'
-                : 'bg-gradient-to-br from-slate-300 to-slate-400'
+            className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl ${
+              companyUnlocked ? 'bg-[#e9ecfb] text-[#4b57c8]' : 'bg-slate-100 text-slate-400'
             }`}
           >
-            {initials}
+            {companyUnlocked ? <BuildingIcon className="h-7 w-7" /> : <LockIcon className="h-6 w-6" />}
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="min-w-0 pr-10">
-              <div className="truncate text-[17px] font-bold leading-snug tracking-tight text-slate-900 group-hover:text-brand-800">
-                {job.title}
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="line-clamp-2 text-[19px] font-bold italic leading-snug tracking-tight text-slate-900 group-hover:text-brand-800">
+                  {job.title}
+                </h3>
+                {companyUnlocked && job.company ? (
+                  <div className="mt-0.5 truncate text-[15px] font-medium italic text-slate-500">{job.company}</div>
+                ) : (
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span aria-hidden className="select-none text-[15px] font-medium italic text-slate-400 blur-[5px]">Hidden Pharma Pvt Ltd</span>
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">Locked</span>
+                  </div>
+                )}
               </div>
-              <div className="mt-0.5 flex items-center gap-1 text-sm text-slate-700">
-                <span aria-hidden className="text-brand-600">📍</span>
-                <span className="truncate font-semibold">{job.location}</span>
-              </div>
+              <ChevronIcon className="mt-1 h-5 w-5 shrink-0 text-[#4b57c8]" />
             </div>
 
-            {companyUnlocked && job.company ? (
-              <div className="mt-0.5 truncate text-sm font-medium text-slate-600">{job.company}</div>
-            ) : (
-              /* Locked placeholder: the real company name is never sent to a
-                 free user, so there is nothing behind this blur. */
-              <div className="mt-1 flex items-center gap-1.5">
-                <span aria-hidden className="text-xs">🔒</span>
-                <span aria-hidden className="select-none text-sm font-bold text-slate-400 blur-[5px]">Hidden Pharma Pvt Ltd</span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">Locked</span>
+            {salary.amount && (
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <MoneyIcon className="mr-0.5 h-[18px] w-[18px] shrink-0 translate-y-[3px] text-[#4b57c8]" />
+                <span className="text-[19px] font-bold italic leading-tight text-slate-900">{salary.amount}</span>
+                {salary.unit && <span className="text-[15px] font-medium italic text-slate-500">{salary.unit}</span>}
               </div>
             )}
 
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <Badge color={categoryColor[job.category] ?? 'slate'}>{job.category}</Badge>
-              {job.pinned && <Badge color="amber">★ Pinned</Badge>}
-              {job.salary && <Badge color="green">{job.salary}</Badge>}
-              {job.experience && <span className="rounded-full bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">{job.experience}</span>}
+            <div className="mt-2 flex items-start gap-2">
+              <PinIcon className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#4b57c8]" />
+              <div className="min-w-0 text-[18px] font-bold italic leading-snug text-slate-900">
+                <span className="break-words">{job.location}</span>
+                {job.hq && job.hq !== job.location && (
+                  <span className="text-[15px] font-medium text-slate-500"> · HQ {job.hq}</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
-
-        {preview.length > 0 ? (
-          <ul className="mt-3 space-y-1 rounded-2xl bg-slate-50/80 px-3 py-2.5 ring-1 ring-slate-100">
-            {preview.map((point, index) => (
-              <li key={index} className="flex items-start gap-1.5 text-sm leading-snug text-slate-700">
-                <span aria-hidden className="shrink-0 font-extrabold text-brand-600">•</span>
-                <span className="line-clamp-1">{point}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="mt-3 rounded-2xl bg-slate-50/80 px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-100">
-            Tap to view full details.
-          </div>
-        )}
-
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="text-xs font-medium text-slate-500">
-            {timeAgo(job.postedAt)}
-            {postedOn(job.postedAt) ? ` · ${postedOn(job.postedAt)}` : ''}
-          </div>
-          {unlocked ? (
-            <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">
-              ✓ Unlocked
-            </div>
-          ) : companyUnlocked ? (
-            <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">
-              ✓ Company unlocked · {unlockWindow.label} left
-            </div>
-          ) : (
-            <div className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">
-              🔒 Contact locked
-            </div>
-          )}
-        </div>
-
-        {unlocked && (
-          <div className="mt-3 rounded-2xl bg-brand-50/70 px-3 py-2 text-xs text-slate-700 ring-1 ring-brand-100">
-            Company: <span className="font-semibold text-slate-900">{job.company}</span>
-            {job.manager ? <> · Manager: <span className="font-semibold text-slate-900">{job.manager}</span></> : null}
-            {job.contact ? <> · Contact: <span className="font-semibold text-slate-900">{job.contact}</span></> : null}
-            {job.managerAltPhone ? <> · <span className="font-extrabold text-brand-700">+91</span> <span className="font-semibold text-slate-900">{normalizeIndianMobile(job.managerAltPhone)}</span></> : null}
-          </div>
-        )}
       </button>
 
+      {/* Footer strip: the tags that describe the role, then freshness and share. */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#eef1f8] px-4 py-3">
+        <span className="rounded-[10px] bg-[#fdf1e5] px-3 py-1 text-sm font-bold italic text-[#a86a15]">
+          {job.experience || 'Fresher'}
+        </span>
+        <span className="rounded-[10px] bg-[#e4f6f1] px-3 py-1 text-sm font-bold italic text-[#0f7d68]">{job.category}</span>
+        {job.pinned && (
+          <span className="rounded-[10px] bg-amber-100 px-3 py-1 text-sm font-bold italic text-amber-900">★ Pinned</span>
+        )}
+        <span className={`rounded-[10px] px-3 py-1 text-sm font-bold italic ring-1 ${status.tone}`}>{status.label}</span>
+
+        <div className="ml-auto flex items-center gap-1.5">
+          <span className="text-xs font-medium italic text-slate-500">{timeAgo(job.postedAt)}</span>
+          <ShareJobButton job={job} icon className="" />
+        </div>
+      </div>
+
+      {unlocked && (
+        <div className="border-t border-[#eef1f8] px-4 py-3 text-sm text-slate-700">
+          Company: <span className="font-semibold text-slate-900">{job.company}</span>
+          {job.manager ? <> · Manager: <span className="font-semibold text-slate-900">{job.manager}</span></> : null}
+          {job.contact ? <> · Contact: <span className="font-semibold text-slate-900">{job.contact}</span></> : null}
+          {job.managerAltPhone ? <> · <span className="font-extrabold text-brand-700">+91</span> <span className="font-semibold text-slate-900">{normalizeIndianMobile(job.managerAltPhone)}</span></> : null}
+        </div>
+      )}
+
       {showUnlockButton && (
-        <div className="px-4 pb-4">
+        <div className="border-t border-[#eef1f8] px-4 py-3">
           <button
             type="button"
             disabled={unlockStage !== null}
