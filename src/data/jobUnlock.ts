@@ -42,7 +42,7 @@ export function paidJobUnlockAvailable(): boolean {
 export type JobUnlockPrefill = { name?: string; email?: string }
 
 export function jobUnlockLabel(): string {
-  return `₹${JOB_UNLOCK_PRICE_RUPEES} · Unlock this job for good`
+  return `₹${JOB_UNLOCK_PRICE_RUPEES} · Unlock this job`
 }
 
 /**

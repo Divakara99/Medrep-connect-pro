@@ -107,7 +107,8 @@ assert.ok(/<ShareJobButton job=\{job\}/.test(detail), 'the job page offers Share
 assert.ok(!/unlocked &&[\s\S]{0,80}<ShareJobButton/.test(card), 'Share is not gated behind the subscription')
 assert.ok(/border-t border-\[#eef1f8\] px-4 py-3">[\s\S]{0,900}?<ShareJobButton job=\{job\} icon/.test(card), 'the card share rides in the footer strip, costing no extra card block')
 assert.ok(!/displays the share row/.test(card) && !/justify-end">\s*\{showUnlockButton/.test(card), 'no extra action row is added to the card')
-assert.ok(/<ShareJobButton job=\{job\} \/>/.test(detail), 'the job page keeps the full labelled button')
+assert.ok(/<ShareJobButton job=\{job\} icon \/>/.test(detail), 'the job page offers the plain share glyph')
+assert.ok(!/<ShareJobButton job=\{job\} \/>/.test(detail), 'and no longer spends a full-width button on it')
 
 // ---------- the web control is a link, the app uses the chooser ----------
 const button = await readFile(new URL('../src/components/ShareJobButton.tsx', import.meta.url), 'utf8')

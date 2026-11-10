@@ -100,6 +100,12 @@ assert.match(detail, /paidUnlock\?: \{ available: boolean; busy: boolean; onBuy:
 assert.match(detail, /paidUnlock\?\.available && \(/, 'the ₹5 button appears only when it is available')
 assert.match(detail, /jobUnlockLabel\(\)/, 'the button shows the price and the window')
 assert.match(detail, /Full contact unlocked for this job/, 'an active paid unlock is stated on the sheet')
+// Both unlock buttons must fit one line on a phone: short labels, no fillers.
+assert.match(buyer, /· Unlock this job`/, 'the ₹5 button reads "Unlock this job"')
+assert.doesNotMatch(buyer, /Unlock this job for good/, 'the "for good" tail is gone from the button')
+assert.match(detail, /🔓 Unlock all jobs/, 'the pass button reads "Unlock all jobs"')
+assert.doesNotMatch(detail, /Unlock manager contact/, 'the long pass label is gone')
+assert.match(detail, /One payment for this job — nothing renews\./, 'the ₹5 note is one short line')
 assert.match(detail, /const fullDetails = Boolean\(job && \(unlocked \|\| paidWindow\.active\)\)/,
   'a paid window reveals the contact block, like a pass would for this sheet')
 assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app offers the ₹5 unlock wherever it can be paid')

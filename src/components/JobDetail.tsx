@@ -75,7 +75,7 @@ function LockedValue({ label, placeholder }: { label: string; placeholder: strin
       </div>
       <div className="mt-0.5 text-sm font-bold text-slate-400 blur-[5px] select-none" aria-hidden>{placeholder}</div>
       <div className="text-[9px] font-bold uppercase tracking-wide text-amber-700 mt-0.5">
-        Locked · subscribe to unlock
+        Locked
       </div>
     </div>
   )
@@ -257,14 +257,14 @@ export function JobDetail({
                     {paidUnlock.busy ? 'Opening secure checkout…' : `🔓 ${jobUnlockLabel()}`}
                   </Button>
                   <p className="text-center text-xs font-medium text-slate-500">
-                    ₹5 opens this one job's manager name, email and phone numbers — kept for that job, not for an hour. One payment, nothing renews.
+                    One payment for this job — nothing renews.
                   </p>
                 </>
               )}
               {/* Quiet by design: a pass is one way to see the contact, not
                   the pitch of the screen. The job itself is the subject. */}
               <Button className="w-full" variant="secondary" onClick={onSubscribe}>
-                🔓 Unlock manager contact
+                🔓 Unlock all jobs
               </Button>
               <p className="text-center text-xs font-medium text-slate-500">
                 {paidUnlock?.available
@@ -277,13 +277,13 @@ export function JobDetail({
               {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}
             </Button>
           )}
-          <ShareJobButton job={job} />
-          <p className="text-center text-xs font-medium text-slate-500">
-            Sharing sends the role, city, HQ and the Play Store link — never the company name or contact details.
-          </p>
-          <Button variant="ghost" className="w-full" onClick={onClose}>
-            Close
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" className="flex-1" onClick={onClose}>
+              Close
+            </Button>
+            {/* Just the glyph: sharing is a small action here, not a headline. */}
+            <ShareJobButton job={job} icon />
+          </div>
         </div>
       )}
     </Modal>
