@@ -25,6 +25,8 @@ export type Profile = {
   phone?: string
   city?: string
   state?: string
+  /** Full postal address, as typed. Optional; the admin console can read it. */
+  address?: string
   dob?: string
   gender?: 'Male' | 'Female' | 'Other' | ''
   languages?: string[]

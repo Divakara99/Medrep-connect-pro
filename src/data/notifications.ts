@@ -443,6 +443,26 @@ export async function sendAnnouncement(title: string, message: string): Promise<
 }
 
 /**
+ * Send an announcement to ONE user: it appears in that account's notification
+ * list and is pushed only to that account's phones. Used when the message is
+ * meant for a single person (a reply, a reminder) and must not ring everyone.
+ */
+export async function sendAnnouncementTo(
+  title: string,
+  message: string,
+  email: string,
+): Promise<AnnouncementResult> {
+  const cleanTitle = title.trim()
+  const cleanMessage = message.trim()
+  if (!cleanTitle || !cleanMessage) return { ok: false, error: 'Write a title and a message before sending.' }
+  const target = privateNotificationTarget(email)
+  if (!target) return { ok: false, error: 'Choose the user this announcement is for.' }
+
+  const notification = broadcast({ kind: 'announcement', title: cleanTitle, message: cleanMessage }, { target })
+  return publish(notification)
+}
+
+/**
  * Store a broadcast on the server and push it to every subscribed device. Used
  * for announcements and for vacancy posts/updates.
  */

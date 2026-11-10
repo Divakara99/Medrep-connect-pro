@@ -4,6 +4,7 @@ import { getProfile, newEducation, newExperience, refreshProfile, saveProfile, p
 import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
+import { MAX_ADDRESS_LENGTH, addressProblem } from '../data/userAddress'
 
 export type ProfileEditorHandle = {
   save: () => Promise<Profile | null>
@@ -143,6 +144,19 @@ export const ProfileEditor = forwardRef<
           <div>
             <Label>State</Label>
             <Input value={p.state ?? ''} onChange={(e) => update({ state: e.target.value })} placeholder="e.g. Telangana" />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Address (optional)</Label>
+            <Textarea
+              rows={2}
+              maxLength={MAX_ADDRESS_LENGTH}
+              value={p.address ?? ''}
+              onChange={(e) => update({ address: e.target.value })}
+              placeholder="House / street, area, PIN code — shown to you and to the administrator only"
+            />
+            {addressProblem(p.address ?? '') && (
+              <div className="mt-1 text-xs font-semibold text-red-700">{addressProblem(p.address ?? '')}</div>
+            )}
           </div>
           <div>
             <Label>Date of birth</Label>

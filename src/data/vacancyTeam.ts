@@ -1,4 +1,4 @@
-import { hasAdminRole, supabase } from './supabase'
+import { callEdgeFunction, hasAdminRole, supabase } from './supabase'
 import { notifyDevices } from './push'
 import type { Job } from './jobs'
 import { deleteReasonProblem, type ActorRole, type AuditRow } from './vacancyRules'
@@ -44,19 +44,9 @@ async function requireAdminSession(): Promise<void> {
 
 /** Calls the admin-manage-employees function and returns its JSON body. */
 async function callEmployeeFunction(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { data, error } = await supabase.functions.invoke('admin-manage-employees', { body })
-  if (error) {
-    let message = error.message || 'The team login service could not be reached.'
-    const context = (error as Error & { context?: unknown }).context
-    if (context instanceof Response) {
-      const failure = await context.clone().json().catch(() => null) as { error?: string } | null
-      if (failure?.error) message = failure.error
-    }
-    throw new Error(message)
-  }
-  const payload = (data ?? {}) as Record<string, unknown> & { error?: string }
-  if (payload.error) throw new Error(payload.error)
-  return payload
+  const { data, error } = await callEdgeFunction('admin-manage-employees', body)
+  if (error) throw new Error(error)
+  return data ?? {}
 }
 
 // ---------------------------------------------------------------------------

@@ -54,11 +54,12 @@ import {
 } from '../data/supportRequests'
 import { reasonLabel } from '../data/refundCheck'
 import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
-import { announcementSignOff, broadcast, sendAnnouncement } from '../data/notifications'
+import { announcementSignOff, broadcast, sendAnnouncement, sendAnnouncementTo } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
 import { getSyncStatus } from '../data/supabase'
 import { publishToEveryone, pushReach, type PushReach } from '../data/push'
 import { announcementProblem, ANNOUNCEMENT_WARN_DEVICES } from '../data/pushRules'
+import { addressLine, addressSearchText } from '../data/userAddress'
 import {
   adminSecurityAudit,
   adminSecurityState,
@@ -1594,7 +1595,7 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
     return true
   }).filter((u) => {
     if (!query.trim()) return true
-    const haystack = `${u.name} ${u.email}`.toLowerCase()
+    const haystack = `${u.name} ${u.email} ${addressSearchText(u)}`.toLowerCase()
     if (haystack.includes(query.trim().toLowerCase())) return true
     return Boolean(searchDigits) && (u.phone || '').includes(searchDigits)
   })
@@ -1651,8 +1652,8 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search users by name, email or phone number…"
-          aria-label="Search users by name, email or phone number"
+          placeholder="Search users by name, email, phone or address…"
+          aria-label="Search users by name, email, phone or address"
         />
       </div>
       <div className="flex gap-2 flex-wrap">
@@ -1676,12 +1677,13 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
+            <table className="w-full text-sm min-w-[860px]">
               <thead className="bg-slate-50 text-slate-600 text-left">
                 <tr>
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Email</th>
                   <th className="px-3 py-2">Phone</th>
+                  <th className="px-3 py-2">Address</th>
                   <th className="px-3 py-2">Joined</th>
                   <th className="px-3 py-2">Subscription</th>
                   <th className="px-3 py-2">Action</th>
@@ -1698,6 +1700,9 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
                       </td>
                       <td className="px-3 py-2 text-slate-700">{u.email}</td>
                       <td className="px-3 py-2 text-slate-700">{u.phone || '—'}</td>
+                      <td className="px-3 py-2 text-slate-700 max-w-[260px]">
+                        {addressLine(u) ? <span className="block whitespace-normal break-words">{addressLine(u)}</span> : '—'}
+                      </td>
                       <td className="px-3 py-2 text-slate-700">{new Date(u.createdAt).toLocaleDateString()}</td>
                       <td className="px-3 py-2">
                         {active ? (
@@ -2087,13 +2092,22 @@ function StatCard({
 
 // -------------------- Profile (AI update composer) --------------------
 
-// -------------------- Announcements (to every user) --------------------
+// ------------- Announcements (every user, or one chosen user) -------------
 function AnnouncementsTab() {
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [reach, setReach] = useState<PushReach | null>(null)
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string; detail?: string } | null>(null)
+
+  // Who receives it: everyone, or one account the admin picks by name / email /
+  // phone. A personal message must never ring every phone by accident.
+  const [audience, setAudience] = useState<'all' | 'user'>('all')
+  const [people, setPeople] = useState<User[]>(() => getUsers())
+  const [peopleLoading, setPeopleLoading] = useState(false)
+  const [peopleError, setPeopleError] = useState<string | null>(null)
+  const [personQuery, setPersonQuery] = useState('')
+  const [person, setPerson] = useState<User | null>(null)
 
   const loadReach = useCallback(async () => { setReach(await pushReach()) }, [])
   useEffect(() => {
@@ -2102,26 +2116,51 @@ function AnnouncementsTab() {
     return () => { window.clearTimeout(first); window.clearInterval(interval) }
   }, [loadReach])
 
+  const loadPeople = useCallback(async () => {
+    setPeopleLoading(true)
+    setPeopleError(null)
+    try {
+      setPeople(await refreshAdminUsers())
+    } catch (err) {
+      setPeopleError(err instanceof Error ? err.message : 'Accounts could not be loaded.')
+    } finally {
+      setPeopleLoading(false)
+    }
+  }, [])
+
+  const query = personQuery.trim().toLowerCase()
+  const digits = personQuery.replace(/\D/g, '')
+  const matches = query.length === 0 ? [] : people.filter((candidate) =>
+    `${candidate.name} ${candidate.email}`.toLowerCase().includes(query)
+    || (digits.length >= 3 && (candidate.phone || '').includes(digits)),
+  ).slice(0, 6)
+
   const problem = announcementProblem(title, message)
+  const missingPerson = audience === 'user' && !person
 
   async function publish() {
     if (problem) { setResult({ kind: 'error', text: problem }); return }
+    if (missingPerson) { setResult({ kind: 'error', text: 'Choose the user this announcement is for.' }); return }
     setBusy(true)
     setResult(null)
-    const outcome = await sendAnnouncement(title, message)
+    const one = audience === 'user' ? person : null
+    const outcome = one
+      ? await sendAnnouncementTo(title, message, one.email)
+      : await sendAnnouncement(title, message)
     setBusy(false)
     if (!outcome.ok) { setResult({ kind: 'error', text: outcome.error }); return }
     const delivery = outcome.delivery
+    const who = one ? `${one.name} (${one.email})` : 'every user'
     setResult({
       kind: 'ok',
-      text: `Announcement sent to every user${delivery ? ` — ${delivery.sent} of ${delivery.devices} device${delivery.devices === 1 ? '' : 's'} notified` : ''}.`,
+      text: `Announcement sent to ${who}${delivery ? ` — ${delivery.sent} of ${delivery.devices} device${delivery.devices === 1 ? '' : 's'} notified` : ''}.`,
       detail: outcome.warning ?? (delivery && delivery.failed > 0
         ? `${delivery.failed} device${delivery.failed === 1 ? '' : 's'} could not be reached and ${delivery.removed > 0 ? `${delivery.removed} were removed as dead.` : 'will be retried on the next send.'}`
         : undefined),
     })
     setTitle('')
     setMessage('')
-    void loadReach()
+    if (!one) void loadReach()
   }
 
   return (
@@ -2129,10 +2168,10 @@ function AnnouncementsTab() {
       <h2 className="text-lg font-bold text-slate-900">📣 Announcements</h2>
 
       <Card className="p-4 space-y-2">
-        <div className="font-bold text-slate-900 text-sm">Write once, every user gets it</div>
+        <div className="font-bold text-slate-900 text-sm">Write once — everyone, or one person</div>
         <div className="text-xs text-slate-600">
-          The announcement appears in every user's notification list and is pushed to every phone that switched
-          notifications on — with sound, even when the app is closed.
+          Send to every user, or pick one account and only that person is notified. It appears in the
+          notification list of whoever receives it and is pushed to their phone — with sound, even when the app is closed.
         </div>
         {reach && (
           <div className="text-xs text-slate-700 flex items-center gap-2 flex-wrap">
@@ -2151,13 +2190,85 @@ function AnnouncementsTab() {
         {reach && (reach.devices === 0 || reach.devices >= ANNOUNCEMENT_WARN_DEVICES) && (
           <div className="text-xs text-slate-500">
             {reach.devices === 0
-              ? 'No phone has notifications switched on yet — the announcement will still appear in every user’s app.'
+              ? 'No phone has notifications switched on yet — the announcement will still appear in the app.'
               : `This will ring ${reach.devices} devices at once. Keep the message short and clear.`}
           </div>
         )}
       </Card>
 
       <Card className="p-4 space-y-3">
+        <div>
+          <div className="text-sm font-bold text-slate-900 mb-1.5">Send to</div>
+          <div className="flex gap-2 flex-wrap">
+            {([['all', '👥 All users'], ['user', '👤 One user']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setAudience(id)
+                  setResult(null)
+                  // The account list is only needed for a single recipient.
+                  if (id === 'user' && people.length === 0 && !peopleLoading) void loadPeople()
+                }}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition touch-manipulation ${
+                  audience === id ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50'
+                }`}
+                aria-pressed={audience === id}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {audience === 'user' && (
+          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200 space-y-2">
+            {person ? (
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate">{person.name}</div>
+                  <div className="text-xs text-slate-600 truncate">{person.email}{person.phone ? ` · ${person.phone}` : ''}</div>
+                </div>
+                <Button variant="secondary" className="px-3 py-1.5 text-sm" onClick={() => { setPerson(null); setPersonQuery('') }}>
+                  Change user
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Label htmlFor="announce-user">Find the user</Label>
+                <Input
+                  id="announce-user"
+                  value={personQuery}
+                  onChange={(event) => setPersonQuery(event.target.value)}
+                  placeholder="Name, email or phone number…"
+                  autoComplete="off"
+                />
+                {peopleLoading && <div className="text-xs text-slate-500">Loading accounts…</div>}
+                {peopleError && <div className="text-xs font-semibold text-red-700" role="alert">{peopleError}</div>}
+                {!peopleLoading && !peopleError && query.length > 0 && matches.length === 0 && (
+                  <div className="text-xs text-slate-500">No account matches “{personQuery.trim()}”.</div>
+                )}
+                <div className="space-y-1">
+                  {matches.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => { setPerson(candidate); setPersonQuery(''); setResult(null) }}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left ring-1 ring-slate-200 hover:bg-brand-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-900">{candidate.name}</span>
+                        <span className="block truncate text-xs text-slate-600">{candidate.email}{candidate.phone ? ` · ${candidate.phone}` : ''}</span>
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-brand-700">Choose</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <div>
           <Label htmlFor="announce-title">Title</Label>
           <Input
@@ -2184,7 +2295,7 @@ function AnnouncementsTab() {
 
         <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-            Preview on the phone
+            {person ? `Preview on ${person.name}'s phone` : 'Preview on the phone'}
           </div>
           <div className="text-sm font-semibold text-slate-900">{title.trim() || 'Your title'}</div>
           <div className="text-xs text-slate-700 whitespace-pre-wrap mt-1">
@@ -2208,10 +2319,10 @@ function AnnouncementsTab() {
 
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-xs text-slate-500">
-            {problem ?? `Ready to send to all users.`}
+            {missingPerson ? 'Choose the user this announcement is for.' : problem ?? (person ? `Ready to send to ${person.name} only.` : 'Ready to send to all users.')}
           </div>
-          <Button disabled={busy || Boolean(problem)} onClick={() => { void publish() }}>
-            {busy ? 'Sending…' : '📣 Send to all users'}
+          <Button disabled={busy || Boolean(problem) || missingPerson} onClick={() => { void publish() }}>
+            {busy ? 'Sending…' : person ? `📣 Send to ${person.name}` : '📣 Send to all users'}
           </Button>
         </div>
       </Card>
