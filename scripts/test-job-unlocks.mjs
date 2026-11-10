@@ -108,7 +108,9 @@ assert.doesNotMatch(detail, /Unlock manager contact/, 'the long pass label is go
 assert.match(detail, /grid grid-cols-2 gap-2/, 'the ₹5 and pass choices share one row')
 assert.match(detail, /₹5 unlocks this job; a pass unlocks all jobs\./, 'the row clarifies the two choices')
 assert.match(detail, /onClick=\{onSubscribe\}/, 'the pass button invokes its selection action')
-assert.match(app, /onSubscribe=\{\(\) => \{ setSelectedJob\(null\); navigate\('plans'\) \}\}/, 'tapping Unlock all jobs shifts to pass selection')
+assert.match(app, /onSubscribe=\{openPlansFromJob\}/, 'tapping Unlock all jobs shifts to pass selection')
+assert.match(app, /setPassReturnJob\(selectedJob\)[\s\S]{0,100}setSelectedJob\(null\)[\s\S]{0,100}navigate\('plans'\)/, 'pass selection remembers the originating job')
+assert.match(app, /nav\.tab === 'plans' && passReturnJob[\s\S]{0,100}setSelectedJob\(passReturnJob\)/, 'Back restores the job detail page')
 assert.match(detail, /const fullDetails = Boolean\(job && \(unlocked \|\| paidWindow\.active\)\)/,
   'a paid window reveals the contact block, like a pass would for this sheet')
 assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app offers the ₹5 unlock wherever it can be paid')

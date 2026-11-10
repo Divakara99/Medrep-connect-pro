@@ -68,6 +68,9 @@ export default function App() {
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState<string | null>(null)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  // Preserve the vacancy sheet when its pass action opens Plans, so Back
+  // returns to the exact job the user was viewing.
+  const [passReturnJob, setPassReturnJob] = useState<Job | null>(null)
   const [applyJob, setApplyJob] = useState<Job | null>(null)
   const [pendingApplyJob, setPendingApplyJob] = useState<Job | null>(null)
   const [profileGateOpen, setProfileGateOpen] = useState(false)
@@ -143,19 +146,33 @@ export default function App() {
   /** Opens a tab, remembering the page it was opened from. */
   const navigate = useCallback((next: UserTab) => {
     setMenuOpen(false)
+    if (next !== 'plans') setPassReturnJob(null)
     setNav((current) => next === current.tab
       ? current
       : { tab: next, stack: [...current.stack, current.tab].slice(-20) })
   }, [])
 
-  /** The back step inside the app: the previous tab, or nothing on Home. */
+  /** The back step inside the app: the previous page, or nothing on Home. */
   const goBackInApp = useCallback(() => {
+    const previous = nav.stack[nav.stack.length - 1]
+    if (!previous) return
+    if (nav.tab === 'plans' && passReturnJob) {
+      setSelectedJob(passReturnJob)
+      setPassReturnJob(null)
+    }
     setNav((current) => {
-      const previous = current.stack[current.stack.length - 1]
-      if (!previous) return current
-      return { tab: previous, stack: current.stack.slice(0, -1) }
+      const currentPrevious = current.stack[current.stack.length - 1]
+      if (!currentPrevious) return current
+      return { tab: currentPrevious, stack: current.stack.slice(0, -1) }
     })
-  }, [])
+  }, [nav, passReturnJob])
+
+  /** Open pass selection from a job and make Back restore that job sheet. */
+  const openPlansFromJob = useCallback(() => {
+    setPassReturnJob(selectedJob)
+    setSelectedJob(null)
+    navigate('plans')
+  }, [navigate, selectedJob])
 
   // Arm the history guard for every page of the app (sign-in included) and let
   // the signed-in page stack answer the back gesture. Sheets and the
@@ -782,7 +799,7 @@ export default function App() {
         job={selectedJob}
         unlocked={unlocked}
         onClose={() => setSelectedJob(null)}
-        onSubscribe={() => { setSelectedJob(null); navigate('plans') }}
+        onSubscribe={openPlansFromJob}
         onApply={requestApplication}
         onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
         unlockStage={selectedJob && unlockingJobId === selectedJob.id ? unlockStage : null}
