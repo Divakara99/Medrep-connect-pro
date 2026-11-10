@@ -82,4 +82,14 @@ const teamData = await readFile(new URL('../src/data/vacancyTeam.ts', import.met
 assert.match(teamData, /callEdgeFunction\('admin-manage-employees'/, 'the team console goes through it')
 assert.match(auth, /callEdgeFunction\('admin-delete-user'/, 'delete-account does too')
 
+// 7. An application carries the app link --------------------------------------
+const apply = await readFile(new URL('../src/data/apply.ts', import.meta.url), 'utf8')
+assert.match(apply, /PLAY_STORE_URL/, 'the application text names the Play Store app')
+assert.match(apply, /App: \$\{PLAY_STORE_URL\}/, 'the WhatsApp message ends with the app link')
+assert.match(apply, /Android app: \$\{PLAY_STORE_URL\}/, 'the email body carries it too')
+assert.match(apply, /mailto:|wa\.me/, 'and it travels on both channels')
+
+const story = await readFile(new URL('../ANDROID.md', import.meta.url), 'utf8')
+assert.match(story, /FCM_SERVICE_ACCOUNT/, 'the closed-app notification steps are documented')
+
 console.log('admin messaging: address visible, one-user announcements, 6-character team password, stale session recovered — passed')
