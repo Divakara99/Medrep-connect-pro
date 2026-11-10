@@ -15,13 +15,14 @@ export const ProfileEditor = forwardRef<
   ProfileEditorHandle,
   {
     email: string
+    name: string
     phone?: string
     onSaved?: (p: Profile) => void
     onPhotoSaved?: (url: string) => void
     onResumeChange?: (resume: ResumeRecord | null) => void
   }
 >(function ProfileEditor(
-  { email, phone, onSaved, onPhotoSaved, onResumeChange },
+  { email, name, phone, onSaved, onPhotoSaved, onResumeChange },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
@@ -177,8 +178,8 @@ export const ProfileEditor = forwardRef<
             <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={changePhoto} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-bold uppercase tracking-widest text-brand-700">Tagline</div>
-            <div className="text-xl font-extrabold text-slate-900">{p.tagline}</div>
+            <div className="text-[11px] font-bold uppercase tracking-widest text-brand-700">Profile</div>
+            <div className="truncate text-xl font-extrabold text-slate-900">{name}</div>
             <div className="truncate text-xs text-slate-600">{p.email}</div>
             <div className="mt-1 text-[11px] text-slate-500">JPG, PNG or WEBP · up to 5 MB</div>
           </div>

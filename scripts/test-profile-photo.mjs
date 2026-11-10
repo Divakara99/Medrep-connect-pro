@@ -2,11 +2,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
-const [profile, photo, editor, account, sql, deleteUser] = await Promise.all([
+const [profile, photo, editor, account, app, sql, deleteUser] = await Promise.all([
   read('src/data/profile.ts'),
   read('src/data/profilePhoto.ts'),
   read('src/components/ProfileEditor.tsx'),
   read('src/screens/AccountScreen.tsx'),
+  read('src/App.tsx'),
   read('supabase/profile_photos.sql'),
   read('supabase/functions/admin-delete-user/index.ts'),
 ])
@@ -23,6 +24,9 @@ assert.match(deleteUser, /\.from\('profile-photos'\)[\s\S]*\.list\(targetId[\s\S
 assert.match(editor, /Upload or change profile photo/, 'the account profile provides a photo picker')
 assert.match(editor, /onPhotoSaved\?\.\(uploaded\.url\)/, 'the uploaded photo immediately updates the account avatar')
 assert.match(account, /profilePhoto \? \([\s\S]*<img src=\{profilePhoto\}/, 'the account header displays the saved photo')
+assert.match(account, /name=\{user\.name\}/, 'the profile editor receives the account name')
+assert.match(editor, /Profile<\/div>[\s\S]*\{name\}/, 'the same name appears in the profile card')
+assert.match(app, /label: 'Account & Profile'[\s\S]*whitespace-nowrap/, 'Account & Profile stays on one line in the menu')
 assert.match(editor, /JPG, PNG or WEBP · up to 5 MB/, 'the photo limits are explained to the user')
 assert.match(editor, /function EditLabel[\s\S]*document\.getElementById\(inputId\)\?\.focus\(\)/, 'each pencil affordance focuses its editable field')
 for (const id of ['profile-phone', 'profile-city', 'profile-state', 'profile-address', 'profile-dob', 'profile-gender', 'profile-ctc', 'profile-notice', 'profile-languages', 'profile-skills', 'profile-roles', 'profile-bio']) {

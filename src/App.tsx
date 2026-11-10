@@ -746,13 +746,13 @@ export default function App() {
                   key={item.id}
                   type="button"
                   variant={tab === item.id ? 'primary' : 'secondary'}
-                  className="w-full justify-start"
+                  className="w-full justify-start px-3 text-sm"
                   aria-current={tab === item.id ? 'page' : undefined}
                   onClick={() => navigate(item.id)}
                 >
-                  <span aria-hidden="true">{item.icon}</span>
-                  <span>{item.label}</span>
-                  {tab === item.id && <span className="ml-auto text-xs opacity-80">Current</span>}
+                  <span aria-hidden="true" className="shrink-0">{item.icon}</span>
+                  <span className="whitespace-nowrap">{item.label}</span>
+                  {tab === item.id && <span className="ml-auto shrink-0 text-xs opacity-80">Current</span>}
                 </Button>
               ))}
               <Button
