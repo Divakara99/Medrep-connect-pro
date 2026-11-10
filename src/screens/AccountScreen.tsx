@@ -145,7 +145,6 @@ export function AccountScreen({
       <ProfileEditor
         ref={editorRef}
         email={user.email}
-        name={user.name}
         phone={user.phone}
         onSaved={(profile) => {
           onSubscribed({ ...user, phone: profile.phone })

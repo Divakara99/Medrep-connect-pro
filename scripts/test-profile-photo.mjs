@@ -24,8 +24,9 @@ assert.match(deleteUser, /\.from\('profile-photos'\)[\s\S]*\.list\(targetId[\s\S
 assert.match(editor, /Upload or change profile photo/, 'the account profile provides a photo picker')
 assert.match(editor, /onPhotoSaved\?\.\(uploaded\.url\)/, 'the uploaded photo immediately updates the account avatar')
 assert.match(account, /profilePhoto \? \([\s\S]*<img src=\{profilePhoto\}/, 'the account header displays the saved photo')
-assert.match(account, /name=\{user\.name\}/, 'the profile editor receives the account name')
-assert.match(editor, /Profile<\/div>[\s\S]*\{name\}/, 'the same name appears in the profile card')
+assert.match(account, /text-lg font-extrabold tracking-tight text-slate-900">\{user\.name\}/, 'the account identity card shows the signed-in name')
+assert.match(editor, /Profile photo/, 'the profile editor card is only for changing the photo')
+assert.doesNotMatch(editor, /\{name\}|Profile<\/div>/, 'the profile editor does not repeat the account name')
 assert.match(app, /label: 'Account & Profile'[\s\S]*whitespace-nowrap/, 'Account & Profile stays on one line in the menu')
 assert.match(editor, /JPG, PNG or WEBP · up to 5 MB/, 'the photo limits are explained to the user')
 assert.match(editor, /function EditLabel[\s\S]*document\.getElementById\(inputId\)\?\.focus\(\)/, 'each pencil affordance focuses its editable field')
@@ -33,4 +34,4 @@ for (const id of ['profile-phone', 'profile-city', 'profile-state', 'profile-add
   assert.ok(editor.includes(`inputId="${id}"`), `pencil edit control exists for ${id}`)
 }
 
-console.log('profile photo: private owner-only uploads, signed preview, 5 MB validation, per-field pencil editing — passed')
+console.log('profile photo: private owner-only uploads, one account name, 5 MB validation, per-field pencil editing — passed')
