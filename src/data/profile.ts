@@ -35,6 +35,8 @@ export type Profile = {
   ctc?: string
   noticePeriod?: string
   bio?: string
+  /** Owner-only profile photo object path in the private Supabase bucket. */
+  photoPath?: string
   education: Education[]
   experience: Experience[]
   updatedAt?: number
