@@ -247,29 +247,32 @@ export function JobDetail({
                   {unlockButtonLabel(unlockStage)}
                 </Button>
               )}
-              {paidUnlock?.available && (
-                <>
+              {/* Buying one job and opening the pass picker are peer actions:
+                  keep them on the same row so both choices stay in view. */}
+              <div className={paidUnlock?.available ? 'grid grid-cols-2 gap-2' : ''}>
+                {paidUnlock?.available && (
                   <Button
-                    className="w-full"
+                    className="w-full min-w-0 whitespace-nowrap px-2 text-sm"
                     disabled={paidUnlock.busy}
                     onClick={() => paidUnlock.onBuy(job)}
+                    aria-label={paidUnlock.busy ? 'Opening secure checkout' : jobUnlockLabel()}
                   >
-                    {paidUnlock.busy ? 'Opening secure checkout…' : `🔓 ${jobUnlockLabel()}`}
+                    {paidUnlock.busy ? 'Opening…' : `🔓 ${jobUnlockLabel()}`}
                   </Button>
-                  <p className="text-center text-xs font-medium text-slate-500">
-                    One payment for this job — nothing renews.
-                  </p>
-                </>
-              )}
-              {/* Quiet by design: a pass is one way to see the contact, not
-                  the pitch of the screen. The job itself is the subject. */}
-              <Button className="w-full" variant="secondary" onClick={onSubscribe}>
-                🔓 Unlock all jobs
-              </Button>
+                )}
+                {/* Opens the pass-selection screen; it is not a silent select. */}
+                <Button
+                  className={`w-full whitespace-nowrap px-2 text-sm ${paidUnlock?.available ? 'min-w-0' : ''}`}
+                  variant="secondary"
+                  onClick={onSubscribe}
+                >
+                  🔓 Unlock all jobs
+                </Button>
+              </div>
               <p className="text-center text-xs font-medium text-slate-500">
                 {paidUnlock?.available
-                  ? 'Or open every job with a pass.'
-                  : 'Contact details need a pass.'}
+                  ? '₹5 unlocks this job; a pass unlocks all jobs.'
+                  : 'Choose a pass to unlock all job contacts.'}
               </p>
             </>
           ) : (
