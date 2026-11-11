@@ -19,7 +19,7 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent'
 }) {
   const base =
-    'inline-flex select-none items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-base font-bold transition-[transform,background-color,box-shadow,border-color] duration-200 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50'
+    'inline-flex min-w-0 max-w-full select-none items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-center text-base font-bold leading-snug whitespace-normal break-words transition-[transform,background-color,box-shadow,border-color] duration-200 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50'
   const styles: Record<string, string> = {
     primary:
       'bg-gradient-to-b from-brand-500 to-brand-700 text-white ring-1 ring-brand-700/30 shadow-[0_12px_26px_-14px_rgba(29,78,216,0.95)] hover:to-brand-800',
@@ -86,7 +86,7 @@ export function Badge({ children, color = 'slate' }: { children: ReactNode; colo
     purple: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
   }
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${map[color]}`}>
+    <span className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-center text-xs font-bold whitespace-normal break-words leading-snug ${map[color]}`}>
       {children}
     </span>
   )

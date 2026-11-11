@@ -252,7 +252,7 @@ export function JobDetail({
               <div className={paidUnlock?.available ? 'grid grid-cols-2 gap-2' : ''}>
                 {paidUnlock?.available && (
                   <Button
-                    className="w-full min-w-0 whitespace-nowrap px-2 text-sm"
+                    className="w-full min-w-0 whitespace-normal break-words px-2 text-center text-sm leading-tight"
                     disabled={paidUnlock.busy}
                     onClick={() => paidUnlock.onBuy(job)}
                     aria-label={paidUnlock.busy ? 'Opening secure checkout' : jobUnlockLabel()}
@@ -262,7 +262,7 @@ export function JobDetail({
                 )}
                 {/* Opens the pass-selection screen; it is not a silent select. */}
                 <Button
-                  className={`w-full whitespace-nowrap px-2 text-sm ${paidUnlock?.available ? 'min-w-0' : ''}`}
+                  className={`w-full whitespace-normal break-words px-2 text-center text-sm leading-tight ${paidUnlock?.available ? 'min-w-0' : ''}`}
                   variant="secondary"
                   onClick={onSubscribe}
                 >
