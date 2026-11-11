@@ -1,9 +1,11 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { Button, Input, Label, Select, Textarea, Card, Badge } from './ui'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ChangeEvent } from 'react'
+import { Button, Input, Select, Textarea, Card, Badge } from './ui'
+import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
 import { getProfile, newEducation, newExperience, refreshProfile, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
+import { MAX_ADDRESS_LENGTH, addressProblem } from '../data/userAddress'
 
 export type ProfileEditorHandle = {
   save: () => Promise<Profile | null>
@@ -15,10 +17,11 @@ export const ProfileEditor = forwardRef<
     email: string
     phone?: string
     onSaved?: (p: Profile) => void
+    onPhotoSaved?: (url: string) => void
     onResumeChange?: (resume: ResumeRecord | null) => void
   }
 >(function ProfileEditor(
-  { email, phone, onSaved, onResumeChange },
+  { email, phone, onSaved, onPhotoSaved, onResumeChange },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
@@ -27,6 +30,10 @@ export const ProfileEditor = forwardRef<
   })
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
   // Never overwrite fields the user has already started typing into.
   const dirty = useRef(false)
 
@@ -41,9 +48,59 @@ export const ProfileEditor = forwardRef<
     return () => { alive = false }
   }, [email, phone])
 
+  useEffect(() => {
+    let alive = true
+    if (!p.photoPath) return () => { alive = false }
+    profilePhotoUrl(p.photoPath).then((url) => {
+      if (alive) setPhotoUrl(url)
+    })
+    return () => { alive = false }
+  }, [p.photoPath])
+
   function update(patch: Partial<Profile>) {
     dirty.current = true
     setP((prev) => ({ ...prev, ...patch }))
+  }
+
+  async function changePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file || photoBusy) return
+    setPhotoBusy(true)
+    setPhotoError(null)
+    setSaveError(null)
+    const oldPath = p.photoPath ?? ''
+    let uploaded
+    try {
+      uploaded = await uploadProfilePhoto(file)
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'The profile photo could not be uploaded.')
+      setPhotoBusy(false)
+      return
+    }
+    if (!uploaded.ok) {
+      setPhotoError(uploaded.error)
+      setPhotoBusy(false)
+      return
+    }
+    setPhotoUrl(uploaded.url)
+    try {
+      // Save only the photo field against the server copy, so other unsaved
+      // form edits are not unexpectedly committed by choosing an image.
+      const remote = await refreshProfile(email)
+      const saved = await saveProfile({ ...remote, photoPath: uploaded.path })
+      setP((previous) => ({ ...previous, photoPath: saved.photoPath }))
+      onPhotoSaved?.(uploaded.url)
+      if (oldPath && oldPath !== uploaded.path) await deleteProfilePhoto(oldPath)
+      setSavedMsg('Profile photo updated.')
+      window.setTimeout(() => setSavedMsg(null), 2500)
+    } catch (error) {
+      await deleteProfilePhoto(uploaded.path)
+      setPhotoUrl(oldPath ? await profilePhotoUrl(oldPath) : null)
+      setPhotoError(error instanceof Error ? error.message : 'The profile photo could not be saved.')
+    } finally {
+      setPhotoBusy(false)
+    }
   }
 
   function addEducation() {
@@ -98,14 +155,35 @@ export const ProfileEditor = forwardRef<
   return (
     <div className="space-y-4 pb-4">
       <Card className="p-4 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-widest text-brand-700">Tagline</div>
-            <div className="text-xl font-extrabold text-slate-900">{p.tagline}</div>
-            <div className="text-xs text-slate-600">{p.email}</div>
+        <div className="flex items-center gap-3">
+          <div className="relative h-16 w-16 shrink-0">
+            {photoUrl ? (
+              <img src={photoUrl} alt="Your profile" className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white shadow" />
+            ) : (
+              <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-700 text-2xl font-extrabold text-white ring-2 ring-white shadow">
+                {p.email.slice(0, 1).toUpperCase() || 'U'}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => photoInput.current?.click()}
+              disabled={photoBusy}
+              aria-label={photoBusy ? 'Uploading profile photo' : 'Upload or change profile photo'}
+              title="Upload or change profile photo"
+              className="absolute -bottom-1.5 -right-1.5 grid h-7 w-7 place-items-center rounded-full bg-white text-brand-700 shadow ring-1 ring-brand-200 disabled:opacity-60"
+            >
+              <PencilIcon />
+            </button>
+            <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={changePhoto} />
           </div>
-          <Badge color="brand">Job Seeker</Badge>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-slate-900">Profile photo</div>
+            <div className="text-xs text-slate-600">Shown on your Account</div>
+            <div className="mt-1 text-[11px] text-slate-500">JPG, PNG or WEBP · up to 5 MB</div>
+          </div>
         </div>
+        {photoBusy && <p className="mt-2 text-xs font-semibold text-brand-700" role="status">Uploading profile photo…</p>}
+        {photoError && <p className="mt-2 text-xs font-semibold text-red-700" role="alert">{photoError}</p>}
       </Card>
 
       <Card className={`p-4 space-y-2 ${completionIssues.length === 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
@@ -133,24 +211,38 @@ export const ProfileEditor = forwardRef<
         <div className="font-bold text-slate-900">Personal</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <Label>Phone</Label>
-            <Input value={p.phone ?? ''} onChange={(e) => update({ phone: e.target.value })} placeholder="10-digit mobile" />
+            <EditLabel label="Phone" inputId="profile-phone" />
+            <Input id="profile-phone" value={p.phone ?? ''} onChange={(e) => update({ phone: e.target.value })} placeholder="10-digit mobile" />
           </div>
           <div>
-            <Label>City</Label>
-            <Input value={p.city ?? ''} onChange={(e) => update({ city: e.target.value })} placeholder="e.g. Hyderabad" />
+            <EditLabel label="City" inputId="profile-city" />
+            <Input id="profile-city" value={p.city ?? ''} onChange={(e) => update({ city: e.target.value })} placeholder="e.g. Hyderabad" />
           </div>
           <div>
-            <Label>State</Label>
-            <Input value={p.state ?? ''} onChange={(e) => update({ state: e.target.value })} placeholder="e.g. Telangana" />
+            <EditLabel label="State" inputId="profile-state" />
+            <Input id="profile-state" value={p.state ?? ''} onChange={(e) => update({ state: e.target.value })} placeholder="e.g. Telangana" />
+          </div>
+          <div className="sm:col-span-2">
+            <EditLabel label="Address (optional)" inputId="profile-address" />
+            <Textarea
+              id="profile-address"
+              rows={2}
+              maxLength={MAX_ADDRESS_LENGTH}
+              value={p.address ?? ''}
+              onChange={(e) => update({ address: e.target.value })}
+              placeholder="House / street, area, PIN code — shown to you and to the administrator only"
+            />
+            {addressProblem(p.address ?? '') && (
+              <div className="mt-1 text-xs font-semibold text-red-700">{addressProblem(p.address ?? '')}</div>
+            )}
           </div>
           <div>
-            <Label>Date of birth</Label>
-            <Input type="date" value={p.dob ?? ''} onChange={(e) => update({ dob: e.target.value })} />
+            <EditLabel label="Date of birth" inputId="profile-dob" />
+            <Input id="profile-dob" type="date" value={p.dob ?? ''} onChange={(e) => update({ dob: e.target.value })} />
           </div>
           <div>
-            <Label>Gender</Label>
-            <Select value={p.gender ?? ''} onChange={(e) => update({ gender: e.target.value as Profile['gender'] })}>
+            <EditLabel label="Gender" inputId="profile-gender" />
+            <Select id="profile-gender" value={p.gender ?? ''} onChange={(e) => update({ gender: e.target.value as Profile['gender'] })}>
               <option value="">Select</option>
               <option>Male</option>
               <option>Female</option>
@@ -158,30 +250,30 @@ export const ProfileEditor = forwardRef<
             </Select>
           </div>
           <div>
-            <Label>Expected CTC</Label>
-            <Input value={p.ctc ?? ''} onChange={(e) => update({ ctc: e.target.value })} placeholder="e.g. 3 LPA" />
+            <EditLabel label="Expected CTC" inputId="profile-ctc" />
+            <Input id="profile-ctc" value={p.ctc ?? ''} onChange={(e) => update({ ctc: e.target.value })} placeholder="e.g. 3 LPA" />
           </div>
           <div>
-            <Label>Notice period</Label>
-            <Input value={p.noticePeriod ?? ''} onChange={(e) => update({ noticePeriod: e.target.value })} placeholder="e.g. Immediate / 30 days" />
+            <EditLabel label="Notice period" inputId="profile-notice" />
+            <Input id="profile-notice" value={p.noticePeriod ?? ''} onChange={(e) => update({ noticePeriod: e.target.value })} placeholder="e.g. Immediate / 30 days" />
           </div>
         </div>
 
         <div>
-          <Label>Languages (comma separated)</Label>
-          <Input value={join(p.languages)} onChange={(e) => update({ languages: split(e.target.value) })} placeholder="English, Telugu, Hindi" />
+          <EditLabel label="Languages (comma separated)" inputId="profile-languages" />
+          <Input id="profile-languages" value={join(p.languages)} onChange={(e) => update({ languages: split(e.target.value) })} placeholder="English, Telugu, Hindi" />
         </div>
         <div>
-          <Label>Skills (comma separated)</Label>
-          <Input value={join(p.skills)} onChange={(e) => update({ skills: split(e.target.value) })} placeholder="Sales, RCPA, Detailing, Excel" />
+          <EditLabel label="Skills (comma separated)" inputId="profile-skills" />
+          <Input id="profile-skills" value={join(p.skills)} onChange={(e) => update({ skills: split(e.target.value) })} placeholder="Sales, RCPA, Detailing, Excel" />
         </div>
         <div>
-          <Label>Preferred roles (comma separated)</Label>
-          <Input value={join(p.preferredRoles)} onChange={(e) => update({ preferredRoles: split(e.target.value) })} placeholder="MR, ABM, Field Sales" />
+          <EditLabel label="Preferred roles (comma separated)" inputId="profile-roles" />
+          <Input id="profile-roles" value={join(p.preferredRoles)} onChange={(e) => update({ preferredRoles: split(e.target.value) })} placeholder="MR, ABM, Field Sales" />
         </div>
         <div>
-          <Label>Bio</Label>
-          <Textarea rows={3} value={p.bio ?? ''} onChange={(e) => update({ bio: e.target.value })} placeholder="A short summary about you…" />
+          <EditLabel label="Bio" inputId="profile-bio" />
+          <Textarea id="profile-bio" rows={3} value={p.bio ?? ''} onChange={(e) => update({ bio: e.target.value })} placeholder="A short summary about you…" />
         </div>
       </Card>
 
@@ -194,13 +286,11 @@ export const ProfileEditor = forwardRef<
         {p.education.map((e) => (
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <Input placeholder="Degree" value={e.degree} onChange={(ev) => updateEdu(e.id, { degree: ev.target.value })} />
-              <Input placeholder="Field" value={e.field} onChange={(ev) => updateEdu(e.id, { field: ev.target.value })} />
-              <Input placeholder="Institution" className="col-span-2" value={e.institution} onChange={(ev) => updateEdu(e.id, { institution: ev.target.value })} />
-              <Input placeholder="Year" value={e.year} onChange={(ev) => updateEdu(e.id, { year: ev.target.value })} />
-              <div className="flex justify-end">
-                <Button variant="ghost" onClick={() => removeEdu(e.id)}>Remove</Button>
-              </div>
+              <div><EditLabel label="Degree" inputId={`education-${e.id}-degree`} /><Input id={`education-${e.id}-degree`} placeholder="Degree" value={e.degree} onChange={(ev) => updateEdu(e.id, { degree: ev.target.value })} /></div>
+              <div><EditLabel label="Field" inputId={`education-${e.id}-field`} /><Input id={`education-${e.id}-field`} placeholder="Field" value={e.field} onChange={(ev) => updateEdu(e.id, { field: ev.target.value })} /></div>
+              <div className="sm:col-span-2"><EditLabel label="Institution" inputId={`education-${e.id}-institution`} /><Input id={`education-${e.id}-institution`} placeholder="Institution" value={e.institution} onChange={(ev) => updateEdu(e.id, { institution: ev.target.value })} /></div>
+              <div><EditLabel label="Year" inputId={`education-${e.id}-year`} /><Input id={`education-${e.id}-year`} placeholder="Year" value={e.year} onChange={(ev) => updateEdu(e.id, { year: ev.target.value })} /></div>
+              <div className="flex items-end justify-end"><Button variant="ghost" onClick={() => removeEdu(e.id)}>Remove</Button></div>
             </div>
           </div>
         ))}
@@ -215,11 +305,11 @@ export const ProfileEditor = forwardRef<
         {p.experience.map((e) => (
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <Input placeholder="Title" value={e.title} onChange={(ev) => updateExp(e.id, { title: ev.target.value })} />
-              <Input placeholder="Company" value={e.company} onChange={(ev) => updateExp(e.id, { company: ev.target.value })} />
-              <Input placeholder="Duration" className="col-span-2" value={e.duration} onChange={(ev) => updateExp(e.id, { duration: ev.target.value })} />
-              <Textarea placeholder="Description" className="col-span-2" rows={2} value={e.description} onChange={(ev) => updateExp(e.id, { description: ev.target.value })} />
-              <div className="col-span-2 flex justify-end">
+              <div><EditLabel label="Title" inputId={`experience-${e.id}-title`} /><Input id={`experience-${e.id}-title`} placeholder="Title" value={e.title} onChange={(ev) => updateExp(e.id, { title: ev.target.value })} /></div>
+              <div><EditLabel label="Company" inputId={`experience-${e.id}-company`} /><Input id={`experience-${e.id}-company`} placeholder="Company" value={e.company} onChange={(ev) => updateExp(e.id, { company: ev.target.value })} /></div>
+              <div className="sm:col-span-2"><EditLabel label="Duration" inputId={`experience-${e.id}-duration`} /><Input id={`experience-${e.id}-duration`} placeholder="Duration" value={e.duration} onChange={(ev) => updateExp(e.id, { duration: ev.target.value })} /></div>
+              <div className="sm:col-span-2"><EditLabel label="Description" inputId={`experience-${e.id}-description`} /><Textarea id={`experience-${e.id}-description`} rows={2} value={e.description} onChange={(ev) => updateExp(e.id, { description: ev.target.value })} /></div>
+              <div className="sm:col-span-2 flex justify-end">
                 <Button variant="ghost" onClick={() => removeExp(e.id)}>Remove</Button>
               </div>
             </div>
@@ -237,3 +327,28 @@ export const ProfileEditor = forwardRef<
     </div>
   )
 })
+
+function EditLabel({ label, inputId }: { label: string; inputId: string }) {
+  return (
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <label htmlFor={inputId} className="text-sm font-bold tracking-wide text-slate-700">{label}</label>
+      <button
+        type="button"
+        aria-label={`Edit ${label}`}
+        title={`Edit ${label}`}
+        onClick={() => document.getElementById(inputId)?.focus()}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700 ring-1 ring-brand-100 hover:bg-brand-100 active:scale-95"
+      >
+        <PencilIcon />
+      </button>
+    </div>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m16 4 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" />
+    </svg>
+  )
+}

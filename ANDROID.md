@@ -271,6 +271,48 @@ upload): `scripts/generate-upload-key.py` (see its header).
 
 ---
 
+## 5b. Notifications with sound while the app is closed (Firebase / FCM)
+
+The website and the installed PWA already ring through Web Push (service
+worker + `send-push`). The **Android app cannot**: Android WebView does not
+implement the Push API, so closed-app notifications must go through Google
+Firebase Cloud Messaging. Nothing is live until the five steps below are done;
+until then the app rings only while it is open.
+
+### What you do (about 10 minutes, all free)
+
+1. **Create the Firebase project** — https://console.firebase.google.com →
+   *Add project* → name it `medrep-pro` → disable Google Analytics (not needed).
+2. **Add the Android app** — in the project, *Add app* → Android:
+   - Android package name: `in.medrepconnect.app` (exactly)
+   - App nickname: `MedRep Pro`
+   - SHA-1: not required for FCM.
+   → **Download `google-services.json`**.
+3. **Give me that file** — paste its contents here (it is a public client
+   config, safe to share) or commit it to `android/app/google-services.json`.
+   The Gradle build picks it up automatically once it exists; without it the
+   build still succeeds and push is simply skipped.
+4. **Create the service account for sending** — Firebase console → ⚙ *Project
+   settings* → *Service accounts* → *Generate new private key* → a JSON file
+   downloads. That file is a **secret**: do not commit it.
+5. **Add it as a Supabase secret** — Supabase → Project Settings → Edge
+   Functions → Secrets → add name `FCM_SERVICE_ACCOUNT` and paste the whole
+   service-account JSON as the value. I can also do this from here if you paste
+   the JSON to me.
+
+### What I do once those exist
+
+- `@capacitor/push-notifications` in the app: ask permission, register, store
+  the FCM token with `save_push_subscription` (same table the website uses),
+  and route a tap to the right screen.
+- `send-push`: send the same notification to FCM tokens as well as Web Push
+  endpoints, with the Android notification channel created for sound and
+  vibration.
+- Announcements (everyone or one user) and new vacancies then ring a closed
+  app exactly like the website does.
+
+---
+
 ## 6. Builds (GitHub Actions)
 
 Workflow: **Android (MedRep Pro)** (`.github/workflows/android.yml`)

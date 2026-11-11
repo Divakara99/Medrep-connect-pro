@@ -1,7 +1,8 @@
-import { hasAdminRole, supabase } from './supabase'
+import { callEdgeFunction, hasAdminRole, supabase } from './supabase'
 import { notifyDevices } from './push'
 import type { Job } from './jobs'
 import { deleteReasonProblem, type ActorRole, type AuditRow } from './vacancyRules'
+import { parseFillCheck, type FillCheck } from './fillCheck'
 
 /**
  * Vacancy team: login accounts that only post and delete vacancies, and the
@@ -24,6 +25,8 @@ export type TeamVacancy = {
   vacancyCount?: string
   postedAt: number
   postedBy: string
+  /** Set when the administrator asks whether this vacancy is still open. */
+  fillCheck?: FillCheck
 }
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string }
@@ -41,19 +44,9 @@ async function requireAdminSession(): Promise<void> {
 
 /** Calls the admin-manage-employees function and returns its JSON body. */
 async function callEmployeeFunction(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { data, error } = await supabase.functions.invoke('admin-manage-employees', { body })
-  if (error) {
-    let message = error.message || 'The team login service could not be reached.'
-    const context = (error as Error & { context?: unknown }).context
-    if (context instanceof Response) {
-      const failure = await context.clone().json().catch(() => null) as { error?: string } | null
-      if (failure?.error) message = failure.error
-    }
-    throw new Error(message)
-  }
-  const payload = (data ?? {}) as Record<string, unknown> & { error?: string }
-  if (payload.error) throw new Error(payload.error)
-  return payload
+  const { data, error } = await callEdgeFunction('admin-manage-employees', body)
+  if (error) throw new Error(error)
+  return data ?? {}
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +181,7 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
 export async function teamListVacancies(): Promise<TeamVacancy[]> {
   const { data, error } = await supabase.rpc('employee_list_vacancies')
   if (error) throw new Error(error.message || 'Vacancies could not be loaded.')
-  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string }[])
+  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string; fillCheck?: unknown }[])
     .map((row) => ({
       id: row.id,
       title: row.title,
@@ -200,7 +193,20 @@ export async function teamListVacancies(): Promise<TeamVacancy[]> {
       vacancyCount: row.vacancyCount,
       postedAt: Number(row.postedAt) || 0,
       postedBy: row.postedBy ?? '',
+      fillCheck: parseFillCheck(row.fillCheck),
     }))
+}
+
+/**
+ * Answers the administrator's "is this still open?" question. The database
+ * stamps who answered and when, so the reply cannot be forged from the browser.
+ */
+export async function teamAnswerFillCheck(id: string, answer: 'open' | 'filled'): Promise<Result> {
+  if (!id) return { ok: false, error: 'Choose the vacancy and try again.' }
+  if (answer !== 'open' && answer !== 'filled') return { ok: false, error: 'Answer Open or Filled.' }
+  const { error } = await supabase.rpc('employee_answer_fill_check', { p_id: id, p_answer: answer })
+  if (error) return { ok: false, error: error.message || 'The answer could not be saved.' }
+  return { ok: true }
 }
 
 export async function teamDeleteVacancy(id: string, reason: string): Promise<Result> {

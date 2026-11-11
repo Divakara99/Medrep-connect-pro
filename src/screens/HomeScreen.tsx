@@ -212,17 +212,17 @@ export function HomeScreen({
 
       <div className="flex items-end justify-between gap-2">
         <div>
-          <h2 className="text-lg font-extrabold tracking-tight text-slate-900">
-            {category === 'All' ? 'Recommended for you' : `${category} openings`}
+          <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-slate-900">
+            {category === 'All' ? 'Apply to these jobs' : `${category} openings`}
           </h2>
-          <p className="text-xs font-semibold text-slate-500">
-            {category === 'All' ? 'MR roles pinned first' : 'Newest first'}
+          <p className="mt-0.5 text-sm font-medium italic text-slate-500">
+            {category === 'All' ? `Top ${list.length} job${list.length === 1 ? '' : 's'} that match your profile` : 'Newest first'}
           </p>
         </div>
         <Badge color="brand">{list.length} roles</Badge>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {list.length === 0 ? (
           <Card className="p-6">
             <EmptyState

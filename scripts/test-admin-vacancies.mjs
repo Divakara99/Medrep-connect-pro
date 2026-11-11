@@ -104,7 +104,7 @@ assert.match(admin, /deleteReasonProblem\(duplicateReason\)/, 'duplicate removal
 // ------------------------------------------------------- pasted text is opt-in
 const form = await read('src/components/VacancyForm.tsx')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
-assert.match(form, /setReview\(\{ fields: extracted, picked \}\)/, 'the reader only lists what it found')
+assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')
 assert.match(form, /function applyReviewedFields\(\)/, 'only ticked values are written')
 assert.match(form, /const next = current\.length > 0 \? \[\.\.\.current\] : \[''\]/, 'HQ text never adds a new HQ box')
@@ -114,9 +114,9 @@ assert.doesNotMatch(form, /if \(fields\.hq\?\.trim\(\)\) \{\s*const entries = pa
 // The panel offers Undo twice: in the banner right after a delete, and per row
 // in the Deleted list.
 assert.match(admin, /label: '↩ Undo', run: \(\) => undoDelete\(target\)/, 'the delete banner carries an Undo action')
-assert.match(admin, /Deleted \(\{deleted\.length\}\)/, 'the Vacancies tab lists what was deleted')
-assert.match(admin, /\{undoBusyId === item\.id \? 'Restoring…' : '↩ Undo'\}/, 'each deleted vacancy has its own Undo')
-assert.match(admin, /await restoreJob\(target\.id\)/, 'Undo restores through the database helper')
+assert.match(admin, /Deleted vacancies \(\{deleted\.length\}\)/, 'the Vacancies tab lists what was deleted')
+assert.match(admin, /\{undoBusyId === item\.id \? 'Restoring…' : '↩ Restore'\}/, 'each deleted vacancy has its own Restore')
+assert.match(admin, /const restoredTitle = await restoreJob\(target\.id\)/, 'Undo restores through the database helper')
 assert.match(admin, /action\?: \{ label: string; run: \(\) => void \}/, 'the notice can carry one action')
 
 // ------------------------------------------------- the list reads as a table

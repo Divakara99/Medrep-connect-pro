@@ -59,7 +59,22 @@ assert.match(login, /min-h-full/, 'the sign-in shell fills the current viewport,
 assert.doesNotMatch(login, /min-h-\[100dvh\]/, 'a dvh floor leaves a blank page behind the keyboard')
 assert.doesNotMatch(login, /overflow-y-auto/, 'one scroll container only — the document, not a nested div')
 
+// 5. The welcome stays two lines, and the build number sits at the bottom of
+//    the page instead of under the tagline, where it pushed the sign-in card
+//    down by a row on a phone.
+const creator = await readFile(new URL('../src/data/creator.ts', import.meta.url), 'utf8')
+const tagline = creator.match(/tagline: "([^"]+)"/)?.[1] ?? ''
+assert.ok(tagline.length > 0, 'the sign-in tagline exists')
+assert.ok(tagline.length <= 70, `the tagline fits two lines on a phone (it is ${tagline.length} characters)`)
+assert.doesNotMatch(tagline, /, then /, 'the tagline is two clauses, not a list')
+assert.match(login, /text-balance/, 'the tagline is balanced across its two lines')
+
+const header = login.slice(login.indexOf('<header'), login.indexOf('</header>'))
+assert.doesNotMatch(header, /APP_VERSION_LABEL/, 'the version chip is no longer part of the welcome')
+const footer = login.slice(login.indexOf('<footer'), login.indexOf('</footer>'))
+assert.match(footer, /Version \{APP_VERSION_LABEL\}/, 'the version is stated at the bottom of the page')
+
 const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
 assert.match(css, /scroll-margin-block:\s*88px/, 'focused fields keep clear of the keyboard')
 
-console.log('keyboard layout: adjustResize, resizes-content viewport, top-aligned sign-in — passed')
+console.log('keyboard layout: adjustResize, resizes-content viewport, top-aligned sign-in, two-line tagline and the version at the foot — passed')

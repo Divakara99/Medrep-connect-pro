@@ -3,6 +3,7 @@ import type { User } from './auth'
 import type { ResumeRecord } from './resume'
 import { profileCompletionIssues, refreshProfile, type Profile } from './profile'
 import { CREATOR } from './creator'
+import { PLAY_STORE_URL } from './jobShareText'
 import { mirror, supabase } from './supabase'
 
 /**
@@ -100,6 +101,10 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
     })
   }
 
+  lines.push('')
+  lines.push(format === 'email'
+    ? `Shared through MedRep Connect Pro (Android app: ${PLAY_STORE_URL}) — vacancy details and applications for pharma and multi-industry roles.`
+    : `_Shared through MedRep Connect Pro — vacancy details for pharma and multi-industry roles._\n📱 App: ${PLAY_STORE_URL}`)
   lines.push('')
   if (format === 'email') {
     lines.push('I would welcome the opportunity to discuss how my experience fits your requirement. Please feel free to reach out to me at the phone number or email address given above.')

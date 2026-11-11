@@ -39,7 +39,7 @@ assert.doesNotMatch(home, /PlansScreen|onSubscribe|Upgrade|💎|Subscribe to/, '
 assert.doesNotMatch(priority, /onSubscribe|Upgrade|💎|Subscribe to/, 'priority jobs never sell a pass')
 assert.doesNotMatch(detail, /variant="accent"[\s\S]{0,120}onSubscribe/, 'the detail sheet keeps passes quiet')
 assert.doesNotMatch(detail, /Subscribe to unlock/, 'the detail sheet does not push a subscription')
-assert.match(detail, /Unlock manager contact/, 'the detail sheet offers the contact plainly')
+assert.match(detail, /Unlock all jobs|Unlock this job/, 'the detail sheet offers the contact plainly')
 assert.doesNotMatch(card, /Subscribe to unlock/, 'the job card does not push a subscription')
 assert.match(card, /Contact locked/, 'the job card states the lock without selling')
 

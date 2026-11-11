@@ -236,7 +236,7 @@ export function VacancyTeamAdmin() {
             <Input id="team-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" autoComplete="off" spellCheck={false} />
           </div>
           <div>
-            <Label htmlFor="team-password">Password (12+ characters)</Label>
+            <Label htmlFor="team-password">Password (6+ characters)</Label>
             <div className="flex gap-2">
               <Input id="team-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
               <Button variant="secondary" className="shrink-0 px-3" onClick={() => setShowPassword((v) => !v)}>{showPassword ? 'Hide' : 'Show'}</Button>
@@ -286,7 +286,7 @@ export function VacancyTeamAdmin() {
           <div className="space-y-3">
             <div className="text-sm text-slate-900">Login ID: <span className="font-semibold">{resetTarget.email}</span></div>
             <div>
-              <Label htmlFor="team-reset-password">New password (12+ characters)</Label>
+              <Label htmlFor="team-reset-password">New password (6+ characters)</Label>
               <Input id="team-reset-password" type="text" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} autoComplete="off" />
             </div>
             {resetError && <p role="alert" className="text-sm font-semibold text-red-800">{resetError}</p>}

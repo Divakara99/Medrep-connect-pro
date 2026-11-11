@@ -75,7 +75,7 @@ function LockedValue({ label, placeholder }: { label: string; placeholder: strin
       </div>
       <div className="mt-0.5 text-sm font-bold text-slate-400 blur-[5px] select-none" aria-hidden>{placeholder}</div>
       <div className="text-[9px] font-bold uppercase tracking-wide text-amber-700 mt-0.5">
-        Locked · subscribe to unlock
+        Locked
       </div>
     </div>
   )
@@ -155,6 +155,23 @@ export function JobDetail({
             <Field label="Salary" value={job.salary || '—'} />
           </div>
 
+          {(job.extraFields?.length ?? 0) > 0 && (
+            <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">More details</div>
+                <Badge color="slate">Public</Badge>
+              </div>
+              <dl className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {(job.extraFields ?? []).map((field) => (
+                  <div key={field.label} className="min-w-0 rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-slate-200">
+                    <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{field.label}</dt>
+                    <dd className="break-words text-sm font-semibold text-slate-900">{field.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
           <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Job description</div>
@@ -230,29 +247,32 @@ export function JobDetail({
                   {unlockButtonLabel(unlockStage)}
                 </Button>
               )}
-              {paidUnlock?.available && (
-                <>
+              {/* Buying one job and opening the pass picker are peer actions:
+                  keep them on the same row so both choices stay in view. */}
+              <div className={paidUnlock?.available ? 'grid grid-cols-2 gap-2' : ''}>
+                {paidUnlock?.available && (
                   <Button
-                    className="w-full"
+                    className="w-full min-w-0 whitespace-nowrap px-2 text-sm"
                     disabled={paidUnlock.busy}
                     onClick={() => paidUnlock.onBuy(job)}
+                    aria-label={paidUnlock.busy ? 'Opening secure checkout' : jobUnlockLabel()}
                   >
-                    {paidUnlock.busy ? 'Opening secure checkout…' : `🔓 ${jobUnlockLabel()}`}
+                    {paidUnlock.busy ? 'Opening…' : `🔓 ${jobUnlockLabel()}`}
                   </Button>
-                  <p className="text-center text-xs font-medium text-slate-500">
-                    ₹5 opens this one job's manager name, email and phone numbers — kept for that job, not for an hour. One payment, nothing renews.
-                  </p>
-                </>
-              )}
-              {/* Quiet by design: a pass is one way to see the contact, not
-                  the pitch of the screen. The job itself is the subject. */}
-              <Button className="w-full" variant="secondary" onClick={onSubscribe}>
-                🔓 Unlock manager contact
-              </Button>
+                )}
+                {/* Opens the pass-selection screen; it is not a silent select. */}
+                <Button
+                  className={`w-full whitespace-nowrap px-2 text-sm ${paidUnlock?.available ? 'min-w-0' : ''}`}
+                  variant="secondary"
+                  onClick={onSubscribe}
+                >
+                  🔓 Unlock all jobs
+                </Button>
+              </div>
               <p className="text-center text-xs font-medium text-slate-500">
                 {paidUnlock?.available
-                  ? 'Or open every job with a pass.'
-                  : 'Contact details need a pass.'}
+                  ? '₹5 unlocks this job; a pass unlocks all jobs.'
+                  : 'Choose a pass to unlock all job contacts.'}
               </p>
             </>
           ) : (
@@ -260,13 +280,13 @@ export function JobDetail({
               {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}
             </Button>
           )}
-          <ShareJobButton job={job} />
-          <p className="text-center text-xs font-medium text-slate-500">
-            Sharing sends the role, city, HQ and the Play Store link — never the company name or contact details.
-          </p>
-          <Button variant="ghost" className="w-full" onClick={onClose}>
-            Close
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" className="flex-1" onClick={onClose}>
+              Close
+            </Button>
+            {/* Just the glyph: sharing is a small action here, not a headline. */}
+            <ShareJobButton job={job} icon />
+          </div>
         </div>
       )}
     </Modal>

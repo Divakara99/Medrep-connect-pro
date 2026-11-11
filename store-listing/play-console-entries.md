@@ -1,4 +1,4 @@
-# Play Console — manual entries for 1.0.4 (versionCode 6)
+# Play Console — manual entries for 1.0.5 (versionCode 7)
 
 Everything on this page has to be typed into Play Console by hand. Nothing here
 is applied by a code push. Work top to bottom; each block is copy-paste ready.
@@ -106,14 +106,14 @@ shows — the website price comes from the Admin → Plans table and is separate
 
 ## 5. Release → review and rollout
 
-1. **Release name**: `1.0.4 (vc6)`.
-2. **Upload** the release AAB; confirm Play shows versionCode **6**.
-3. **Release notes**: paste section 1 for each language.
+1. **Release name**: `1.0.5 (vc7)`.
+2. **Upload** the release AAB; confirm Play shows versionCode **7**.
+3. **Release notes**: paste the `1.0.5` block for each language from `release-notes.md`.
 4. **Rollout**: staged 20% → 50% → 100%, or full if you want the filter change out
    quickly. 1.0.3 (vc5) stays available for anyone rolling back.
 5. After it goes live, install from Play Store on a device that had the old build
    **uninstalled first**, open Menu → Account and check the build stamp shows
-   **1.0.4 (6)** before judging anything else.
+   **1.0.5 (7)** before judging anything else.
 
 ---
 

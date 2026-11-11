@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { BackButton, Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
+import { BackButton, Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
@@ -9,6 +9,7 @@ import { CREATOR } from '../data/creator'
 import { APP_VERSION_LABEL } from '../data/version'
 import { currentUser, deleteUserAccount, getUsers, grantManualAccess, refreshAdminUsers, type User } from '../data/auth'
 import {
+  CATEGORIES,
   deleteJob,
   getJobs,
   getLegacyJobs,
@@ -19,8 +20,10 @@ import {
   sortedJobs,
   togglePin,
   type DeletedVacancy,
+  setFillCheck,
   type Job,
 } from '../data/jobs'
+import { fillCheckState, fillCheckWaiting, FILL_CHECK_LABELS, fillCheckWhatsAppUrl } from '../data/fillCheck'
 import {
   deleteReasonProblem,
   paymentStatusLabel,
@@ -51,11 +54,12 @@ import {
 } from '../data/supportRequests'
 import { reasonLabel } from '../data/refundCheck'
 import { getCachedApplications, loadAllApplications, type ApplicationRecord } from '../data/apply'
-import { announcementSignOff, broadcast, sendAnnouncement } from '../data/notifications'
+import { announcementSignOff, broadcast, sendAnnouncement, sendAnnouncementTo } from '../data/notifications'
 import { reviewPlatformMessage, type Review } from '../data/aiPolish'
 import { getSyncStatus } from '../data/supabase'
 import { publishToEveryone, pushReach, type PushReach } from '../data/push'
 import { announcementProblem, ANNOUNCEMENT_WARN_DEVICES } from '../data/pushRules'
+import { addressLine, addressSearchText } from '../data/userAddress'
 import {
   adminSecurityAudit,
   adminSecurityState,
@@ -455,6 +459,42 @@ function VacanciesTab({ onMutate, onNotice }: {
   const [deleted, setDeleted] = useState<DeletedVacancy[]>([])
   const [deletedOpen, setDeletedOpen] = useState(false)
   const [undoBusyId, setUndoBusyId] = useState<string | null>(null)
+  // Which deleted vacancy is expanded into a readable preview.
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  // Values carried into the "post it again" form when a tombstone has no body.
+  const [seed, setSeed] = useState<Partial<Job> | null>(null)
+  // Remounts the form so a new seed takes effect.
+  const [formSeq, setFormSeq] = useState(0)
+  // Finding one vacancy in the list: free text, city, category and whether the
+  // question "is this still open?" has an answer.
+  const [query, setQuery] = useState('')
+  const [city, setCity] = useState('all')
+  const [filterCategory, setFilterCategory] = useState('all')
+  const [fillFilter, setFillFilter] = useState<'all' | 'unasked' | 'asked' | 'open' | 'filled'>('all')
+  const [askingId, setAskingId] = useState<string | null>(null)
+  // What the table shows: the same rows the server returned, narrowed by the
+  // filters above it. Nothing is hidden by default.
+  const cityChoices = useMemo(
+    () => Array.from(new Set(jobs.map((job) => job.location).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [jobs],
+  )
+  const visibleJobs = useMemo(() => {
+    const text = query.trim().toLowerCase()
+    return jobs.filter((job) => {
+      if (text && !`${job.title} ${job.company} ${job.location} ${job.category} ${job.manager ?? ''} ${job.postedBy ?? ''}`.toLowerCase().includes(text)) return false
+      if (city !== 'all' && job.location !== city) return false
+      if (filterCategory !== 'all' && job.category !== filterCategory) return false
+      if (fillFilter === 'unasked' && fillCheckState(job.fillCheck) !== 'none') return false
+      if (fillFilter === 'asked' && !fillCheckWaiting(job.fillCheck)) return false
+      if (fillFilter === 'open' && fillCheckState(job.fillCheck) !== 'open') return false
+      if (fillFilter === 'filled' && fillCheckState(job.fillCheck) !== 'filled') return false
+      return true
+    })
+  }, [jobs, query, city, filterCategory, fillFilter])
+  const filtersActive = Boolean(query.trim()) || city !== 'all' || filterCategory !== 'all' || fillFilter !== 'all'
+  const waitingCount = jobs.filter((job) => fillCheckWaiting(job.fillCheck)).length
+  const filledCount = jobs.filter((job) => fillCheckState(job.fillCheck) === 'filled').length
+
   const legacyCount = getLegacyJobs().length
   const reasonProblem = deleteReason.trim() ? deleteReasonProblem(deleteReason) : null
   const duplicateReasonProblem = deleteReasonProblem(duplicateReason)
@@ -487,8 +527,17 @@ function VacanciesTab({ onMutate, onNotice }: {
     setUndoBusyId(target.id)
     void (async () => {
       try {
-        await restoreJob(target.id)
-        onNotice(`Restored “${target.title}”. It is live in the app again.`)
+        const restoredTitle = await restoreJob(target.id)
+        // The catalogue and the bin are both re-read: a restore that only
+        // changed the banner would leave the admin looking at the same list.
+        const [list] = await Promise.all([
+          reload().catch(() => null),
+          refreshDeleted(),
+        ])
+        setPreviewId(null)
+        onNotice(
+          `Restored “${restoredTitle || target.title}”. It is live in the app again${list ? ` — ${list.length} vacancies published` : ''}.`,
+        )
         onMutate()
       } catch (cause) {
         onNotice(cause instanceof Error ? cause.message : 'The vacancy could not be restored.', 'warn')
@@ -496,6 +545,56 @@ function VacanciesTab({ onMutate, onNotice }: {
         setUndoBusyId(null)
       }
     })()
+  }
+
+  /** Opens the post form with what the activity log remembers, for a tombstone
+   *  that has no body left to restore. */
+  function postAgain(item: DeletedVacancy) {
+    setEditing(null)
+    setSeed({
+      title: item.title === 'Deleted vacancy' ? '' : item.title,
+      company: item.company,
+      location: item.location,
+      category: (item.category || 'MR') as Job['category'],
+    })
+    setFormSeq((value) => value + 1)
+    setOpen(true)
+  }
+
+  /** Records "is this still open?" on the vacancy the team will answer. */
+  async function askTeam(target: Job) {
+    setAskingId(target.id)
+    setError(null)
+    try {
+      await setFillCheck(target.id, {
+        askedAt: Date.now(),
+        askedBy: currentUser()?.email ?? '',
+        answer: undefined,
+        answeredAt: undefined,
+        answeredBy: undefined,
+      })
+      await reload()
+      onNotice(`Asked the vacancy team about “${target.title}”. The question is at the top of their portal; the answer shows here.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The question could not be saved.')
+    } finally {
+      setAskingId(null)
+    }
+  }
+
+  /** Clears the answer once the vacancy has been dealt with. */
+  async function clearAsk(target: Job) {
+    setAskingId(target.id)
+    setError(null)
+    try {
+      await setFillCheck(target.id, null)
+      await reload()
+      onNotice(`Cleared the “still open?” question on “${target.title}”.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The question could not be cleared.')
+    } finally {
+      setAskingId(null)
+    }
   }
 
   /** Re-reads the catalogue from the database and returns what is left. */
@@ -593,14 +692,19 @@ function VacanciesTab({ onMutate, onNotice }: {
 
   function openNew() {
     setEditing(null)
+    setSeed(null)
+    setFormSeq((value) => value + 1)
     setOpen(true)
   }
   function openEdit(j: Job) {
     setEditing(j)
+    setSeed(null)
+    setFormSeq((value) => value + 1)
     setOpen(true)
   }
   function onSaved() {
     setOpen(false)
+    setSeed(null)
     onNotice(editing ? `Saved changes to “${editing.title}”.` : 'Vacancy posted.')
     onMutate()
   }
@@ -622,6 +726,54 @@ function VacanciesTab({ onMutate, onNotice }: {
           <Button onClick={openNew}>+ Post vacancy</Button>
         </div>
       </div>
+      {/* Filters: find one vacancy without scrolling the whole catalogue, and
+          see at a glance which ones are waiting for an answer. */}
+      <Card className="space-y-2 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label="Search vacancies"
+            className="min-w-[12rem] flex-1 text-sm"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search title, company, city, manager or poster"
+          />
+          <Select aria-label="Filter by city" className="w-auto text-sm" value={city} onChange={(event) => setCity(event.target.value)}>
+            <option value="all">All cities</option>
+            {cityChoices.map((option) => <option key={option} value={option}>{option}</option>)}
+          </Select>
+          <Select aria-label="Filter by category" className="w-auto text-sm" value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
+            <option value="all">All categories</option>
+            {CATEGORIES.filter((option) => option !== 'All').map((option) => <option key={option} value={option}>{option}</option>)}
+          </Select>
+          <Select
+            aria-label="Filter by filled status"
+            className="w-auto text-sm"
+            value={fillFilter}
+            onChange={(event) => setFillFilter(event.target.value as typeof fillFilter)}
+          >
+            <option value="all">Any status</option>
+            <option value="unasked">Not asked</option>
+            <option value="asked">Waiting for reply</option>
+            <option value="open">Team says open</option>
+            <option value="filled">Team says filled</option>
+          </Select>
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              className="px-3 py-1.5 text-xs"
+              onClick={() => { setQuery(''); setCity('all'); setFilterCategory('all'); setFillFilter('all') }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+          <span>Showing {visibleJobs.length} of {jobs.length}</span>
+          {waitingCount > 0 && <Badge color="amber">{waitingCount} waiting for the team</Badge>}
+          {filledCount > 0 && <Badge color="green">{filledCount} reported filled</Badge>}
+          <span className="font-medium text-slate-500">Ask the manager on WhatsApp, or ask the vacancy team and read their answer here.</span>
+        </div>
+      </Card>
       {loading && <p role="status" className="text-xs font-semibold text-slate-500">Refreshing vacancies from the server…</p>}
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900">{error}</p>}
       {legacyCount > 0 && (
@@ -642,7 +794,12 @@ function VacanciesTab({ onMutate, onNotice }: {
           <span className="text-right">Actions</span>
         </div>
         <div className="divide-y divide-slate-100">
-          {jobs.map((j) => (
+          {visibleJobs.length === 0 && (
+            <div className="px-4 py-6 text-center text-sm text-slate-600">
+              {jobs.length === 0 ? 'No active vacancies yet. Use “+ Post vacancy” to add one.' : 'No vacancy matches these filters.'}
+            </div>
+          )}
+          {visibleJobs.map((j) => (
             <div
               key={j.id}
               className="px-4 py-3 transition hover:bg-slate-50/70 sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto] sm:items-center sm:gap-3"
@@ -657,6 +814,18 @@ function VacanciesTab({ onMutate, onNotice }: {
                   {j.salary ? ` · ${j.salary}` : ''}
                   {j.postedBy ? ` · by ${j.postedBy}` : ''}
                 </div>
+                {fillCheckState(j.fillCheck) !== 'none' && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Badge color={fillCheckState(j.fillCheck) === 'filled' ? 'green' : fillCheckState(j.fillCheck) === 'open' ? 'brand' : 'amber'}>
+                      {FILL_CHECK_LABELS[fillCheckState(j.fillCheck)]}
+                    </Badge>
+                    {j.fillCheck?.answeredAt && (
+                      <span className="text-[11px] text-slate-500">
+                        {j.fillCheck.answeredBy || 'team'} · {new Date(j.fillCheck.answeredAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {/* Phone-only meta, so no column is lost on a small screen. */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
                   <Badge color="brand">{j.category}</Badge>
@@ -679,6 +848,34 @@ function VacanciesTab({ onMutate, onNotice }: {
                 >
                   {j.pinned ? '★ Unpin' : '☆ Pin'}
                 </Button>
+                <a
+                  href={fillCheckWhatsAppUrl(j)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={j.contact ? 'Ask the hiring manager on WhatsApp whether this is still open' : 'Open WhatsApp and choose who to ask'}
+                  className="inline-flex items-center rounded-xl bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-800 ring-1 ring-brand-200 transition hover:bg-brand-100"
+                >
+                  💬 Ask
+                </a>
+                <Button
+                  variant="secondary"
+                  className="px-2.5 py-1.5 text-xs"
+                  disabled={askingId === j.id}
+                  title={fillCheckWaiting(j.fillCheck)
+                    ? 'Waiting for the vacancy team — press to ask again'
+                    : fillCheckState(j.fillCheck) === 'none'
+                      ? 'Ask the vacancy team whether this job is filled'
+                      : 'Clear this question and its answer'}
+                  onClick={() => { void (fillCheckWaiting(j.fillCheck) || fillCheckState(j.fillCheck) === 'none' ? askTeam(j) : clearAsk(j)) }}
+                >
+                  {askingId === j.id
+                    ? 'Saving…'
+                    : fillCheckWaiting(j.fillCheck)
+                      ? '📩 Ask again'
+                      : fillCheckState(j.fillCheck) === 'none'
+                        ? '📩 Ask team'
+                        : '✕ Clear answer'}
+                </Button>
                 <Button variant="secondary" className="px-2.5 py-1.5 text-xs" onClick={() => openEdit(j)}>
                   ✏️ Edit
                 </Button>
@@ -691,8 +888,9 @@ function VacanciesTab({ onMutate, onNotice }: {
         </div>
       </Card>
 
-      {/* The bin. A delete can always be undone, so a wrong tap (or a whole
-          run of duplicates) is recoverable without re-typing the vacancy. */}
+      {/* The bin. Every delete is listed, can be read in full, and can be
+          brought back — except the tombstones from before the row was kept,
+          which say so instead of offering an Undo that cannot work. */}
       {deleted.length > 0 && (
         <Card className="overflow-hidden p-0">
           <button
@@ -701,41 +899,117 @@ function VacanciesTab({ onMutate, onNotice }: {
             aria-expanded={deletedOpen}
             className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-slate-50"
           >
-            <span className="text-sm font-bold text-slate-900">🗑 Deleted ({deleted.length})</span>
-            <span className="text-xs font-semibold text-slate-500">{deletedOpen ? 'Hide' : 'Show · undo a delete'}</span>
+            <span className="text-sm font-bold text-slate-900">🗑 Deleted vacancies ({deleted.length})</span>
+            <span className="text-xs font-semibold text-slate-500">
+              {deletedOpen ? 'Hide' : `Show · ${deleted.filter((item) => item.recoverable).length} can be restored`}
+            </span>
           </button>
           {deletedOpen && (
             <div className="divide-y divide-slate-100 border-t border-slate-100">
-              {deleted.map((item) => (
-                <div key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
-                    {(item.company || item.location) && (
-                      <div className="truncate text-xs text-slate-600">{[item.company, item.location].filter(Boolean).join(' · ')}</div>
-                    )}
-                    <div className="text-xs text-slate-500">
-                      {item.deletedAt
-                        ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
-                        : 'Deleted'}
-                      {' · '}{item.deleteReason || 'No reason recorded'}
+              {deleted.map((item) => {
+                const open = previewId === item.id
+                return (
+                  <div key={item.id} className="px-4 py-3">
+                    <div className="flex flex-wrap items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
+                        <div className="truncate text-xs text-slate-600">
+                          {[item.company, item.location, item.category].filter(Boolean).join(' · ') || 'No details recorded'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {item.deletedAt
+                            ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
+                            : 'Deleted'}
+                          {' · '}{item.deleteReason || 'No reason recorded'}
+                          {item.deletedBy ? ` · by ${item.deletedBy}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          variant="ghost"
+                          className="px-3 py-1.5 text-xs"
+                          onClick={() => setPreviewId(open ? null : item.id)}
+                        >
+                          {open ? 'Hide' : '👁 Preview'}
+                        </Button>
+                        {item.recoverable ? (
+                          <Button
+                            variant="secondary"
+                            className="px-3 py-1.5 text-xs"
+                            disabled={undoBusyId === item.id}
+                            onClick={() => undoDelete(item)}
+                          >
+                            {undoBusyId === item.id ? 'Restoring…' : '↩ Restore'}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            className="px-3 py-1.5 text-xs"
+                            onClick={() => postAgain(item)}
+                          >
+                            Post it again
+                          </Button>
+                        )}
+                      </div>
                     </div>
+
+                    {open && (
+                      <div className="mt-2 space-y-2 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                        <dl className="grid grid-cols-2 gap-2 text-xs">
+                          {[
+                            ['Title', item.title],
+                            ['Company', item.company],
+                            ['City', item.location],
+                            ['Category', item.category],
+                            ['Salary', item.salary ?? ''],
+                            ['Experience', item.experience ?? ''],
+                            ['Qualification', item.qualification ?? ''],
+                            ['Age limit', item.ageLimit ?? ''],
+                            ['Vacancies', item.vacancyCount ?? ''],
+                            ['Posted', item.postedAt ? new Date(item.postedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : ''],
+                          ]
+                            .filter(([, value]) => Boolean(value))
+                            .map(([label, value]) => (
+                              <div key={label} className="min-w-0">
+                                <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</dt>
+                                <dd className="truncate font-semibold text-slate-900">{value}</dd>
+                              </div>
+                            ))}
+                        </dl>
+                        {item.description && (
+                          <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-xs text-slate-700 ring-1 ring-slate-200">
+                            {item.description}
+                          </p>
+                        )}
+                        {item.recoverable ? (
+                          <p className="text-xs font-semibold text-emerald-800">
+                            Everything above is still stored. Restore puts it back exactly as it was.
+                          </p>
+                        ) : (
+                          <p className="text-xs font-semibold text-amber-900">
+                            {item.detailsFromAudit
+                              ? 'Only the deletion was recorded for this vacancy — the rest was never kept, so it cannot be restored. “Post it again” opens the form with the title, company, city and category from the activity log.'
+                              : 'Only the deletion was recorded for this vacancy, so it cannot be restored. “Post it again” opens a fresh form.'}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    variant="secondary"
-                    className="shrink-0 px-3 py-1.5 text-sm"
-                    disabled={undoBusyId === item.id}
-                    onClick={() => undoDelete(item)}
-                  >
-                    {undoBusyId === item.id ? 'Restoring…' : '↩ Undo'}
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Card>
       )}
 
-      <VacancyForm key={editing?.id ?? 'new'} job={editing} open={open} onClose={() => setOpen(false)} onSaved={onSaved} />
+      <VacancyForm
+        key={`${editing?.id ?? 'new'}-${formSeq}`}
+        job={editing}
+        seed={seed ?? undefined}
+        open={open}
+        onClose={() => { setOpen(false); setSeed(null) }}
+        onSaved={onSaved}
+      />
 
       <Modal open={!!deleteTarget} onClose={() => { setDeleteTarget(null); setDeleteReason('') }} title="Delete vacancy">
         {deleteTarget && (
@@ -1321,7 +1595,7 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
     return true
   }).filter((u) => {
     if (!query.trim()) return true
-    const haystack = `${u.name} ${u.email}`.toLowerCase()
+    const haystack = `${u.name} ${u.email} ${addressSearchText(u)}`.toLowerCase()
     if (haystack.includes(query.trim().toLowerCase())) return true
     return Boolean(searchDigits) && (u.phone || '').includes(searchDigits)
   })
@@ -1378,8 +1652,8 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search users by name, email or phone number…"
-          aria-label="Search users by name, email or phone number"
+          placeholder="Search users by name, email, phone or address…"
+          aria-label="Search users by name, email, phone or address"
         />
       </div>
       <div className="flex gap-2 flex-wrap">
@@ -1403,12 +1677,13 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
+            <table className="w-full text-sm min-w-[860px]">
               <thead className="bg-slate-50 text-slate-600 text-left">
                 <tr>
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Email</th>
                   <th className="px-3 py-2">Phone</th>
+                  <th className="px-3 py-2">Address</th>
                   <th className="px-3 py-2">Joined</th>
                   <th className="px-3 py-2">Subscription</th>
                   <th className="px-3 py-2">Action</th>
@@ -1425,6 +1700,9 @@ function UsersTab({ filter, onFilter }: { filter: UserFilter; onFilter: (f: User
                       </td>
                       <td className="px-3 py-2 text-slate-700">{u.email}</td>
                       <td className="px-3 py-2 text-slate-700">{u.phone || '—'}</td>
+                      <td className="px-3 py-2 text-slate-700 max-w-[260px]">
+                        {addressLine(u) ? <span className="block whitespace-normal break-words">{addressLine(u)}</span> : '—'}
+                      </td>
                       <td className="px-3 py-2 text-slate-700">{new Date(u.createdAt).toLocaleDateString()}</td>
                       <td className="px-3 py-2">
                         {active ? (
@@ -1814,13 +2092,22 @@ function StatCard({
 
 // -------------------- Profile (AI update composer) --------------------
 
-// -------------------- Announcements (to every user) --------------------
+// ------------- Announcements (every user, or one chosen user) -------------
 function AnnouncementsTab() {
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [reach, setReach] = useState<PushReach | null>(null)
   const [result, setResult] = useState<{ kind: 'ok' | 'error'; text: string; detail?: string } | null>(null)
+
+  // Who receives it: everyone, or one account the admin picks by name / email /
+  // phone. A personal message must never ring every phone by accident.
+  const [audience, setAudience] = useState<'all' | 'user'>('all')
+  const [people, setPeople] = useState<User[]>(() => getUsers())
+  const [peopleLoading, setPeopleLoading] = useState(false)
+  const [peopleError, setPeopleError] = useState<string | null>(null)
+  const [personQuery, setPersonQuery] = useState('')
+  const [person, setPerson] = useState<User | null>(null)
 
   const loadReach = useCallback(async () => { setReach(await pushReach()) }, [])
   useEffect(() => {
@@ -1829,26 +2116,51 @@ function AnnouncementsTab() {
     return () => { window.clearTimeout(first); window.clearInterval(interval) }
   }, [loadReach])
 
+  const loadPeople = useCallback(async () => {
+    setPeopleLoading(true)
+    setPeopleError(null)
+    try {
+      setPeople(await refreshAdminUsers())
+    } catch (err) {
+      setPeopleError(err instanceof Error ? err.message : 'Accounts could not be loaded.')
+    } finally {
+      setPeopleLoading(false)
+    }
+  }, [])
+
+  const query = personQuery.trim().toLowerCase()
+  const digits = personQuery.replace(/\D/g, '')
+  const matches = query.length === 0 ? [] : people.filter((candidate) =>
+    `${candidate.name} ${candidate.email}`.toLowerCase().includes(query)
+    || (digits.length >= 3 && (candidate.phone || '').includes(digits)),
+  ).slice(0, 6)
+
   const problem = announcementProblem(title, message)
+  const missingPerson = audience === 'user' && !person
 
   async function publish() {
     if (problem) { setResult({ kind: 'error', text: problem }); return }
+    if (missingPerson) { setResult({ kind: 'error', text: 'Choose the user this announcement is for.' }); return }
     setBusy(true)
     setResult(null)
-    const outcome = await sendAnnouncement(title, message)
+    const one = audience === 'user' ? person : null
+    const outcome = one
+      ? await sendAnnouncementTo(title, message, one.email)
+      : await sendAnnouncement(title, message)
     setBusy(false)
     if (!outcome.ok) { setResult({ kind: 'error', text: outcome.error }); return }
     const delivery = outcome.delivery
+    const who = one ? `${one.name} (${one.email})` : 'every user'
     setResult({
       kind: 'ok',
-      text: `Announcement sent to every user${delivery ? ` — ${delivery.sent} of ${delivery.devices} device${delivery.devices === 1 ? '' : 's'} notified` : ''}.`,
+      text: `Announcement sent to ${who}${delivery ? ` — ${delivery.sent} of ${delivery.devices} device${delivery.devices === 1 ? '' : 's'} notified` : ''}.`,
       detail: outcome.warning ?? (delivery && delivery.failed > 0
         ? `${delivery.failed} device${delivery.failed === 1 ? '' : 's'} could not be reached and ${delivery.removed > 0 ? `${delivery.removed} were removed as dead.` : 'will be retried on the next send.'}`
         : undefined),
     })
     setTitle('')
     setMessage('')
-    void loadReach()
+    if (!one) void loadReach()
   }
 
   return (
@@ -1856,10 +2168,10 @@ function AnnouncementsTab() {
       <h2 className="text-lg font-bold text-slate-900">📣 Announcements</h2>
 
       <Card className="p-4 space-y-2">
-        <div className="font-bold text-slate-900 text-sm">Write once, every user gets it</div>
+        <div className="font-bold text-slate-900 text-sm">Write once — everyone, or one person</div>
         <div className="text-xs text-slate-600">
-          The announcement appears in every user's notification list and is pushed to every phone that switched
-          notifications on — with sound, even when the app is closed.
+          Send to every user, or pick one account and only that person is notified. It appears in the
+          notification list of whoever receives it and is pushed to their phone — with sound, even when the app is closed.
         </div>
         {reach && (
           <div className="text-xs text-slate-700 flex items-center gap-2 flex-wrap">
@@ -1878,13 +2190,85 @@ function AnnouncementsTab() {
         {reach && (reach.devices === 0 || reach.devices >= ANNOUNCEMENT_WARN_DEVICES) && (
           <div className="text-xs text-slate-500">
             {reach.devices === 0
-              ? 'No phone has notifications switched on yet — the announcement will still appear in every user’s app.'
+              ? 'No phone has notifications switched on yet — the announcement will still appear in the app.'
               : `This will ring ${reach.devices} devices at once. Keep the message short and clear.`}
           </div>
         )}
       </Card>
 
       <Card className="p-4 space-y-3">
+        <div>
+          <div className="text-sm font-bold text-slate-900 mb-1.5">Send to</div>
+          <div className="flex gap-2 flex-wrap">
+            {([['all', '👥 All users'], ['user', '👤 One user']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setAudience(id)
+                  setResult(null)
+                  // The account list is only needed for a single recipient.
+                  if (id === 'user' && people.length === 0 && !peopleLoading) void loadPeople()
+                }}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition touch-manipulation ${
+                  audience === id ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50'
+                }`}
+                aria-pressed={audience === id}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {audience === 'user' && (
+          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200 space-y-2">
+            {person ? (
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate">{person.name}</div>
+                  <div className="text-xs text-slate-600 truncate">{person.email}{person.phone ? ` · ${person.phone}` : ''}</div>
+                </div>
+                <Button variant="secondary" className="px-3 py-1.5 text-sm" onClick={() => { setPerson(null); setPersonQuery('') }}>
+                  Change user
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Label htmlFor="announce-user">Find the user</Label>
+                <Input
+                  id="announce-user"
+                  value={personQuery}
+                  onChange={(event) => setPersonQuery(event.target.value)}
+                  placeholder="Name, email or phone number…"
+                  autoComplete="off"
+                />
+                {peopleLoading && <div className="text-xs text-slate-500">Loading accounts…</div>}
+                {peopleError && <div className="text-xs font-semibold text-red-700" role="alert">{peopleError}</div>}
+                {!peopleLoading && !peopleError && query.length > 0 && matches.length === 0 && (
+                  <div className="text-xs text-slate-500">No account matches “{personQuery.trim()}”.</div>
+                )}
+                <div className="space-y-1">
+                  {matches.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => { setPerson(candidate); setPersonQuery(''); setResult(null) }}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left ring-1 ring-slate-200 hover:bg-brand-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-900">{candidate.name}</span>
+                        <span className="block truncate text-xs text-slate-600">{candidate.email}{candidate.phone ? ` · ${candidate.phone}` : ''}</span>
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-brand-700">Choose</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <div>
           <Label htmlFor="announce-title">Title</Label>
           <Input
@@ -1911,7 +2295,7 @@ function AnnouncementsTab() {
 
         <div className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-            Preview on the phone
+            {person ? `Preview on ${person.name}'s phone` : 'Preview on the phone'}
           </div>
           <div className="text-sm font-semibold text-slate-900">{title.trim() || 'Your title'}</div>
           <div className="text-xs text-slate-700 whitespace-pre-wrap mt-1">
@@ -1935,10 +2319,10 @@ function AnnouncementsTab() {
 
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-xs text-slate-500">
-            {problem ?? `Ready to send to all users.`}
+            {missingPerson ? 'Choose the user this announcement is for.' : problem ?? (person ? `Ready to send to ${person.name} only.` : 'Ready to send to all users.')}
           </div>
-          <Button disabled={busy || Boolean(problem)} onClick={() => { void publish() }}>
-            {busy ? 'Sending…' : '📣 Send to all users'}
+          <Button disabled={busy || Boolean(problem) || missingPerson} onClick={() => { void publish() }}>
+            {busy ? 'Sending…' : person ? `📣 Send to ${person.name}` : '📣 Send to all users'}
           </Button>
         </div>
       </Card>

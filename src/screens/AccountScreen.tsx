@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Badge } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
@@ -10,7 +10,8 @@ import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
-import type { Profile } from '../data/profile'
+import { refreshProfile, type Profile } from '../data/profile'
+import { profilePhotoUrl } from '../data/profilePhoto'
 import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
 import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
 import { loadMyUnlocks } from '../data/companyUnlocks'
@@ -35,6 +36,14 @@ export function AccountScreen({
 }) {
   const unlocked = isSubscribed(user)
   const editorRef = useRef<ProfileEditorHandle>(null)
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    refreshProfile(user.email)
+      .then((profile) => profilePhotoUrl(profile.photoPath ?? ''))
+      .then((url) => { if (alive) setProfilePhoto(url) })
+    return () => { alive = false }
+  }, [user.email])
   // "My applications" opens as its own page over this one, so the phone's back
   // button (and its Back button) return here.
   const [applicationsOpen, setApplicationsOpen] = useState(false)
@@ -93,9 +102,13 @@ export function AccountScreen({
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-24 space-y-4">
       <Card className="hairline flex items-center gap-3.5 bg-gradient-to-br from-white to-brand-50/60 p-4">
-        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-700 text-2xl font-extrabold text-white shadow-[0_16px_30px_-18px_rgba(29,78,216,0.95)] ring-1 ring-white/50">
-          {user.name.slice(0, 1).toUpperCase()}
-        </div>
+        {profilePhoto ? (
+          <img src={profilePhoto} alt="Your profile" className="h-16 w-16 shrink-0 rounded-2xl object-cover shadow ring-1 ring-white/50" />
+        ) : (
+          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-700 text-2xl font-extrabold text-white shadow-[0_16px_30px_-18px_rgba(29,78,216,0.95)] ring-1 ring-white/50">
+            {user.name.slice(0, 1).toUpperCase()}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-lg font-extrabold tracking-tight text-slate-900">{user.name}</div>
           <div className="text-xs text-slate-500 truncate">{user.email}</div>
@@ -137,6 +150,7 @@ export function AccountScreen({
           onSubscribed({ ...user, phone: profile.phone })
           onProfileSaved(profile)
         }}
+        onPhotoSaved={setProfilePhoto}
         onResumeChange={onResumeChange}
       />
 

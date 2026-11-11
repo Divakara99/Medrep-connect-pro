@@ -1,5 +1,5 @@
 import type { AuthChangeEvent, User as SupabaseUser } from '@supabase/supabase-js'
-import { hasAdminRole, hasVacancyRole, supabase } from './supabase'
+import { callEdgeFunction, hasAdminRole, hasVacancyRole, supabase } from './supabase'
 import { adminMfaRequired, isMfaVerifiedSession } from './mfa'
 import { MIN_STAFF_PASSWORD_LENGTH, MIN_USER_PASSWORD_LENGTH, passwordLengthError } from './passwordRules'
 import { passwordResetRedirectTo } from './platform'
@@ -10,6 +10,10 @@ export type User = {
   email: string
   name: string
   phone?: string
+  /** Filled from the job-seeker profile; admin console only. */
+  address?: string
+  city?: string
+  state?: string
   createdAt: number
   subscribedUntil?: number // epoch ms; loaded from the server-owned Supabase account row
   isAdmin?: boolean
@@ -196,11 +200,29 @@ export async function refreshAdminUsers(): Promise<User[]> {
     is_admin: boolean
   }
   const rows = (data ?? []) as unknown as AccountRow[]
+
+  // The address lives in the job-seeker profile, not in the account row. One
+  // extra read fills it in; when the read fails the list still loads.
+  type ProfileRow = { user_id: string; data: { address?: unknown; city?: unknown; state?: unknown } | null }
+  const { data: profileData } = await supabase
+    .from('job_profiles')
+    .select('user_id,data')
+  const places = new Map<string, { address?: string; city?: string; state?: string }>()
+  for (const row of (profileData ?? []) as unknown as ProfileRow[]) {
+    const profile = row.data ?? {}
+    const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+    const place = { address: text(profile.address), city: text(profile.city), state: text(profile.state) }
+    if (place.address || place.city || place.state) places.set(row.user_id, place)
+  }
+
   const users = rows.map((row): User => ({
     id: row.user_id,
     email: row.email,
     name: row.name,
     phone: row.phone ?? undefined,
+    address: places.get(row.user_id)?.address,
+    city: places.get(row.user_id)?.city,
+    state: places.get(row.user_id)?.state,
     createdAt: new Date(row.created_at).getTime(),
     subscribedUntil: row.subscribed_until ? new Date(row.subscribed_until).getTime() : undefined,
     isAdmin: row.is_admin,
@@ -399,21 +421,8 @@ export async function deleteUserAccount(userId: string): Promise<{ ok: true } | 
     return { ok: false, error: 'You cannot delete the active administrator account.' }
   }
 
-  const { error } = await supabase.functions.invoke('admin-delete-user', {
-    body: { userId },
-  })
-  if (error) {
-    const context = (error as Error & { context?: unknown }).context
-    if (context instanceof Response) {
-      try {
-        const payload = await context.clone().json() as { error?: string }
-        if (payload.error) return { ok: false, error: payload.error }
-      } catch {
-        // Keep the SDK's message when the function response is not JSON.
-      }
-    }
-    return { ok: false, error: error.message }
-  }
+  const { error } = await callEdgeFunction('admin-delete-user', { userId })
+  if (error) return { ok: false, error }
 
   adminUsersCache = getUsers().filter((user) => user.id !== userId)
   return { ok: true }

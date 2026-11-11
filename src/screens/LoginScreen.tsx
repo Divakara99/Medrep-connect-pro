@@ -131,11 +131,9 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
                   MedRep <span className="gradient-text">Connect Pro</span>
                 </button>
               </h1>
-              <p className="mx-auto mt-1 max-w-xs px-4 text-sm font-medium text-slate-600">{CREATOR.tagline}</p>
-              <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Version {APP_VERSION_LABEL}
-              </span>
+              {/* Two lines, never three: `text-balance` splits the two clauses
+                  evenly and the width keeps them on a phone screen. */}
+              <p className="mx-auto mt-1 max-w-sm px-2 text-balance text-sm font-medium text-slate-600">{CREATOR.tagline}</p>
             </div>
             <div className="mt-4"><CreatorCredit variant="solid" /></div>
           </header>
@@ -260,6 +258,11 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
 
           <footer className="mt-5 text-center">
             <p className="text-sm font-medium text-slate-700">Use Forgot password if you cannot sign in. Never share your password or payment PIN.</p>
+            {/* The build, stated once, at the very bottom — it is a support
+                detail, not part of the welcome. */}
+            <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Version {APP_VERSION_LABEL}
+            </p>
           </footer>
         </div>
       </div>

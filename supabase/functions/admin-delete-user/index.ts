@@ -81,6 +81,25 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: 'Administrator accounts are protected from this action.' }, 409)
   }
 
+  // Profile photos live in a private Storage bucket rather than inside the
+  // profile JSON. Remove every object in this account's own folder before
+  // deleting Auth so account deletion does not leave private files orphaned.
+  const { data: profilePhotos, error: photoListError } = await adminClient.storage
+    .from('profile-photos')
+    .list(targetId, { limit: 1000 })
+  if (photoListError) {
+    return jsonResponse({ error: 'Could not prepare the profile photo for account deletion.' }, 500)
+  }
+  const photoPaths = (profilePhotos ?? [])
+    .filter((photo) => Boolean(photo.id))
+    .map((photo) => `${targetId}/${photo.name}`)
+  if (photoPaths.length > 0) {
+    const { error: photoDeleteError } = await adminClient.storage.from('profile-photos').remove(photoPaths)
+    if (photoDeleteError) {
+      return jsonResponse({ error: 'Could not remove the profile photo; the account was not deleted.' }, 500)
+    }
+  }
+
   const { error: deleteError } = await adminClient.auth.admin.deleteUser(targetId)
   if (deleteError) return jsonResponse({ error: 'Supabase could not delete this account.' }, 500)
 

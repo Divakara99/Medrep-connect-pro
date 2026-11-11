@@ -4,7 +4,8 @@ import { Wordmark } from '../components/Logo'
 import { VacancyForm } from '../components/VacancyForm'
 import { currentUser } from '../data/auth'
 import { deleteReasonProblem } from '../data/vacancyRules'
-import { teamDeleteVacancy, teamListVacancies, type TeamVacancy } from '../data/vacancyTeam'
+import { teamAnswerFillCheck, teamDeleteVacancy, teamListVacancies, type TeamVacancy } from '../data/vacancyTeam'
+import { fillCheckWaiting } from '../data/fillCheck'
 
 /**
  * The vacancy team's only page: post a vacancy, see the active vacancies and
@@ -45,6 +46,24 @@ export function VacancyPortal({ onExit }: { onExit: () => void }) {
   }, [vacancies, search])
 
   const postedByMe = vacancies.filter((v) => v.postedBy.toLowerCase() === me).length
+  // The administrator's questions, newest first — the first thing on the page.
+  const pendingQuestions = vacancies
+    .filter((vacancy) => fillCheckWaiting(vacancy.fillCheck))
+    .sort((a, b) => (b.fillCheck?.askedAt ?? 0) - (a.fillCheck?.askedAt ?? 0))
+  const [answeringId, setAnsweringId] = useState<string | null>(null)
+
+  async function answer(target: TeamVacancy, answer: 'open' | 'filled') {
+    setAnsweringId(target.id)
+    setError(null)
+    const result = await teamAnswerFillCheck(target.id, answer)
+    setAnsweringId(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setNotice(`Told the administrator that “${target.title}” is ${answer === 'filled' ? 'filled' : 'still open'}.`)
+    void load()
+  }
   const reasonProblem = reason.trim() ? deleteReasonProblem(reason) : null
 
   async function confirmDelete() {
@@ -87,6 +106,51 @@ export function VacancyPortal({ onExit }: { onExit: () => void }) {
 
         {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-900 ring-1 ring-emerald-200">{notice}</p>}
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-900 ring-1 ring-red-200">{error}</p>}
+
+        {pendingQuestions.length > 0 && (
+          <Card className="space-y-3 border-amber-200 bg-amber-50/60 p-4 ring-1 ring-amber-200">
+            <div>
+              <div className="text-sm font-bold text-amber-950">
+                📩 The administrator asks about {pendingQuestions.length} vacanc{pendingQuestions.length === 1 ? 'y' : 'ies'}
+              </div>
+              <p className="text-xs font-medium text-amber-900">
+                Is it still open, or has it been filled? The answer decides whether the vacancy stays or is deleted.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {pendingQuestions.map((vacancy) => (
+                <div key={vacancy.id} className="rounded-xl bg-white p-3 ring-1 ring-amber-200">
+                  <div className="truncate text-sm font-semibold text-slate-900">{vacancy.title}</div>
+                  <div className="truncate text-xs text-slate-600">{vacancy.company} · {vacancy.location}</div>
+                  {vacancy.fillCheck?.askedAt && (
+                    <div className="text-[11px] text-slate-500">
+                      Asked {new Date(vacancy.fillCheck.askedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                      {vacancy.fillCheck.askedBy ? ` by ${vacancy.fillCheck.askedBy}` : ''}
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs"
+                      disabled={answeringId === vacancy.id}
+                      onClick={() => { void answer(vacancy, 'open') }}
+                    >
+                      ✅ Still open
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs"
+                      disabled={answeringId === vacancy.id}
+                      onClick={() => { void answer(vacancy, 'filled') }}
+                    >
+                      🚫 Filled
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div>
           <Label htmlFor="vacancy-search">Find a vacancy</Label>

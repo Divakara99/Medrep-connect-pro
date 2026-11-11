@@ -121,7 +121,6 @@ export type JobUnlockOrder = {
   amount: number
   currency: 'INR'
   keyId: string
-  minutes: number
 }
 
 export type JobUnlockVerification = {

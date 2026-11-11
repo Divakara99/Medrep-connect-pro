@@ -111,3 +111,80 @@ export function getSyncStatus(): SupabaseSyncStatus {
     lastHttpStatus,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Edge Functions called with the signed-in session
+// ---------------------------------------------------------------------------
+
+/**
+ * The server's own sentence for a failed call, when it sent one.
+ *
+ * `functions.invoke` reports "non-2xx status code"; the function's JSON body
+ * carries the reason the administrator actually needs ("Verify your
+ * authenticator code…"), so read that first.
+ */
+async function edgeFunctionMessage(error: unknown, fallback: string): Promise<string> {
+  const context = (error as Error & { context?: unknown })?.context
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json() as { error?: unknown }
+      if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error
+    } catch {
+      // Not JSON — fall through to the SDK message.
+    }
+  }
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+/**
+ * Call an Edge Function with the signed-in session's access token.
+ *
+ * `functions.invoke` reads whatever the client currently holds. On a cold start
+ * (a reload, or the app resuming from the background) that can still be the
+ * anonymous key, and the function then answers "The Supabase session is invalid
+ * or expired" even though the administrator is signed in. The token is
+ * therefore read (and, when the server still says it is expired, refreshed)
+ * before the call, and the call is retried once.
+ */
+export async function callEdgeFunction(
+  name: string,
+  body: Record<string, unknown> = {},
+): Promise<{ data: Record<string, unknown> | null; error: string | null }> {
+  let expired = false
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = await sessionAccessToken(attempt > 0)
+    if (!token) {
+      return expired
+        ? { data: null, error: 'The Supabase session is invalid or expired.' }
+        : { data: null, error: 'Please sign in again — this session has ended.' }
+    }
+    const { data, error } = await supabase.functions.invoke(name, {
+      body,
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!error) {
+      const payload = (data ?? {}) as Record<string, unknown> & { error?: unknown }
+      if (typeof payload.error === 'string' && payload.error.trim()) {
+        return { data: null, error: payload.error }
+      }
+      return { data: payload, error: null }
+    }
+    const message = await edgeFunctionMessage(error, 'The service could not be reached.')
+    if (attempt === 0 && /session is invalid or expired/i.test(message)) {
+      expired = true
+      continue
+    }
+    return { data: null, error: message }
+  }
+  return { data: null, error: 'The service could not be reached. Try again.' }
+}
+
+/** The stored access token, optionally after a refresh. */
+async function sessionAccessToken(refresh: boolean): Promise<string | null> {
+  if (refresh) {
+    const { data, error } = await supabase.auth.refreshSession()
+    if (!error && data.session?.access_token) return data.session.access_token
+  }
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? null
+}

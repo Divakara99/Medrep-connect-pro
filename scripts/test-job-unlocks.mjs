@@ -100,6 +100,17 @@ assert.match(detail, /paidUnlock\?: \{ available: boolean; busy: boolean; onBuy:
 assert.match(detail, /paidUnlock\?\.available && \(/, 'the ₹5 button appears only when it is available')
 assert.match(detail, /jobUnlockLabel\(\)/, 'the button shows the price and the window')
 assert.match(detail, /Full contact unlocked for this job/, 'an active paid unlock is stated on the sheet')
+// Both unlock buttons must fit one line on a phone: short labels, no fillers.
+assert.match(buyer, /· Unlock this job`/, 'the ₹5 button reads "Unlock this job"')
+assert.doesNotMatch(buyer, /Unlock this job for good/, 'the "for good" tail is gone from the button')
+assert.match(detail, /🔓 Unlock all jobs/, 'the pass button reads "Unlock all jobs"')
+assert.doesNotMatch(detail, /Unlock manager contact/, 'the long pass label is gone')
+assert.match(detail, /grid grid-cols-2 gap-2/, 'the ₹5 and pass choices share one row')
+assert.match(detail, /₹5 unlocks this job; a pass unlocks all jobs\./, 'the row clarifies the two choices')
+assert.match(detail, /onClick=\{onSubscribe\}/, 'the pass button invokes its selection action')
+assert.match(app, /onSubscribe=\{openPlansFromJob\}/, 'tapping Unlock all jobs shifts to pass selection')
+assert.match(app, /setPassReturnJob\(selectedJob\)[\s\S]{0,100}setSelectedJob\(null\)[\s\S]{0,100}navigate\('plans'\)/, 'pass selection remembers the originating job')
+assert.match(app, /nav\.tab === 'plans' && passReturnJob[\s\S]{0,100}setSelectedJob\(passReturnJob\)/, 'Back restores the job detail page')
 assert.match(detail, /const fullDetails = Boolean\(job && \(unlocked \|\| paidWindow\.active\)\)/,
   'a paid window reveals the contact block, like a pass would for this sheet')
 assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app offers the ₹5 unlock wherever it can be paid')
