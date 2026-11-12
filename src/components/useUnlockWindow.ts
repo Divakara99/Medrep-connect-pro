@@ -28,9 +28,8 @@ export function useUnlockWindow(job: Pick<Job, 'companyUnlocked' | 'unlockExpire
 }
 
 /**
- * The countdown for the paid ₹5 unlock (one job, one hour). Same idea as the
- * video window: the sheet must stop showing a contact the server would no
- * longer send.
+ * Paid ₹5 unlock status for one job. A permanent unlock has no expiry; older
+ * time-limited rows are still handled safely if any remain during rollout.
  */
 export function usePaidUnlockWindow(job: Pick<Job, 'jobUnlocked' | 'jobUnlockExpiresAt'>) {
   const [now, setNow] = useState(() => Date.now())

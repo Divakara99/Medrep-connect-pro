@@ -98,7 +98,7 @@ BEGIN
         SELECT max(cu.expires_at)::text FROM public.company_unlocks AS cu
         WHERE cu.user_id = auth.uid() AND cu.job_id = v.id AND cu.expires_at > now()
       ),
-      -- Paid ₹5 unlock: the whole contact block for this job, for one hour.
+      -- Paid ₹5 unlock: the whole contact block for this job, permanently.
       'jobUnlocked', EXISTS (
         SELECT 1 FROM public.job_unlocks AS ju
         WHERE ju.user_id = auth.uid() AND ju.job_id = v.id
@@ -127,7 +127,7 @@ BEGIN
           AND ju.payment_status = 'paid' AND ju.expires_at > now()
       ) THEN
         -- Paid single-job unlock: same five fields a pass would reveal, for
-        -- this job only, while the hour runs.
+        -- this job only, permanently after verified payment.
         jsonb_build_object(
           'company', v.data ->> 'company',
           'manager', v.data ->> 'manager',

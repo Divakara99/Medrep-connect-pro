@@ -95,14 +95,22 @@ export function JobCard({
   // time-limited, so the card re-reads the window on a short clock.
   const unlockWindow = useUnlockWindow(job)
   const companyUnlocked = unlocked || unlockWindow.active
-  // Keep the rewarded action in the card's action area only when there is a
-  // company name to reveal. The app supplies this callback only for free users
+  // The company name is intentionally omitted from locked-job data, so do not
+  // require job.company here. The app supplies this callback only for free users
   // on Android; subscribers, the website and already-unlocked cards omit it.
-  const showUnlockButton = Boolean(onWatchUnlock && job.company?.trim() && !companyUnlocked)
+  const showUnlockButton = Boolean(onWatchUnlock && !companyUnlocked)
   const hasApplyEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((job.managerEmail || '').trim())
   const applyPhoneDigits = (job.contact || '').replace(/[^\d]/g, '')
   const hasApplyPhone = applyPhoneDigits.replace(/^0/, '').replace(/^91/, '').length === 10 || applyPhoneDigits.length >= 10
-  const applyLabel = hasApplyEmail ? 'Apply via Email' : hasApplyPhone ? 'Apply via WhatsApp' : 'Apply now'
+  const applyAccessibleLabel = hasApplyEmail ? 'Apply via Email' : hasApplyPhone ? 'Apply via WhatsApp' : 'Apply now'
+  const applyLabel = hasApplyEmail ? 'Apply · Email' : hasApplyPhone ? 'Apply · WA' : 'Apply'
+  const unlockCompactLabel = unlockStage === 'loading'
+    ? 'Loading…'
+    : unlockStage === 'watching'
+      ? 'Watching…'
+      : unlockStage === 'verifying'
+        ? 'Verifying…'
+        : 'Watch video'
   const salary = salaryParts(job.salary)
 
   const status = unlocked
@@ -185,20 +193,37 @@ export function JobCard({
         </div>
       </div>
 
-      {onApply && (
-        <div className="border-t border-slate-100 px-4 py-3">
-          <button
-            type="button"
-            onClick={() => onApply(job)}
-            className="flex w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-center text-sm font-extrabold leading-snug text-white shadow-[0_8px_18px_-12px_rgba(5,150,105,0.9)] transition hover:bg-emerald-600 active:scale-[0.99]"
-          >
-            {hasApplyPhone && !hasApplyEmail ? (
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="currentColor">
-                <path d="M12.04 2A9.93 9.93 0 0 0 3.5 17.03L2 22l5.1-1.47A10 10 0 1 0 12.04 2Zm0 18.2a8.16 8.16 0 0 1-4.16-1.14l-.3-.18-3.02.87.89-2.94-.2-.31a8.2 8.2 0 1 1 6.79 3.7Zm4.5-6.14c-.25-.13-1.48-.73-1.71-.81-.23-.08-.4-.13-.56.13-.17.25-.65.81-.8.98-.15.17-.3.19-.55.06-.25-.13-1.06-.39-2.02-1.24-.75-.66-1.25-1.48-1.4-1.73-.15-.25-.02-.39.11-.52.11-.11.25-.3.38-.44.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.36-.77-1.86-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.09s.9 2.43 1.02 2.6c.13.17 1.77 2.71 4.28 3.8.6.26 1.07.41 1.44.52.61.19 1.17.16 1.61.1.49-.07 1.48-.61 1.69-1.2.21-.59.21-1.09.15-1.2-.06-.11-.23-.17-.48-.29Z" />
-              </svg>
-            ) : <span aria-hidden>{hasApplyEmail ? '✉' : '↗'}</span>}
-            <span className="min-w-0 break-words">{applyLabel}</span>
-          </button>
+      {(onApply || showUnlockButton) && (
+        <div className={`border-t border-slate-100 px-3 py-2.5 ${onApply && showUnlockButton ? 'grid grid-cols-2 gap-2' : ''}`}>
+          {onApply && (
+            <button
+              type="button"
+              aria-label={applyAccessibleLabel}
+              title={applyAccessibleLabel}
+              onClick={() => onApply(job)}
+              className="flex h-11 w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-500 px-1.5 text-center text-xs font-extrabold leading-none text-white shadow-[0_8px_18px_-12px_rgba(5,150,105,0.9)] transition hover:bg-emerald-600 active:scale-[0.99]"
+            >
+              {hasApplyPhone && !hasApplyEmail ? (
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="currentColor">
+                  <path d="M12.04 2A9.93 9.93 0 0 0 3.5 17.03L2 22l5.1-1.47A10 10 0 1 0 12.04 2Zm0 18.2a8.16 8.16 0 0 1-4.16-1.14l-.3-.18-3.02.87.89-2.94-.2-.31a8.2 8.2 0 1 1 6.79 3.7Zm4.5-6.14c-.25-.13-1.48-.73-1.71-.81-.23-.08-.4-.13-.56.13-.17.25-.65.81-.8.98-.15.17-.3.19-.55.06-.25-.13-1.06-.39-2.02-1.24-.75-.66-1.25-1.48-1.4-1.73-.15-.25-.02-.39.11-.52.11-.11.25-.3.38-.44.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.36-.77-1.86-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.09s.9 2.43 1.02 2.6c.13.17 1.77 2.71 4.28 3.8.6.26 1.07.41 1.44.52.61.19 1.17.16 1.61.1.49-.07 1.48-.61 1.69-1.2.21-.59.21-1.09.15-1.2-.06-.11-.23-.17-.48-.29Z" />
+                </svg>
+              ) : <span aria-hidden className="shrink-0">{hasApplyEmail ? '✉' : '↗'}</span>}
+              <span className="min-w-0 truncate">{applyLabel}</span>
+            </button>
+          )}
+          {showUnlockButton && (
+            <button
+              type="button"
+              aria-label={unlockButtonLabel(unlockStage)}
+              title={unlockButtonLabel(unlockStage)}
+              disabled={unlockStage !== null}
+              onClick={() => onWatchUnlock?.(job)}
+              className="flex h-11 w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-slate-900 px-1.5 text-center text-xs font-extrabold leading-none text-white transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60"
+            >
+              <span aria-hidden className="shrink-0">🎬</span>
+              <span className="min-w-0 truncate">{unlockCompactLabel}</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -211,19 +236,6 @@ export function JobCard({
         </div>
       )}
 
-      {showUnlockButton && (
-        <div className="border-t border-[#eef1f8] px-4 py-3">
-          <button
-            type="button"
-            disabled={unlockStage !== null}
-            onClick={() => onWatchUnlock?.(job)}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-3 py-3 text-sm font-bold text-white transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60"
-          >
-            <span aria-hidden>🎬</span>
-            {unlockButtonLabel(unlockStage)}
-          </button>
-        </div>
-      )}
     </Card>
   )
 }

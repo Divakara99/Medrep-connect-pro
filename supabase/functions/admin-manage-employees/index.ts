@@ -21,9 +21,9 @@ const corsHeaders = {
 }
 
 const TEAM_ROLE = 'vacancy_editor'
-const MAX_EMPLOYEES = 1
+const MAX_EMPLOYEES = 50
 const EMPLOYEE_LIMIT_MESSAGE =
-  'Only one employee login is allowed. Delete the current employee login first, then add the new employee.'
+  'The maximum of 50 employee logins has been reached. Delete an employee login before adding another.'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -139,8 +139,8 @@ Deno.serve(async (request: Request) => {
     if (rowError) {
       // Keep the list and the accounts in step: undo the new login.
       await adminClient.auth.admin.deleteUser(created.user.id)
-      // The database allows one employee login at a time (vacancy_employees_single_login).
-      if (rowError.code === '23505') return jsonResponse({ error: EMPLOYEE_LIMIT_MESSAGE }, 409)
+      // The database trigger enforces the 50-login cap even across racing requests.
+      if (rowError.code === '23514') return jsonResponse({ error: EMPLOYEE_LIMIT_MESSAGE }, 409)
       return jsonResponse({ error: 'The team login could not be saved. Nothing was created.' }, 500)
     }
     return jsonResponse({ ok: true, employee: { user_id: created.user.id, email, name } }, 201)

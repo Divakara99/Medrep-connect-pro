@@ -3,10 +3,10 @@ import { jsonResponse, readJson } from '../_shared/http.ts'
 import { createRazorpayOrder, razorpayCredentials } from '../_shared/razorpay.ts'
 
 /**
- * Price of one job's full contact details for one hour, in paise.
+ * One-time price of one job's full contact details, in paise; the unlock is permanent.
  *
  * ₹5 is decided HERE, on the server, and nowhere else. The browser cannot send
- * an amount, so it cannot buy an hour for less. The same number is repeated in
+ * an amount, so it cannot buy the contact for less. The same number is repeated in
  * supabase/job_unlocks.sql (CHECK amount_paise = 500) and in the app, which only
  * uses it for the label.
  */
@@ -50,7 +50,7 @@ Deno.serve(async (request: Request) => {
       notes: {
         user_id: context.user.id,
         job_id: jobId,
-        unlock: 'job_contact_1h',
+        unlock: 'job_contact_permanent',
         payment_record_id: recordId,
       },
     })
@@ -80,7 +80,6 @@ Deno.serve(async (request: Request) => {
       amount: order.amount,
       currency: order.currency,
       keyId,
-      minutes: 60,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Payment service is unavailable.'
