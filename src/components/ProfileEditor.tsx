@@ -17,11 +17,10 @@ export const ProfileEditor = forwardRef<
     email: string
     phone?: string
     onSaved?: (p: Profile) => void
-    onPhotoSaved?: (url: string) => void
     onResumeChange?: (resume: ResumeRecord | null) => void
   }
 >(function ProfileEditor(
-  { email, phone, onSaved, onPhotoSaved, onResumeChange },
+  { email, phone, onSaved, onResumeChange },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
@@ -90,7 +89,6 @@ export const ProfileEditor = forwardRef<
       const remote = await refreshProfile(email)
       const saved = await saveProfile({ ...remote, photoPath: uploaded.path })
       setP((previous) => ({ ...previous, photoPath: saved.photoPath }))
-      onPhotoSaved?.(uploaded.url)
       if (oldPath && oldPath !== uploaded.path) await deleteProfilePhoto(oldPath)
       setSavedMsg('Profile photo updated.')
       window.setTimeout(() => setSavedMsg(null), 2500)

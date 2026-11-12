@@ -12,6 +12,8 @@ import {
 import { actorLabel, summarizeActivity, type AuditRow } from '../data/vacancyRules'
 import { staffPasswordError } from '../data/passwordRules'
 
+const MAX_EMPLOYEES = 50
+
 const dateTime = (value: number) => new Date(value).toLocaleString('en-IN', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 })
@@ -215,16 +217,19 @@ export function VacancyTeamAdmin() {
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-slate-900">Team logins</h3>
-          <Badge color="brand">{logins.length} of 1 employee login</Badge>
+          <Badge color="brand">{logins.length} of {MAX_EMPLOYEES} employee logins</Badge>
         </div>
 
         {logins.length > 0 && (
-          <p className="rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-900 ring-1 ring-amber-300">
-            One employee login is set up. To give vacancy access to a different person, delete this login first, then create the new one. Your admin login is never shared.
+          <p className={`rounded-xl p-3 text-sm font-medium ring-1 ${logins.length >= MAX_EMPLOYEES ? 'bg-amber-50 text-amber-900 ring-amber-300' : 'bg-blue-50 text-blue-900 ring-blue-200'}`}>
+            {logins.length >= MAX_EMPLOYEES
+              ? 'The 50-login limit is reached. Delete an existing login before adding another.'
+              : `${logins.length} of ${MAX_EMPLOYEES} employee logins are active. Add more team members below, or delete any login that is no longer needed.`}
+            {' '}Your admin login is never shared.
           </p>
         )}
 
-        {logins.length === 0 && !loading && (
+        {logins.length < MAX_EMPLOYEES && !loading && (
         <>
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto] items-end">
           <div>

@@ -31,7 +31,7 @@ REVOKE ALL ON FUNCTION public.is_vacancy_editor() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_vacancy_editor() TO authenticated;
 
 -- ---------------------------------------------------------------------------
--- 2. Team logins (one row per vacancy_editor account). Written only by the
+-- 2. Team logins (up to 50 vacancy_editor accounts). Written only by the
 --    admin-manage-employees function with the service role.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.vacancy_employees (
@@ -42,10 +42,29 @@ CREATE TABLE IF NOT EXISTS public.vacancy_employees (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Only one employee login at a time. A unique index on a constant allows one
--- row; a second insert fails in the database, even if two requests race.
-CREATE UNIQUE INDEX IF NOT EXISTS vacancy_employees_single_login
-  ON public.vacancy_employees ((true));
+-- A DB-side cap, not just an admin UI check: serialize inserts and reject the
+-- 51st login even if requests race or bypass the edge function.
+DROP INDEX IF EXISTS public.vacancy_employees_single_login;
+CREATE OR REPLACE FUNCTION public.enforce_vacancy_employee_limit()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(1836016749, 50);
+  IF (SELECT count(*) FROM public.vacancy_employees) >= 50 THEN
+    RAISE EXCEPTION 'Maximum of 50 vacancy employee logins reached.'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.enforce_vacancy_employee_limit() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS vacancy_employees_enforce_limit ON public.vacancy_employees;
+CREATE TRIGGER vacancy_employees_enforce_limit
+  BEFORE INSERT ON public.vacancy_employees
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_vacancy_employee_limit();
 
 ALTER TABLE public.vacancy_employees ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS admin_read_vacancy_employees ON public.vacancy_employees;

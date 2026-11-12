@@ -45,9 +45,9 @@ export type Job = {
    */
   unlockExpiresAt?: string | null
   /**
-   * Paid ₹5 single-job unlock: the whole contact block for THIS vacancy, for
-   * the hour the server stamped. Set by list_visible_jobs() only while the
-   * window runs; the app mirrors it, it never decides it.
+   * Paid ₹5 single-job unlock: the whole contact block for THIS vacancy,
+   * permanently after server verification. The app mirrors the server projection;
+   * it never decides access itself.
    */
   jobUnlocked?: boolean
   jobUnlockExpiresAt?: string | null

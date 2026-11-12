@@ -27,7 +27,7 @@ const jobs = await read('src/data/jobs.ts')
 const detail = await read('src/components/JobDetail.tsx')
 const app = await read('src/App.tsx')
 
-// 1. One job, one hour, one payment -------------------------------------------
+// 1. One job, one permanent payment -------------------------------------------
 assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.job_unlocks/, 'paid unlocks have their own table')
 assert.match(sql, /CONSTRAINT job_unlocks_order_unique UNIQUE \(razorpay_order_id\)/, 'one row per Razorpay order')
 assert.match(sql, /CONSTRAINT job_unlocks_payment_unique UNIQUE \(razorpay_payment_id\)/, 'one row per Razorpay payment')
@@ -72,7 +72,7 @@ assert.match(verifyFn, /const JOB_UNLOCK_NEVER_EXPIRES = 'infinity'/, 'a paid un
 assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation is not charged twice')
 assert.match(verifyFn, /verifyCheckoutSignature\(secret, orderId, paymentId, signature\)/, 'the signature is verified server-side')
 assert.match(verifyFn, /payment\.amount !== JOB_UNLOCK_PRICE_PAISE/, 'a payment of any other amount is refused')
-assert.match(verifyFn, /payment\.status !== 'captured'/, 'only a captured payment starts the hour')
+assert.match(verifyFn, /payment\.status !== 'captured'/, 'only a captured payment grants the permanent unlock')
 assert.match(verifyFn, /\.eq\('payment_status', 'pending'\)/, 'only a pending row can be paid')
 assert.match(verifyFn, /expires_at: JOB_UNLOCK_NEVER_EXPIRES/, 'the server stamps the permanent unlock')
 assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation returns the same unlock')

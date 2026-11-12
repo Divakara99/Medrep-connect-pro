@@ -12,6 +12,12 @@ import { PGlite } from '@electric-sql/pglite'
  *   - the migration backfills earlier vacancies once, and is safe to re-run
  */
 const db = new PGlite()
+const employeeFunction = await readFile(new URL('../supabase/functions/admin-manage-employees/index.ts', import.meta.url), 'utf8')
+const employeeAdmin = await readFile(new URL('../src/components/VacancyTeamAdmin.tsx', import.meta.url), 'utf8')
+assert.match(employeeFunction, /MAX_EMPLOYEES = 50/, 'the edge function matches the deployed 50-login limit')
+assert.match(employeeFunction, /rowError\.code === '23514'/, 'the edge function maps the database cap trigger to a user-safe conflict')
+assert.match(employeeAdmin, /const MAX_EMPLOYEES = 50/, 'the admin UI uses the same 50-login cap')
+assert.match(employeeAdmin, /logins\.length < MAX_EMPLOYEES/, 'the admin UI allows additional accounts until the cap is reached')
 const adminId = '33333333-3333-4333-8333-333333333333'
 const teamId = '44444444-4444-4444-8444-444444444444'
 const userId = '11111111-1111-4111-8111-111111111111'
@@ -111,6 +117,9 @@ try {
   const migration = await readFile(new URL('../supabase/vacancy_team.sql', import.meta.url), 'utf8')
   await db.exec(migration)
   await db.exec(migration) // Re-running must not duplicate the backfill or change rules.
+  const employeeLimitMigration = await readFile(new URL('../supabase/vacancy_employee_limit_50.sql', import.meta.url), 'utf8')
+  await db.exec(employeeLimitMigration)
+  await db.exec(employeeLimitMigration) // The production 50-login migration is repeatable too.
   const duplicateMigration = await readFile(new URL('../supabase/vacancy_duplicate_check.sql', import.meta.url), 'utf8')
   await db.exec(duplicateMigration)
   await db.exec(duplicateMigration) // The new RPC and field projections are repeatable.
@@ -255,22 +264,28 @@ try {
   await rejects(db.query(`SELECT public.employee_list_vacancies()`), /vacancy team account/)
   await rejects(db.query(`SELECT public.employee_delete_vacancy($1, $2)`, ['old-live', 'Some reason']), /vacancy team account/)
 
-  // 12. Only one employee login at a time. The database refuses a second one;
-  //     deleting the first makes room for a replacement.
+  // 12. The database enforces the 50-login cap under direct inserts too.
+  //     The 51st is rejected; deleting one slot allows a replacement.
   await db.exec(`RESET ROLE`)
-  const firstEmployee = '55555555-5555-4555-8555-555555555555'
-  const secondEmployee = '66666666-6666-4666-8666-666666666666'
-  await db.query(`INSERT INTO auth.users (id, email) VALUES ($1, 'first@example.org'), ($2, 'second@example.org')`, [firstEmployee, secondEmployee])
-  await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'first@example.org', 'First Employee')`, [firstEmployee])
+  const employeeId = (n) => `70000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+  for (let n = 1; n <= 51; n += 1) {
+    const id = employeeId(n)
+    const email = `employee${n}@example.org`
+    await db.query(`INSERT INTO auth.users (id, email) VALUES ($1, $2)`, [id, email])
+    if (n <= 50) {
+      await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, $2, $3)`, [id, email, `Employee ${n}`])
+    }
+  }
   await rejects(
-    db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'second@example.org', 'Second Employee')`, [secondEmployee]),
-    /vacancy_employees_single_login|duplicate key/,
+    db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, $2, $3)`, [employeeId(51), 'employee51@example.org', 'Employee 51']),
+    /Maximum of 50 vacancy employee logins reached/,
   )
-  await db.query(`DELETE FROM public.vacancy_employees WHERE user_id = $1`, [firstEmployee])
-  await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, 'second@example.org', 'Second Employee')`, [secondEmployee])
-  assert.equal((await db.query(`SELECT count(*)::int AS n FROM public.vacancy_employees`)).rows[0].n, 1, 'exactly one employee login')
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM public.vacancy_employees`)).rows[0].n, 50, 'the team login cap is 50')
+  await db.query(`DELETE FROM public.vacancy_employees WHERE user_id = $1`, [employeeId(1)])
+  await db.query(`INSERT INTO public.vacancy_employees (user_id, email, name) VALUES ($1, $2, $3)`, [employeeId(51), 'employee51@example.org', 'Employee 51'])
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM public.vacancy_employees`)).rows[0].n, 50, 'a deleted slot can be reused')
 
-  console.log('vacancy SQL: role-scoped exact/possible duplicate checks with safe summaries, optional public fields, team post/delete, audit and isolation, MFA gating, single employee login and idempotent migrations passed')
+  console.log('vacancy SQL: role-scoped duplicate checks, team post/delete, audit and isolation, MFA gating, server-enforced 50 employee limit and idempotent migrations passed')
 } finally {
   await db.close()
 }
