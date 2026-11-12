@@ -15,6 +15,7 @@ export function HomeScreen({
   user,
   jobs,
   onOpenJob,
+  onApply,
   onWatchUnlock,
   unlockingJobId,
   unlockStage,
@@ -22,6 +23,7 @@ export function HomeScreen({
   user: User
   jobs: Job[]
   onOpenJob: (j: Job) => void
+  onApply: (j: Job) => void
   onWatchUnlock?: (j: Job) => void
   unlockingJobId?: string | null
   unlockStage?: UnlockStage | null
@@ -241,6 +243,7 @@ export function HomeScreen({
               job={j}
               unlocked={unlocked}
               onClick={() => onOpenJob(j)}
+              onApply={onApply}
               onWatchUnlock={onWatchUnlock}
               unlockStage={unlockingJobId === j.id ? unlockStage : null}
             />

@@ -72,6 +72,7 @@ export function JobCard({
   job,
   unlocked,
   onClick,
+  onApply,
   onWatchUnlock,
   unlockStage = null,
 }: {
@@ -79,6 +80,8 @@ export function JobCard({
   /** Subscription flag ONLY — never set this from a company unlock. */
   unlocked: boolean
   onClick?: () => void
+  /** Start the existing profile-check and application-confirmation flow. */
+  onApply?: (job: Job) => void
   /**
    * Android app, free users: watch a rewarded video to unlock this job's
    * company name. Omitted on the website, for subscribers, and once the
@@ -92,7 +95,14 @@ export function JobCard({
   // time-limited, so the card re-reads the window on a short clock.
   const unlockWindow = useUnlockWindow(job)
   const companyUnlocked = unlocked || unlockWindow.active
-  const showUnlockButton = !unlocked && !unlockWindow.active && Boolean(onWatchUnlock)
+  // Keep the rewarded action in the card's action area only when there is a
+  // company name to reveal. The app supplies this callback only for free users
+  // on Android; subscribers, the website and already-unlocked cards omit it.
+  const showUnlockButton = Boolean(onWatchUnlock && job.company?.trim() && !companyUnlocked)
+  const hasApplyEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((job.managerEmail || '').trim())
+  const applyPhoneDigits = (job.contact || '').replace(/[^\d]/g, '')
+  const hasApplyPhone = applyPhoneDigits.replace(/^0/, '').replace(/^91/, '').length === 10 || applyPhoneDigits.length >= 10
+  const applyLabel = hasApplyEmail ? 'Apply via Email' : hasApplyPhone ? 'Apply via WhatsApp' : 'Apply now'
   const salary = salaryParts(job.salary)
 
   const status = unlocked
@@ -122,11 +132,11 @@ export function JobCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <h3 className="line-clamp-2 text-[19px] font-bold italic leading-snug tracking-tight text-slate-900 group-hover:text-brand-800">
+                <h3 className="break-words text-lg font-extrabold leading-snug tracking-tight text-slate-900 group-hover:text-brand-800">
                   {job.title}
                 </h3>
                 {companyUnlocked && job.company ? (
-                  <div className="mt-0.5 truncate text-[15px] font-medium italic text-slate-500">{job.company}</div>
+                  <div className="mt-0.5 break-words text-sm font-semibold text-slate-700">{job.company}</div>
                 ) : (
                   <div className="mt-0.5 flex items-center gap-1.5">
                     <span aria-hidden className="select-none text-[15px] font-medium italic text-slate-400 blur-[5px]">Hidden Pharma Pvt Ltd</span>
@@ -138,19 +148,19 @@ export function JobCard({
             </div>
 
             {salary.amount && (
-              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <MoneyIcon className="mr-0.5 h-[18px] w-[18px] shrink-0 translate-y-[3px] text-[#4b57c8]" />
-                <span className="text-[19px] font-bold italic leading-tight text-slate-900">{salary.amount}</span>
-                {salary.unit && <span className="text-[15px] font-medium italic text-slate-500">{salary.unit}</span>}
+              <div className="mt-3 inline-flex max-w-full flex-wrap items-baseline gap-x-1.5 gap-y-0.5 rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-900 ring-1 ring-emerald-200/80">
+                <MoneyIcon className="h-4 w-4 shrink-0 translate-y-[2px] text-emerald-700" />
+                <span className="break-words text-base font-extrabold leading-tight">{salary.amount}</span>
+                {salary.unit && <span className="text-xs font-semibold">{salary.unit}</span>}
               </div>
             )}
 
             <div className="mt-2 flex items-start gap-2">
               <PinIcon className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#4b57c8]" />
-              <div className="min-w-0 text-[18px] font-bold italic leading-snug text-slate-900">
-                <span className="break-words">{job.location}</span>
+              <div className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-700">
+                <span>{job.location}</span>
                 {job.hq && job.hq !== job.location && (
-                  <span className="text-[15px] font-medium text-slate-500"> · HQ {job.hq}</span>
+                  <span className="font-medium text-slate-500"> · HQ {job.hq}</span>
                 )}
               </div>
             </div>
@@ -160,10 +170,10 @@ export function JobCard({
 
       {/* Footer strip: the tags that describe the role, then freshness and share. */}
       <div className="flex flex-wrap items-center gap-2 border-t border-[#eef1f8] px-4 py-3">
-        <span className="rounded-[10px] bg-[#fdf1e5] px-3 py-1 text-sm font-bold italic text-[#a86a15]">
+        <span className="max-w-full rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-100">
           {job.experience || 'Fresher'}
         </span>
-        <span className="rounded-[10px] bg-[#e4f6f1] px-3 py-1 text-sm font-bold italic text-[#0f7d68]">{job.category}</span>
+        <span className="max-w-full rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-800 ring-1 ring-violet-100">{job.category}</span>
         {job.pinned && (
           <span className="rounded-[10px] bg-amber-100 px-3 py-1 text-sm font-bold italic text-amber-900">★ Pinned</span>
         )}
@@ -174,6 +184,23 @@ export function JobCard({
           <ShareJobButton job={job} icon className="" />
         </div>
       </div>
+
+      {onApply && (
+        <div className="border-t border-slate-100 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => onApply(job)}
+            className="flex w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-3 text-center text-sm font-extrabold leading-snug text-white shadow-[0_8px_18px_-12px_rgba(5,150,105,0.9)] transition hover:bg-emerald-600 active:scale-[0.99]"
+          >
+            {hasApplyPhone && !hasApplyEmail ? (
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="currentColor">
+                <path d="M12.04 2A9.93 9.93 0 0 0 3.5 17.03L2 22l5.1-1.47A10 10 0 1 0 12.04 2Zm0 18.2a8.16 8.16 0 0 1-4.16-1.14l-.3-.18-3.02.87.89-2.94-.2-.31a8.2 8.2 0 1 1 6.79 3.7Zm4.5-6.14c-.25-.13-1.48-.73-1.71-.81-.23-.08-.4-.13-.56.13-.17.25-.65.81-.8.98-.15.17-.3.19-.55.06-.25-.13-1.06-.39-2.02-1.24-.75-.66-1.25-1.48-1.4-1.73-.15-.25-.02-.39.11-.52.11-.11.25-.3.38-.44.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.36-.77-1.86-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.09s.9 2.43 1.02 2.6c.13.17 1.77 2.71 4.28 3.8.6.26 1.07.41 1.44.52.61.19 1.17.16 1.61.1.49-.07 1.48-.61 1.69-1.2.21-.59.21-1.09.15-1.2-.06-.11-.23-.17-.48-.29Z" />
+              </svg>
+            ) : <span aria-hidden>{hasApplyEmail ? '✉' : '↗'}</span>}
+            <span className="min-w-0 break-words">{applyLabel}</span>
+          </button>
+        </div>
+      )}
 
       {unlocked && (
         <div className="border-t border-[#eef1f8] px-4 py-3 text-sm text-slate-700">
