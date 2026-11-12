@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button, Card, Badge } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
@@ -10,7 +10,8 @@ import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
-import { type Profile } from '../data/profile'
+import { getProfile, refreshProfile, saveProfile, type Profile } from '../data/profile'
+import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
 import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
 import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
 import { loadMyUnlocks } from '../data/companyUnlocks'
@@ -35,6 +36,11 @@ export function AccountScreen({
 }) {
   const unlocked = isSubscribed(user)
   const editorRef = useRef<ProfileEditorHandle>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const [photoPath, setPhotoPath] = useState(() => getProfile(user.email).photoPath ?? '')
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
   // "My applications" opens as its own page over this one, so the phone's back
   // button (and its Back button) return here.
   const [applicationsOpen, setApplicationsOpen] = useState(false)
@@ -60,6 +66,59 @@ export function AccountScreen({
   const [pingBusy, setPingBusy] = useState(false)
   const [unlockNote, setUnlockNote] = useState('')
   const [unlockBusy, setUnlockBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    refreshProfile(user.email).then((profile) => {
+      if (alive) setPhotoPath(profile.photoPath ?? '')
+    })
+    return () => { alive = false }
+  }, [user.email])
+
+  useEffect(() => {
+    let alive = true
+    if (!photoPath) {
+      setPhotoUrl(null)
+      return () => { alive = false }
+    }
+    profilePhotoUrl(photoPath).then((url) => {
+      if (alive) setPhotoUrl(url)
+    })
+    return () => { alive = false }
+  }, [photoPath])
+
+  async function changePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file || photoBusy) return
+    setPhotoBusy(true)
+    setPhotoError(null)
+    const oldPath = photoPath
+    try {
+      const uploaded = await uploadProfilePhoto(file)
+      if (!uploaded.ok) {
+        setPhotoError(uploaded.error)
+        return
+      }
+      setPhotoUrl(uploaded.url)
+      try {
+        // Update only the image field; never commit unrelated unsaved profile edits.
+        const remote = await refreshProfile(user.email)
+        const saved = await saveProfile({ ...remote, photoPath: uploaded.path })
+        setPhotoPath(saved.photoPath ?? '')
+        onProfileSaved(saved)
+        if (oldPath && oldPath !== uploaded.path) await deleteProfilePhoto(oldPath)
+      } catch (error) {
+        await deleteProfilePhoto(uploaded.path)
+        setPhotoUrl(oldPath ? await profilePhotoUrl(oldPath) : null)
+        setPhotoError(error instanceof Error ? error.message : 'The profile picture could not be saved.')
+      }
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'The profile picture could not be uploaded.')
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
 
   /** The card as plain text, so it can be pasted instead of photographed. */
   const diagnosticsText = adsState ? adsDiagnosticsText() : ''
@@ -93,18 +152,42 @@ export function AccountScreen({
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-24 space-y-4">
       <Card className="hairline bg-gradient-to-br from-white to-brand-50/60 p-4">
-        <div className="min-w-0">
-          <div className="truncate text-lg font-extrabold tracking-tight text-slate-900">{user.name}</div>
-          <div className="text-xs text-slate-500 truncate">{user.email}</div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <Badge color="brand">Job Seeker</Badge>
-            {unlocked ? (
-              <Badge color="green">✓ Subscribed</Badge>
-            ) : (
-              <Badge color="amber">Free plan</Badge>
-            )}
+        <div className="flex items-center gap-3">
+          <div className="relative h-14 w-14 shrink-0">
+            <button
+              type="button"
+              onClick={() => photoInput.current?.click()}
+              disabled={photoBusy}
+              aria-label={photoBusy ? 'Uploading profile picture' : 'Change profile picture'}
+              title="Change profile picture"
+              className="relative block h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-white shadow disabled:opacity-60"
+            >
+              {photoUrl ? (
+                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="grid h-full w-full place-items-center bg-gradient-to-br from-brand-500 to-indigo-700 text-xl font-extrabold text-white">
+                  {user.name.trim().slice(0, 1).toUpperCase() || 'U'}
+                </span>
+              )}
+              <span aria-hidden="true" className="absolute bottom-0 right-0 grid h-5 w-5 place-items-center rounded-tl-lg bg-white/95 text-[11px] text-brand-700">✎</span>
+            </button>
+            <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={changePhoto} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-lg font-extrabold tracking-tight text-slate-900">{user.name}</div>
+            <div className="text-xs text-slate-500 truncate">{user.email}</div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <Badge color="brand">Job Seeker</Badge>
+              {unlocked ? (
+                <Badge color="green">✓ Subscribed</Badge>
+              ) : (
+                <Badge color="amber">Free plan</Badge>
+              )}
+            </div>
           </div>
         </div>
+        {photoBusy && <p className="mt-2 text-xs font-semibold text-brand-700" role="status">Updating picture…</p>}
+        {photoError && <p className="mt-2 text-xs font-semibold text-red-700" role="alert">{photoError}</p>}
       </Card>
 
       <Card className="p-4">

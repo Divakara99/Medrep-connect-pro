@@ -1,6 +1,5 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ChangeEvent } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Button, Input, Select, Textarea, Card, Badge } from './ui'
-import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
 import { getProfile, newEducation, newExperience, refreshProfile, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
@@ -29,10 +28,6 @@ export const ProfileEditor = forwardRef<
   })
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [photoBusy, setPhotoBusy] = useState(false)
-  const [photoError, setPhotoError] = useState<string | null>(null)
-  const photoInput = useRef<HTMLInputElement>(null)
   // Never overwrite fields the user has already started typing into.
   const dirty = useRef(false)
 
@@ -47,59 +42,12 @@ export const ProfileEditor = forwardRef<
     return () => { alive = false }
   }, [email, phone])
 
-  useEffect(() => {
-    let alive = true
-    if (!p.photoPath) return () => { alive = false }
-    profilePhotoUrl(p.photoPath).then((url) => {
-      if (alive) setPhotoUrl(url)
-    })
-    return () => { alive = false }
-  }, [p.photoPath])
 
   function update(patch: Partial<Profile>) {
     dirty.current = true
     setP((prev) => ({ ...prev, ...patch }))
   }
 
-  async function changePhoto(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0]
-    event.currentTarget.value = ''
-    if (!file || photoBusy) return
-    setPhotoBusy(true)
-    setPhotoError(null)
-    setSaveError(null)
-    const oldPath = p.photoPath ?? ''
-    let uploaded
-    try {
-      uploaded = await uploadProfilePhoto(file)
-    } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : 'The profile photo could not be uploaded.')
-      setPhotoBusy(false)
-      return
-    }
-    if (!uploaded.ok) {
-      setPhotoError(uploaded.error)
-      setPhotoBusy(false)
-      return
-    }
-    setPhotoUrl(uploaded.url)
-    try {
-      // Save only the photo field against the server copy, so other unsaved
-      // form edits are not unexpectedly committed by choosing an image.
-      const remote = await refreshProfile(email)
-      const saved = await saveProfile({ ...remote, photoPath: uploaded.path })
-      setP((previous) => ({ ...previous, photoPath: saved.photoPath }))
-      if (oldPath && oldPath !== uploaded.path) await deleteProfilePhoto(oldPath)
-      setSavedMsg('Profile photo updated.')
-      window.setTimeout(() => setSavedMsg(null), 2500)
-    } catch (error) {
-      await deleteProfilePhoto(uploaded.path)
-      setPhotoUrl(oldPath ? await profilePhotoUrl(oldPath) : null)
-      setPhotoError(error instanceof Error ? error.message : 'The profile photo could not be saved.')
-    } finally {
-      setPhotoBusy(false)
-    }
-  }
 
   function addEducation() {
     update({ education: [...p.education, newEducation()] })
@@ -152,37 +100,6 @@ export const ProfileEditor = forwardRef<
 
   return (
     <div className="space-y-4 pb-4">
-      <Card className="p-4 bg-gradient-to-br from-brand-50 to-indigo-50 border-brand-200">
-        <div className="flex items-center gap-3">
-          <div className="relative h-16 w-16 shrink-0">
-            {photoUrl ? (
-              <img src={photoUrl} alt="Your profile" className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white shadow" />
-            ) : (
-              <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-700 text-2xl font-extrabold text-white ring-2 ring-white shadow">
-                {p.email.slice(0, 1).toUpperCase() || 'U'}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => photoInput.current?.click()}
-              disabled={photoBusy}
-              aria-label={photoBusy ? 'Uploading profile photo' : 'Upload or change profile photo'}
-              title="Upload or change profile photo"
-              className="absolute -bottom-1.5 -right-1.5 grid h-7 w-7 place-items-center rounded-full bg-white text-brand-700 shadow ring-1 ring-brand-200 disabled:opacity-60"
-            >
-              <PencilIcon />
-            </button>
-            <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={changePhoto} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-slate-900">Profile photo</div>
-            <div className="text-xs text-slate-600">Shown on your Account</div>
-            <div className="mt-1 text-[11px] text-slate-500">JPG, PNG or WEBP · up to 5 MB</div>
-          </div>
-        </div>
-        {photoBusy && <p className="mt-2 text-xs font-semibold text-brand-700" role="status">Uploading profile photo…</p>}
-        {photoError && <p className="mt-2 text-xs font-semibold text-red-700" role="alert">{photoError}</p>}
-      </Card>
 
       <Card className={`p-4 space-y-2 ${completionIssues.length === 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
         <div className="flex items-center justify-between gap-2">
