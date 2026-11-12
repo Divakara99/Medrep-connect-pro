@@ -59,15 +59,22 @@ assert.match(login, /min-h-full/, 'the sign-in shell fills the current viewport,
 assert.doesNotMatch(login, /min-h-\[100dvh\]/, 'a dvh floor leaves a blank page behind the keyboard')
 assert.doesNotMatch(login, /overflow-y-auto/, 'one scroll container only — the document, not a nested div')
 
-// 5. The welcome stays two lines, and the build number sits at the bottom of
-//    the page instead of under the tagline, where it pushed the sign-in card
-//    down by a row on a phone.
+// 5. The tagline stays on one line without crossing the phone width, and the
+//    build number sits at the bottom of the page instead of under the welcome.
 const creator = await readFile(new URL('../src/data/creator.ts', import.meta.url), 'utf8')
 const tagline = creator.match(/tagline: "([^"]+)"/)?.[1] ?? ''
 assert.ok(tagline.length > 0, 'the sign-in tagline exists')
 assert.ok(tagline.length <= 70, `the tagline fits two lines on a phone (it is ${tagline.length} characters)`)
 assert.doesNotMatch(tagline, /, then /, 'the tagline is two clauses, not a list')
-assert.match(login, /text-balance/, 'the tagline is balanced across its two lines')
+assert.match(login, /whitespace-nowrap text-\[11px\]/, 'the concise tagline stays on one visible line')
+assert.match(login, /India&apos;s pharma &amp; multi-industry jobs/, 'the complete concise tagline is rendered')
+assert.match(login, /type=\{showPassword \? 'text' : 'password'\}/, 'password visibility can be toggled')
+assert.match(login, /aria-label=\{showPassword \? 'Hide password' : 'Show password'\}/, 'the visibility symbol has an accessible name')
+assert.match(login, /PasswordVisibilityIcon visible=\{showPassword\}/, 'the eye symbol reflects the current visibility state')
+assert.match(login, /grid w-full grid-cols-2[\s\S]*min-h-10[\s\S]*text-xs font-extrabold/, 'the two auxiliary login buttons stay compact with readable bold text')
+assert.match(login, /bg-white\/95[\s\S]*text-\[#073b7d\][\s\S]*placeholder:text-slate-500/, 'login fields use a high-contrast surface for entered and placeholder text')
+assert.match(login, /id="email"[\s\S]*text-\[#073b7d\]/, 'entered email text has strong contrast')
+assert.match(login, /id="password"[\s\S]*text-\[#073b7d\]/, 'entered password text has strong contrast')
 
 const header = login.slice(login.indexOf('<header'), login.indexOf('</header>'))
 assert.doesNotMatch(header, /APP_VERSION_LABEL/, 'the version chip is no longer part of the welcome')
@@ -77,4 +84,4 @@ assert.match(footer, /Version \{APP_VERSION_LABEL\}/, 'the version is stated at 
 const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
 assert.match(css, /scroll-margin-block:\s*88px/, 'focused fields keep clear of the keyboard')
 
-console.log('keyboard layout: adjustResize, resizes-content viewport, top-aligned sign-in, two-line tagline and the version at the foot — passed')
+console.log('keyboard layout: adjustResize, resizes-content viewport, top-aligned sign-in, one-line tagline and the version at the foot — passed')

@@ -5,7 +5,7 @@ import { JobCard } from '../components/JobCard'
 import { CATEGORIES, filterJobs, sortedJobs, type Job, type JobCategory } from '../data/jobs'
 import { isSubscribed, type User } from '../data/auth'
 
-export function PriorityScreen({ user, jobs, onOpenJob, onWatchUnlock, unlockingJobId, unlockStage }: { user: User; jobs: Job[]; onOpenJob: (j: Job) => void; onWatchUnlock?: (j: Job) => void; unlockingJobId?: string | null; unlockStage?: UnlockStage | null }) {
+export function PriorityScreen({ user, jobs, onOpenJob, onApply, onWatchUnlock, unlockingJobId, unlockStage }: { user: User; jobs: Job[]; onOpenJob: (j: Job) => void; onApply: (j: Job) => void; onWatchUnlock?: (j: Job) => void; unlockingJobId?: string | null; unlockStage?: UnlockStage | null }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<JobCategory>('All')
   const unlocked = isSubscribed(user)
@@ -73,7 +73,7 @@ export function PriorityScreen({ user, jobs, onOpenJob, onWatchUnlock, unlocking
               <EmptyState icon="📭" title="No pinned jobs yet" subtitle="Urgent roles appear here the moment the admin pins them." />
             </Card>
           ) : (
-            pinned.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockStage={unlockingJobId === j.id ? unlockStage : null} />)
+            pinned.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onApply={onApply} onWatchUnlock={onWatchUnlock} unlockStage={unlockingJobId === j.id ? unlockStage : null} />)
           )}
         </div>
       </div>
@@ -109,7 +109,7 @@ export function PriorityScreen({ user, jobs, onOpenJob, onWatchUnlock, unlocking
             <div className="flex justify-center"><Button variant="secondary" onClick={clearFilters}>Clear</Button></div>
           </Card>
         ) : (
-          rest.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onWatchUnlock={onWatchUnlock} unlockStage={unlockingJobId === j.id ? unlockStage : null} />)
+          rest.map((j) => <JobCard key={j.id} job={j} unlocked={unlocked} onClick={() => onOpenJob(j)} onApply={onApply} onWatchUnlock={onWatchUnlock} unlockStage={unlockingJobId === j.id ? unlockStage : null} />)
         )}
       </div>
     </div>

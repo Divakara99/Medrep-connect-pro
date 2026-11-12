@@ -671,13 +671,14 @@ export default function App() {
           user={user}
           jobs={jobs}
           onOpenJob={openJob}
+          onApply={requestApplication}
           onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined}
           unlockingJobId={unlockingJobId}
           unlockStage={unlockStage}
         />
       )}
       {tab === 'priority' && user && (
-        <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined} unlockingJobId={unlockingJobId} unlockStage={unlockStage} />
+        <PriorityScreen user={user} jobs={jobs} onOpenJob={openJob} onApply={requestApplication} onWatchUnlock={isAndroidApp() && !unlocked ? watchToUnlockCompany : undefined} unlockingJobId={unlockingJobId} unlockStage={unlockStage} />
       )}
       {tab === 'plans' && user && (
         <PlansScreen user={user} onSubscribed={(u) => { setUser(u); showToast('Subscription active!') }} />

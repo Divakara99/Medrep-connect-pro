@@ -190,11 +190,12 @@ select {
   }
 }
 
-/* Frosted bar for the top of the app and the menus. */
+/* Opaque top bars: keep the home-page app name on a solid surface while scrolling. */
 .glass-bar {
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: saturate(160%) blur(14px);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(226, 232, 240, 0.95);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* The hero block on a job-seeker screen: deep brand gradient with two soft
@@ -238,3 +239,12 @@ select {
 .slim-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .slim-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
 .slim-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+
+/* Job-seeker sign-in: blue gradient and clean underlined fields, inspired by
+   the supplied customer-login reference. The screen remains opaque and legible. */
+.auth-login-screen {
+  background:
+    radial-gradient(105% 75% at 5% 4%, rgba(191, 219, 254, 0.92) 0%, rgba(147, 197, 253, 0.55) 38%, transparent 72%),
+    radial-gradient(80% 70% at 100% 100%, rgba(3, 37, 99, 0.9) 0%, rgba(3, 37, 99, 0) 68%),
+    linear-gradient(135deg, #65b5f3 0%, #286fba 48%, #0a3474 100%);
+}
