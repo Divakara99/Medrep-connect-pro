@@ -8,9 +8,8 @@ import { salaryParts } from '../src/data/salaryText.ts'
  *   * one typeface across the project — geometric, with a real italic —
  *     bundled with the app, not fetched from a font CDN;
  *   * one type scale, one step larger than the browser default;
- *   * the job card follows the reference layout: employer tile, bold-italic
- *     title, italic secondary lines, salary and location on their own lines
- *     with line icons, a hairline divider and a strip of tags below it;
+ *   * the job card follows the compact reference layout: full-width title,
+ *     company and location lines, salary, compact metadata chips and actions;
  *   * the long description does not come back to the card — it stays on its
  *     own page.
  */
@@ -53,9 +52,9 @@ assert.deepEqual(salaryParts(undefined), { amount: '', unit: '' })
 // 4. The card ----------------------------------------------------------------
 const card = await read('src/components/JobCard.tsx')
 assert.match(card, /salaryParts\(job\.salary\)/, 'the card splits the salary period')
-assert.match(card, /break-words text-lg font-extrabold leading-snug tracking-tight/, 'the job title is bold, clear and wraps fully')
-assert.match(card, /break-words text-sm font-semibold text-slate-700/, 'the full company name stays readable')
-assert.match(card, /min-w-0 break-words text-sm font-semibold leading-snug/, 'location text wraps inside the card')
+assert.match(card, /text-base font-extrabold !leading-tight tracking-tight/, 'the full-width job title is compact and wraps clearly')
+assert.match(card, /text-sm font-semibold !leading-tight text-slate-700/, 'the company name sits close below the title')
+assert.match(card, /break-words text-sm font-medium !leading-snug text-slate-700/, 'location text wraps with tighter line spacing')
 assert.match(card, /rounded-full bg-emerald-50/, 'salary uses the soft green reference chip')
 assert.match(card, /rounded-full bg-sky-50/, 'experience sits in a compact sky chip')
 assert.match(card, /rounded-full bg-violet-50/, 'category sits in a compact violet chip')
@@ -68,9 +67,9 @@ assert.match(card, /onApply && showUnlockButton \? 'grid grid-cols-2 gap-2'/, 'A
 assert.match(card, /whitespace-nowrap rounded-xl/, 'compact action labels stay on a single line')
 assert.match(card, /'Apply · WA'/, 'the WhatsApp action label stays compact in its column')
 assert.match(card, /'Watch video'/, 'the rewarded action has a short label for the shared row')
-assert.match(card, /border-t border-\[#eef1f8\] px-4 py-3/, 'a hairline divider closes the card body')
-assert.match(card, /rounded-\[26px\] border-\[#e9edf6\]/, 'the card is a soft rounded sheet')
-assert.match(card, /<BuildingIcon/, 'the employer tile holds a line icon')
+assert.match(card, /border-t border-\[#eef1f8\] px-3\.5 py-2\.5/, 'the compact metadata strip closes the card body')
+assert.match(card, /rounded-\[22px\] border-\[#e4e8f0\]/, 'the card is a soft rounded sheet')
+assert.match(card, /<LockIcon/, 'locked company details are identified without a large tile')
 assert.match(card, /<MoneyIcon/, 'the salary row has its own icon')
 assert.match(card, /<PinIcon/, 'and so does the city')
 assert.match(card, /<ChevronIcon/, 'the card offers a clear way in')

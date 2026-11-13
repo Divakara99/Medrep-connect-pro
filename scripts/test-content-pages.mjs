@@ -62,7 +62,7 @@ assert.match(account, /if \(infoPage === 'help'\) return <HelpPage onClose=\{\(\
   "Account's Help button opens the page")
 assert.match(account, /About MedRep Connect Pro/, 'the About button has a label')
 assert.match(account, /Help &amp; how it works/, 'the Help button has a label')
-assert.match(home, /Read more about the app/, 'the founder card links to the about page')
+assert.match(home, /onClick=\{\(\) => setAboutOpen\(true\)\}/, 'the compact founder credit links to the about page')
 assert.match(home, /if \(aboutOpen\) return <AboutPage onClose=\{\(\) => setAboutOpen\(false\)\} \/>/,
   "Home's read-more opens the page")
 

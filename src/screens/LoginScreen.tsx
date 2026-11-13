@@ -239,16 +239,16 @@ export function LoginScreen({ onAuthed, recoveryMode = false }: { onAuthed: () =
           </form>
         </section>
 
-        <div className="mt-4 grid w-full grid-cols-2 items-stretch gap-2">
-          <HowToUseVideoButton className="min-h-10 min-w-0 px-2 py-1.5 text-xs font-extrabold leading-tight !bg-white !text-[#073b7d] !ring-white" />
-          <a href="/?portal=vacancy" className="inline-flex min-h-10 min-w-0 items-center justify-center rounded-2xl border-2 border-white bg-white px-2 py-1.5 text-center text-xs font-extrabold leading-tight text-[#073b7d] shadow-sm transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-700">
+        <div className="mt-3 grid w-full grid-cols-2 items-stretch gap-1.5">
+          <HowToUseVideoButton className="min-h-9 min-w-0 gap-1.5 rounded-xl px-1.5 py-1 text-[11px] font-extrabold !leading-tight !bg-white !text-[#073b7d] !ring-white [&_svg]:h-4 [&_svg]:w-4" />
+          <a href="/?portal=vacancy" className="inline-flex min-h-9 min-w-0 items-center justify-center rounded-xl border-2 border-white bg-white px-1.5 py-1 text-center text-[11px] font-extrabold leading-tight text-[#073b7d] shadow-sm transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-700">
             Employee login
           </a>
         </div>
-        <div className="mt-3"><CreatorCredit variant="dark" size="sm" /></div>
-        <footer className="mt-5 w-full text-center">
+        <div className="mt-2"><CreatorCredit variant="dark" size="sm" /></div>
+        <footer className="mt-3 w-full text-center">
           <p className="text-xs font-medium text-white/85">Use Forgot password if you cannot sign in. Never share your password or payment PIN.</p>
-          <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wider text-white/70">Version {APP_VERSION_LABEL}</p>
+          <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/70">Version {APP_VERSION_LABEL}</p>
         </footer>
         </div>
       </div>
