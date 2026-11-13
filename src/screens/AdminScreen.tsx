@@ -102,10 +102,11 @@ function useCurrentTime() {
 
 export function AdminScreen({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState<AdminTab>('dashboard')
+  const [tabHistory, setTabHistory] = useState<AdminTab[]>([])
   const [adminMenuOpen, setAdminMenuOpen] = useState(false)
-  // Leaving is the last step, never the first one: the back arrow walks back
-  // through the panel (section → dashboard) and only the dashboard offers to
-  // close the panel. Signing out also asks first.
+  // Leaving is the last step, never the first one: back follows the admin page
+  // history, and only the root dashboard offers to close the panel. Signing out
+  // also asks first.
   const [exitOpen, setExitOpen] = useState(false)
   const [usersFilter, setUsersFilter] = useState<UserFilter>('all')
   /**
@@ -122,19 +123,23 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
     setNotice({ text, tone, action })
   }, [])
 
-  /**
-   * One back step inside the admin panel: close the menu, otherwise leave the
-   * open section for the dashboard. Only the dashboard itself asks to exit.
-   */
+  /** Close overlays first, then follow the admin page history, then offer exit. */
   const stepBack = useCallback(() => {
     if (adminMenuOpen) { setAdminMenuOpen(false); return }
+    if (tabHistory.length > 0) {
+      const previous = tabHistory[tabHistory.length - 1]
+      setTabHistory((history) => history.slice(0, -1))
+      setTab(previous)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     if (tab !== 'dashboard') {
       setTab('dashboard')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     setExitOpen(true)
-  }, [adminMenuOpen, tab])
+  }, [adminMenuOpen, tab, tabHistory])
   // The phone's back button follows the same steps instead of signing out.
   useBackHandler(true, stepBack)
 
@@ -181,6 +186,7 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   function navigate(target: AdminTab, filter?: UserFilter) {
     if (target === 'users' && filter) setUsersFilter(filter)
     setAdminMenuOpen(false)
+    if (target !== tab) setTabHistory((history) => [...history, tab])
     setTab(target)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -189,7 +195,20 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
     <div className="min-h-[100dvh] bg-slate-50">
       {/* Header */}
       <header className="glass-bar sticky top-0 z-30 border-b border-white/60">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-2 sm:px-4">
+          {tab !== 'dashboard' && (
+            <button
+              type="button"
+              onClick={stepBack}
+              aria-label="Back to previous page"
+              title="Back to previous page"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-200 active:scale-95"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+          )}
           <div className="min-w-0 flex-1">
             <Wordmark size="text-sm" />
           </div>
@@ -1300,62 +1319,69 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
       ) : shown.length === 0 ? (
         <Card className="p-5 text-sm text-slate-700">No payments in this list.</Card>
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1040px]">
-              <thead className="bg-slate-100 text-left text-slate-800">
-                <tr>
-                  <th className="px-3 py-2 font-bold">Date</th>
-                  <th className="px-3 py-2 font-bold">Customer</th>
-                  <th className="px-3 py-2 font-bold">Plan</th>
-                  <th className="px-3 py-2 font-bold text-right">Amount</th>
-                  <th className="px-3 py-2 font-bold">Payment type</th>
-                  <th className="px-3 py-2 font-bold">Status</th>
-                  <th className="px-3 py-2 font-bold">Payment ID</th>
-                  <th className="px-3 py-2 font-bold">UTR</th>
-                  <th className="px-3 py-2 font-bold">Valid until</th>
-                  <th className="px-3 py-2 font-bold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((payment) => {
-                  const account = getUsers().find((candidate) => candidate.id === payment.userId)
-                  const busy = reviewing === payment.id
-                  return (
-                    <tr key={payment.id} className="border-t border-slate-200 align-top">
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-800">{formatDateTime(payment.createdAt)}</td>
-                      <td className="px-3 py-2">
-                        <div className="font-semibold text-slate-900">{account?.name ?? '—'}</div>
-                        <div className="text-xs text-slate-600">{account?.email ?? payment.userId}</div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="text-slate-900">{payment.planTitle ?? payment.planId}</div>
-                        <div className="text-xs text-slate-600">{payment.planDays ? `${payment.planDays} days` : '—'}</div>
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">₹{payment.amount.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-2 text-slate-800 whitespace-nowrap">{paymentTypeLabel(payment.paymentMethod)}</td>
-                      <td className="px-3 py-2"><Badge color={paymentStatusTone(payment)}>{paymentStatusLabel(payment)}</Badge></td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-800 break-all">{payment.gatewayPaymentId ?? payment.txRef ?? '—'}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-800">{payment.utr || '—'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-800">{payment.expiresAt ? formatDateTime(payment.expiresAt) : 'Not active'}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2 whitespace-nowrap">
-                          <Button variant="secondary" onClick={() => setDetails(payment)}>Details</Button>
-                          {payment.manualReview && (
-                            <>
-                              <Button variant="secondary" disabled={busy} onClick={() => setDecision({ payment, approve: false })}>Reject</Button>
-                              <Button disabled={busy} onClick={() => setDecision({ payment, approve: true })}>Verify</Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <div className="space-y-1.5">
+          {shown.map((payment) => {
+            const account = getUsers().find((candidate) => candidate.id === payment.userId)
+            const busy = reviewing === payment.id
+            const customer = account?.name ?? 'Unknown customer'
+            const planName = payment.planTitle ?? payment.planId
+            const compactStatus = payment.manualReview ? 'Review' : paymentStatusLabel(payment)
+            const reference = payment.gatewayPaymentId ?? payment.txRef ?? payment.utr ?? 'No payment reference'
+            return (
+              <article
+                key={payment.id}
+                title={`${formatDateTime(payment.createdAt)} · ${account?.email ?? payment.userId} · ${paymentTypeLabel(payment.paymentMethod)} · ${reference}${payment.expiresAt ? ` · Valid until ${formatDateTime(payment.expiresAt)}` : ''}`}
+                className="flex min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+              >
+                <div className="min-w-0 flex-1 truncate text-xs text-slate-700">
+                  <span className="font-bold text-slate-900">{customer}</span>
+                  <span className="px-1 text-slate-400">·</span>
+                  <span>{planName}</span>
+                  <span className="sr-only"> · {account?.email ?? payment.userId} · {formatDateTime(payment.createdAt)} · {paymentTypeLabel(payment.paymentMethod)} · {reference}</span>
+                </div>
+                <span className="shrink-0 text-[11px] font-extrabold text-slate-900">₹{payment.amount.toLocaleString('en-IN')}</span>
+                <div className="max-w-[72px] shrink-0 truncate">
+                  <Badge color={paymentStatusTone(payment)}>{compactStatus}</Badge>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`Payment details for ${customer}`}
+                    title="Details"
+                    onClick={() => setDetails(payment)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-200 sm:w-auto sm:px-2"
+                  >
+                    <span aria-hidden="true" className="sm:hidden">i</span><span className="hidden sm:inline">Details</span>
+                  </button>
+                  {payment.manualReview && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Reject payment for ${customer}`}
+                        title="Reject payment"
+                        disabled={busy}
+                        onClick={() => setDecision({ payment, approve: false })}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-xs font-bold text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100 sm:w-auto sm:px-2 sm:text-[10px]"
+                      >
+                        <span aria-hidden="true" className="sm:hidden">×</span><span className="hidden sm:inline">Reject</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Verify payment for ${customer}`}
+                        title="Verify payment"
+                        disabled={busy}
+                        onClick={() => setDecision({ payment, approve: true })}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 text-xs font-bold text-white ring-1 ring-brand-700 hover:bg-brand-700 sm:w-auto sm:px-2 sm:text-[10px]"
+                      >
+                        <span aria-hidden="true" className="sm:hidden">✓</span><span className="hidden sm:inline">Verify</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </article>
+            )
+          })}
+        </div>
       )}
 
       <Modal open={!!details} onClose={() => setDetails(null)} title="Payment details">
@@ -1904,92 +1930,101 @@ function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; on
   const openTickets = tickets.filter((t) => t.status !== 'resolved').length
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900">📊 Admin Monitor</h2>
-        <div className="text-xs text-slate-500 mt-0.5">Tap any card to open its full page.</div>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Total users" value={users.length} color="brand" icon="👥" hint="Open users" onClick={() => onNavigate('users', 'all')} />
-        <StatCard label="Active subscribers" value={active.length} color="green" icon="💎" hint="Open subscribers" onClick={() => onNavigate('users', 'active')} />
-        <StatCard label="Free users" value={free.length} color="amber" icon="🆓" hint="Open free users" onClick={() => onNavigate('users', 'free')} />
-        <StatCard label="Live jobs" value={jobs.length} color="purple" icon="💼" hint="Open vacancies" onClick={() => onNavigate('vacancies')} />
-        <StatCard label="New today" value={newToday} color="brand" icon="✨" hint="Open users" onClick={() => onNavigate('users', 'all')} />
-        <StatCard label="Open requests" value={openTickets} color="red" icon="🎫" hint="Open requests" onClick={() => onNavigate('tickets')} />
-        <StatCard label="Applications" value={queue.length} color="purple" icon="✉️" hint="Open applications" onClick={() => onNavigate('applications')} />
-        <StatCard label="Revenue" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Open payments" onClick={() => onNavigate('payments')} />
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Platform metrics</span>
+        <span className="text-[11px] text-slate-400">Tap card to open</span>
       </div>
 
-      <Card className="p-4">
-        <div className="font-bold text-slate-900 mb-2">Subscriptions expiring in 7 days ({expiringSoon.length})</div>
-        {expiringSoon.length === 0 ? (
-          <div className="text-sm text-slate-500">No expiring subscriptions this week.</div>
-        ) : (
-          <ul className="text-sm text-slate-700 space-y-1">
-            {expiringSoon.map((u) => (
-              <li key={u.id} className="flex items-center justify-between">
-                <span>{u.name} · {u.email}</span>
-                <Badge color="amber">{new Date(u.subscribedUntil!).toLocaleDateString()}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button
-          type="button"
-          onClick={() => onNavigate('users', 'active')}
-          className="text-xs font-semibold text-brand-600 mt-2 hover:underline touch-manipulation"
-        >
-          View all subscribers →
-        </button>
+      <div className="grid grid-cols-2 gap-2.5">
+        <StatCard compactLabel="TOTAL USERS" value={users.length} color="brand" icon="👥" hint="Open users" onClick={() => onNavigate('users', 'all')} />
+        <StatCard compactLabel="ACTIVE SUBS" value={active.length} color="green" icon="💎" hint="Open subscribers" onClick={() => onNavigate('users', 'active')} />
+        <StatCard compactLabel="FREE USERS" value={free.length} color="amber" icon="🆓" hint="Open free users" onClick={() => onNavigate('users', 'free')} />
+        <StatCard compactLabel="LIVE JOBS" value={jobs.length} color="purple" icon="💼" hint="Open vacancies" onClick={() => onNavigate('vacancies')} />
+        <StatCard compactLabel="NEW TODAY" value={newToday} color="brand" icon="✨" hint="Open users" onClick={() => onNavigate('users', 'all')} />
+        <StatCard compactLabel="OPEN REQUESTS" value={openTickets} color="red" icon="🎫" hint="Open requests" onClick={() => onNavigate('tickets')} />
+        <StatCard compactLabel="APPLICATIONS" value={queue.length} color="purple" icon="✉️" hint="Open applications" onClick={() => onNavigate('applications')} />
+        <StatCard compactLabel="REVENUE" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Open payments" onClick={() => onNavigate('payments')} />
+      </div>
+
+      <Card className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm text-slate-600">◷</div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h3 className="truncate text-xs font-bold text-slate-900">Subscriptions expiring in 7 days</h3>
+                <Badge color="amber">{expiringSoon.length}</Badge>
+              </div>
+              <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                {expiringSoon.length === 0 ? 'No expiring subscriptions this week' : `${expiringSoon.length} subscriber${expiringSoon.length === 1 ? '' : 's'} need attention`}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('users', 'active')}
+            className="shrink-0 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[11px] font-semibold text-brand-700 transition hover:bg-brand-100 active:scale-95 touch-manipulation"
+          >
+            View →
+          </button>
+        </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="font-bold text-slate-900 mb-2">Recent payments</div>
+      <Card className="p-3 sm:p-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900">Recent payments</div>
+            <div className="text-[10px] text-slate-500">Latest {Math.min(payments.length, 6)} of {payments.length}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('payments')}
+            className="shrink-0 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[11px] font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-100 touch-manipulation"
+          >
+            All payments →
+          </button>
+        </div>
         {payments.length === 0 ? (
-          <div className="text-sm text-slate-500">No transactions yet.</div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">No transactions yet.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-slate-500 text-left">
-                <tr>
-                  <th className="py-1 pr-2">Time</th>
-                  <th className="py-1 pr-2">User</th>
-                  <th className="py-1 pr-2">Plan</th>
-                  <th className="py-1 pr-2">Amount</th>
-                  <th className="py-1 pr-2">TXN</th>
-                  <th className="py-1 pr-2">Expiry</th>
-                  <th className="py-1 pr-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.slice(0, 10).map((p) => {
-                  const u = users.find((x) => x.id === p.userId)
-                  // The payment row carries its own plan title; the catalog is
-                  // only a fallback for very old records.
-                  const plan = getAllPlansIncludingRetired().find((pl) => pl.id === p.planId)
-                  return (
-                    <tr key={p.id} className="border-t border-slate-100">
-                      <td className="py-1 pr-2 text-xs text-slate-500">{new Date(p.createdAt).toLocaleString()}</td>
-                      <td className="py-1 pr-2 font-medium text-slate-900">{u?.name ?? p.userId}</td>
-                      <td className="py-1 pr-2 text-slate-700">{p.planTitle ?? plan?.title ?? p.planId}</td>
-                      <td className="py-1 pr-2 font-bold text-slate-900">₹{p.amount}</td>
-                      <td className="py-1 pr-2 font-mono text-xs text-slate-500">{p.txRef ?? '—'}{p.utr ? ` · UTR ${p.utr}` : ''}</td>
-                      <td className="py-1 pr-2 text-xs">{p.expiresAt ? new Date(p.expiresAt).toLocaleDateString() : '—'}</td>
-                      <td className="py-1 pr-2"><Badge color={p.status === 'success' ? 'green' : p.status === 'pending' ? 'amber' : 'red'}>{p.status}</Badge></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-1.5">
+            {payments.slice(0, 6).map((p) => {
+              const user = users.find((candidate) => candidate.id === p.userId)
+              // The payment row carries its own plan title; the catalog is
+              // only a fallback for very old records.
+              const plan = getAllPlansIncludingRetired().find((candidate) => candidate.id === p.planId)
+              const userName = user?.name ?? 'Unknown user'
+              const planName = p.planTitle ?? plan?.title ?? p.planId
+              const reference = p.txRef ?? p.utr ?? 'No reference'
+              return (
+                <article
+                  key={p.id}
+                  title={`${formatDateTime(p.createdAt)} · ${reference}${p.expiresAt ? ` · Expires ${new Date(p.expiresAt).toLocaleDateString()}` : ''}`}
+                  className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                >
+                  <div className="min-w-0 flex-1 truncate text-xs text-slate-700">
+                    <span className="font-bold text-slate-900">{userName}</span>
+                    <span className="px-1 text-slate-400">·</span>
+                    <span>{planName}</span>
+                    <span className="sr-only"> · {formatDateTime(p.createdAt)} · {reference}</span>
+                  </div>
+                  <span className="shrink-0 text-xs font-extrabold text-slate-900">₹{p.amount.toLocaleString('en-IN')}</span>
+                  <Badge color={p.status === 'success' ? 'green' : p.status === 'pending' ? 'amber' : 'red'}>{p.status}</Badge>
+                  <button
+                    type="button"
+                    aria-label={`Open payments for ${userName}`}
+                    title="Open payments page"
+                    onClick={() => onNavigate('payments')}
+                    className="shrink-0 rounded-md bg-brand-50 px-2 py-1 text-[10px] font-bold text-brand-700 ring-1 ring-brand-200 transition hover:bg-brand-100 active:scale-95 touch-manipulation"
+                  >
+                    Open →
+                  </button>
+                </article>
+              )
+            })}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => onNavigate('payments')}
-          className="text-xs font-semibold text-brand-600 mt-2 hover:underline touch-manipulation"
-        >
-          Open payments page →
-        </button>
       </Card>
 
       <Card className="p-4 bg-gradient-to-br from-indigo-50 to-brand-50 ring-1 ring-brand-200 text-sm text-slate-700">
@@ -2042,46 +2077,39 @@ function SupabaseSyncStatus() {
 }
 
 function StatCard({
-  label,
+  compactLabel,
   value,
   color,
   icon,
   hint,
   onClick,
 }: {
-  label: string
+  compactLabel: string
   value: number | string
   color: 'brand' | 'green' | 'amber' | 'purple' | 'red'
   icon: string
   hint?: string
   onClick?: () => void
 }) {
-  const bg = {
-    brand: 'from-brand-50 to-brand-100 text-brand-800 ring-brand-200',
-    green: 'from-emerald-50 to-emerald-100 text-emerald-800 ring-emerald-200',
-    amber: 'from-amber-50 to-amber-100 text-amber-800 ring-amber-200',
-    purple: 'from-purple-50 to-purple-100 text-purple-800 ring-purple-200',
-    red: 'from-red-50 to-red-100 text-red-800 ring-red-200',
+  const iconTone = {
+    brand: 'bg-blue-50 text-blue-600',
+    green: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600',
+    purple: 'bg-purple-50 text-purple-600',
+    red: 'bg-rose-50 text-rose-600',
   }[color]
   return (
     <button
       type="button"
       onClick={onClick}
       title={hint}
-      className={`w-full text-left rounded-2xl p-3 bg-gradient-to-br ring-1 transition hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] touch-manipulation ${bg}`}
+      className="flex min-h-[64px] w-full items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:shadow active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 touch-manipulation"
     >
-      <div className="flex items-center gap-2">
-        <div className="text-2xl">{icon}</div>
-        <div className="min-w-0">
-          <div className="text-xl font-extrabold truncate">{value}</div>
-          <div className="text-[10px] uppercase tracking-wide font-semibold opacity-80">{label}</div>
-        </div>
+      <div className="min-w-0 pr-1">
+        <p className="truncate text-[10px] font-semibold tracking-wider text-slate-500">{compactLabel}</p>
+        <p className="mt-0.5 truncate text-xl font-bold leading-tight text-slate-900">{value}</p>
       </div>
-      {hint && (
-        <div className="mt-1.5 text-[10px] font-semibold opacity-70 flex items-center gap-1">
-          {hint} <span aria-hidden>→</span>
-        </div>
-      )}
+      <span aria-hidden="true" className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base ${iconTone}`}>{icon}</span>
     </button>
   )
 }

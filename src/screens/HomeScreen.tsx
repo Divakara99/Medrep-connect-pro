@@ -79,25 +79,25 @@ export function HomeScreen({
     <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-4">
       {/* Compact welcome banner: the greeting, one-line purpose and quick counts
           share a shallow card so the first few vacancies stay on screen. */}
-      <section className="hero-mesh hairline relative overflow-hidden rounded-2xl px-3 py-2.5 text-white shadow-[0_14px_30px_-24px_rgba(23,37,84,0.8)]">
+      <section className="hero-mesh hairline relative overflow-hidden rounded-xl px-2.5 py-2 text-white shadow-[0_12px_24px_-22px_rgba(23,37,84,0.8)]">
         <div aria-hidden className="pointer-events-none absolute -right-12 -top-14 h-32 w-32 rounded-full border border-white/15" />
-        <div className="relative flex items-center justify-between gap-2">
-          <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-white/90">✦ India&apos;s pharma job network</span>
-          <CreatorCredit variant="dark" size="sm" />
+        <div className="relative flex min-w-0 items-center justify-between gap-1">
+          <span className="min-w-0 truncate text-[9px] font-bold uppercase tracking-[0.08em] text-white/90">✦ India&apos;s pharma job network</span>
+          <CreatorCredit variant="dark" size="sm" compact />
         </div>
-        <div className="relative mt-1 flex min-w-0 items-baseline gap-1.5">
-          <h1 className="shrink-0 text-base font-extrabold leading-tight">
+        <div className="relative mt-0.5 flex min-w-0 items-baseline gap-1">
+          <h1 className="shrink-0 text-[15px] font-extrabold leading-tight">
             Hi <span className="rounded-lg bg-amber-300 px-1.5 py-0.5 text-slate-900">{firstName}</span> 👋
           </h1>
-          <p className="min-w-0 truncate text-[11px] leading-tight text-white/80">MR &amp; ABM first · genuine openings across India</p>
+          <p className="min-w-0 truncate text-[10px] leading-tight text-white/80">MR &amp; ABM first · genuine openings across India</p>
         </div>
-        <div className="relative mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-white/90">
+        <div className="relative mt-1.5 flex items-center gap-1 text-[9px] font-semibold text-white/90">
           {[
             { value: stats.total, label: 'live jobs' },
             { value: stats.mr, label: 'MR roles' },
             { value: stats.pinned, label: 'pinned' },
           ].map((item, index) => (
-            <div key={item.label} className="rounded-lg bg-white/10 px-2 py-1 ring-1 ring-white/15">
+            <div key={item.label} className="rounded-md bg-white/10 px-1.5 py-0.5 ring-1 ring-white/15">
               <span className="font-extrabold">{item.value}</span> <span className="text-white/75">{item.label}</span>
               {index < 2 && <span className="sr-only"> · </span>}
             </div>

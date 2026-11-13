@@ -8,7 +8,6 @@ import { teamPostVacancy } from '../data/vacancyTeam'
 import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
 import { readVacancyImageText } from '../data/vacancyOcr'
 import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplicateCheck, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
-import { vacancyTemplateDataUrl } from '../data/vacancyTemplate'
 
 /**
  * The vacancy form, shared by the administrator (post, edit, pin) and the
@@ -431,14 +430,23 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
             </div>
             {sourceMode === 'image' ? (
               <div className="space-y-2">
-                <a
-                  href={vacancyTemplateDataUrl()}
-                  download="medrep-vacancy-template.svg"
-                  className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
-                >
-                  ⬇ Download image vacancy template
-                </a>
-                <p className="text-xs leading-snug text-slate-600">Fill the downloaded image in an editor (or print and photograph it), then upload the completed image below. A clear poster or screenshot works too.</p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`${import.meta.env.BASE_URL}templates/vacancy-template.jpg`}
+                    download="medrep-vacancy-template.jpg"
+                    className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
+                  >
+                    ⬇ Download JPG template
+                  </a>
+                  <a
+                    href={`${import.meta.env.BASE_URL}templates/vacancy-template.doc`}
+                    download="medrep-vacancy-template.doc"
+                    className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
+                  >
+                    ⬇ Download Word template
+                  </a>
+                </div>
+                <p className="text-xs leading-snug text-slate-600">Both templates have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the JPG directly or complete the Word document and export/photograph it as an image before uploading. A clear vacancy poster also works.</p>
                 <Input
                   type="file"
                   accept="image/*"
