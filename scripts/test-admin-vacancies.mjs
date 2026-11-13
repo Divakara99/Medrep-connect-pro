@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { duplicateRemovalIds, groupDuplicateVacancies } from '../src/data/vacancyDuplicateGroups.ts'
-import { vacancyTemplateDataUrl } from '../src/data/vacancyTemplate.ts'
 
 /**
  * Admin vacancy list: one back step, one deleted row, no auto-created columns,
@@ -75,12 +74,36 @@ assert.match(jobs, /export async function loadDeletedVacancies/, 'the bin can be
 
 // ------------------------------------------------------------- back navigation
 const admin = await read('src/screens/AdminScreen.tsx')
+const dashboardStart = admin.indexOf('function DashboardTab(')
+const dashboardEnd = admin.indexOf('function SupabaseSyncStatus()', dashboardStart)
+const dashboard = admin.slice(dashboardStart, dashboardEnd)
+const recentPayments = dashboard.slice(dashboard.indexOf('Recent payments'))
+assert.doesNotMatch(dashboard, /Current Heavy|layoutMode|setLayoutMode/, 'the expanded layout toggle is removed')
+assert.match(dashboard, /grid grid-cols-2 gap-2\.5/, 'compact metrics use the tight two-column mobile grid')
+assert.match(dashboard, /compactLabel="ACTIVE SUBS"/, 'long metric labels are shortened in compact mode')
+assert.match(recentPayments, /space-y-1\.5/, 'recent payments use a compact stack of single-line boxes')
+assert.match(recentPayments, /className="flex min-w-0 items-center gap-2 rounded-lg border/, 'each recent transaction is a one-line box')
+assert.match(recentPayments, /All payments →/, 'the recent-payments panel has a compact all-payments button')
+assert.match(recentPayments, /onClick=\{\(\) => onNavigate\('payments'\)\}[\s\S]*Open →/, 'each payment box has a compact action button')
+assert.doesNotMatch(recentPayments, /<table/, 'recent payments do not overflow as a table on phones')
 assert.match(admin, /const stepBack = useCallback\(\(\) => \{/, 'the admin panel has one back step')
 assert.match(admin, /if \(tab !== 'dashboard'\) \{\s*setTab\('dashboard'\)/, 'back from a section returns to the dashboard')
 assert.match(admin, /useBackHandler\(true, stepBack\)/, 'the phone back button follows the same steps')
-assert.doesNotMatch(admin, /<BackButton/, 'the crowded header back button is removed; phone back navigation remains')
+assert.match(admin, /\{tab !== 'dashboard' && \(\s*<button[\s\S]*?onClick=\{stepBack\}[\s\S]*?aria-label="Back to previous page"/, 'the visible back button is hidden on the dashboard and shown on other admin pages')
+assert.match(admin, /useBackHandler\(true, stepBack\)/, 'the phone back button remains available on every admin page')
+assert.ok(admin.includes('setTabHistory((history) => [...history, tab])'), 'admin navigation remembers the previous page')
+assert.match(admin, /const previous = tabHistory\[tabHistory\.length - 1\][\s\S]*setTabHistory\(\(history\) => history\.slice\(0, -1\)\)/, 'the back button returns through page history')
 assert.doesNotMatch(admin, /<div className="min-h-\[100dvh\] bg-slate-50" key=\{version\}>/, 'data refreshes must not remount and reset the entire admin interface')
 assert.match(admin, /<Wordmark size="text-sm" \/>/, 'the compact admin header retains the app name')
+const paymentsStart = admin.indexOf('function PaymentsTab(')
+const paymentsEnd = admin.indexOf('\nfunction ', paymentsStart + 1)
+const paymentsTab = admin.slice(paymentsStart, paymentsEnd)
+assert.ok(paymentsStart >= 0 && paymentsEnd > paymentsStart, 'the payments page is available for layout checks')
+assert.doesNotMatch(paymentsTab, /<table|overflow-x-auto/, 'all payments no longer uses a wide table')
+assert.match(paymentsTab, /space-y-1\.5[\s\S]*?shown\.map\(\(payment\)/, 'all payments uses a compact stack of transaction boxes')
+assert.match(paymentsTab, /className="flex min-w-0 items-center gap-1\.5 rounded-lg border/, 'each all-payments transaction is a single-line box')
+assert.match(paymentsTab, /aria-label=\{`Payment details for \$\{customer\}`\}/, 'payment details remain available in each row')
+assert.match(paymentsTab, /setDecision\(\{ payment, approve: false \}\)[\s\S]*setDecision\(\{ payment, approve: true \}\)/, 'manual payments retain reject and verify actions')
 
 // The list itself is server-backed, so an emptied cache cannot look like a
 // deleted catalogue.
@@ -104,11 +127,20 @@ assert.match(admin, /deleteReasonProblem\(duplicateReason\)/, 'duplicate removal
 
 // ------------------------------------------------------- pasted text is opt-in
 const form = await read('src/components/VacancyForm.tsx')
-const templateUrl = vacancyTemplateDataUrl()
-assert.match(templateUrl, /^data:image\/svg\+xml;charset=utf-8,/, 'the downloadable template is an image, not a text attachment')
-assert.ok(decodeURIComponent(templateUrl.split(',')[1]).includes('CONTACT NUMBER'), 'the template covers contact details')
-assert.match(form, /download="medrep-vacancy-template\.svg"/, 'image upload includes a downloadable vacancy template')
-assert.match(form, /Fill the downloaded image in an editor/, 'admins are told how to complete and upload the image template')
+const jpgTemplate = await readFile(new URL('../public/templates/vacancy-template.jpg', import.meta.url))
+const docTemplate = await read('public/templates/vacancy-template.doc')
+const imageTemplate = await read('public/templates/vacancy-template.svg')
+assert.deepEqual([...jpgTemplate.subarray(0, 3)], [0xff, 0xd8, 0xff], 'the image template is an actual JPEG file')
+assert.match(form, /templates\/vacancy-template\.jpg/, 'vacancy upload offers a downloadable JPG template')
+assert.match(form, /templates\/vacancy-template\.doc/, 'vacancy upload offers a downloadable Word template')
+for (const template of [docTemplate, imageTemplate]) {
+  assert.match(template, />Data</, 'the template has a Data column')
+  assert.match(template, />Entry</, 'the template has a blank Entry column')
+  assert.match(template, /Contact number/i, 'the template covers contact details')
+  assert.match(template, /50 characters/i, 'each entry box allows 50 or more characters')
+}
+assert.match(form, /room for at least 50 characters in each Entry box/, 'admins are told the entry capacity')
+assert.match(form, /Fill the JPG directly or complete the Word document/, 'admins are told how to complete and upload the templates')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
 assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')
@@ -131,4 +163,4 @@ assert.match(admin, /sm:grid-cols-\[minmax\(0,2\.2fr\)_minmax\(0,1fr\)_minmax\(0
 assert.match(admin, /function postedOn\(ms: number\): string/, 'the Posted column has one shared date format')
 assert.doesNotMatch(admin, /w-10 h-10 rounded-lg bg-brand-100/, 'the stacked avatar card is gone')
 
-console.log('admin vacancies: compact header without remounts, phone back steps, one-row delete/undo, opt-in text review, duplicates previewed, image template — passed')
+console.log('admin vacancies: single compact dashboard and page-history back buttons, payment boxes, one-row delete/undo, opt-in text review, duplicates previewed, image template — passed')

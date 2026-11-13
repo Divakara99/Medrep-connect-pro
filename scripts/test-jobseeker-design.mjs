@@ -84,8 +84,12 @@ assert.match(ui, /--ad-reserve, 0px/, 'sheets still clear the native ads banner'
 
 // 5. Screens use the hero block rather than ad-hoc gradients ------------------
 assert.match(home, /className="hero-mesh/, 'the feed opens with the shared hero')
-assert.match(home, /rounded-2xl px-3 py-2\.5/, 'the welcome hero uses compact padding')
-assert.match(home, /mt-2 flex items-center gap-1\.5/, 'the welcome statistics use tight inline spacing')
+assert.match(home, /rounded-xl px-2\.5 py-2/, 'the welcome hero uses reduced padding and a compact radius')
+assert.match(home, /CreatorCredit variant="dark" size="sm" compact/, 'the welcome hero uses the short creator credit')
+assert.match(home, /mt-1\.5 flex items-center gap-1 text-\[9px\]/, 'the welcome statistics use compact inline spacing')
+const creatorCredit = await read('src/components/CreatorCredit.tsx')
+assert.match(creatorCredit, /whitespace-nowrap rounded-full px-1\.5 py-1 text-\[9px\]/, 'the compact creator name stays together on one line')
+assert.match(creatorCredit, /Mr\. \{CREATOR\.name\}/, 'the compact credit displays the app creator name')
 assert.match(priority, /from-amber-300 via-amber-400 to-orange-500/, 'priority keeps its own warm hero')
 assert.match(priority, /rounded-\[28px\]/, 'both heroes use the same radius')
 
