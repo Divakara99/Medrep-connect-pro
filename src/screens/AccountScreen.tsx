@@ -39,6 +39,7 @@ export function AccountScreen({
   const photoInput = useRef<HTMLInputElement>(null)
   const [photoPath, setPhotoPath] = useState(() => getProfile(user.email).photoPath ?? '')
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const visiblePhotoUrl = photoPath ? photoUrl : null
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoError, setPhotoError] = useState<string | null>(null)
   // "My applications" opens as its own page over this one, so the phone's back
@@ -47,13 +48,8 @@ export function AccountScreen({
   // Long text gets a page of its own; the card stays a summary.
   const [infoPage, setInfoPage] = useState<'about' | 'help' | null>(null)
   /**
-   * Hidden ad diagnostics (Android only), opened by tapping the version badge
-   * five times.
-   *
-   * Ads fail silently by design, so "no ads" arrives with no cause attached and
-   * no way to read it on a phone without a USB cable and chrome://inspect. This
-   * surfaces AdMob's own answer — no fill, missing app id, not initialised —
-   * right on the device. A manual request button makes it testable on the spot.
+   * Five taps on the version badge opens diagnostics. The panel can be checked
+   * in a browser preview too; live ad controls remain Android-only.
    */
   const versionTaps = useRef({ count: 0, timer: 0 })
   const [adsDebugOpen, setAdsDebugOpen] = useState(false)
@@ -77,15 +73,20 @@ export function AccountScreen({
 
   useEffect(() => {
     let alive = true
-    if (!photoPath) {
-      setPhotoUrl(null)
-      return () => { alive = false }
-    }
+    if (!photoPath) return () => { alive = false }
     profilePhotoUrl(photoPath).then((url) => {
       if (alive) setPhotoUrl(url)
     })
     return () => { alive = false }
   }, [photoPath])
+
+  useEffect(() => {
+    if (!adsDebugOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('ad-diagnostics-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [adsDebugOpen])
 
   async function changePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0]
@@ -124,17 +125,17 @@ export function AccountScreen({
   const diagnosticsText = adsState ? adsDiagnosticsText() : ''
 
   function onVersionTap() {
-    if (!isAndroidApp()) return
     const taps = versionTaps.current
     taps.count += 1
     window.clearTimeout(taps.timer)
     if (taps.count >= 5) {
       taps.count = 0
+      window.clearTimeout(taps.timer)
       setAdsDebugOpen(true)
       setAdsState(adsDiagnostics())
       return
     }
-    taps.timer = window.setTimeout(() => { taps.count = 0 }, 1500)
+    taps.timer = window.setTimeout(() => { taps.count = 0 }, 5000)
   }
 
   if (infoPage === 'about') return <AboutPage onClose={() => setInfoPage(null)} />
@@ -162,8 +163,8 @@ export function AccountScreen({
               title="Change profile picture"
               className="relative block h-14 w-14 overflow-hidden rounded-2xl ring-2 ring-white shadow disabled:opacity-60"
             >
-              {photoUrl ? (
-                <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+              {visiblePhotoUrl ? (
+                <img src={visiblePhotoUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="grid h-full w-full place-items-center bg-gradient-to-br from-brand-500 to-indigo-700 text-xl font-extrabold text-white">
                   {user.name.trim().slice(0, 1).toUpperCase() || 'U'}
@@ -259,7 +260,7 @@ export function AccountScreen({
               </a>
             </div>
           </div>
-          <button type="button" onClick={onVersionTap} aria-label="App version" className="shrink-0 text-right">
+          <button type="button" onClick={onVersionTap} aria-label="App version. Tap five times to open diagnostics." title="Tap 5 times to open diagnostics" className="min-h-11 min-w-20 shrink-0 rounded-xl px-2 py-1 text-right">
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
             <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
@@ -277,7 +278,8 @@ export function AccountScreen({
         </div>
       </Card>
 
-      {isAndroidApp() && adsDebugOpen && (
+      {adsDebugOpen && (
+        <section id="ad-diagnostics-panel" aria-label="Ad diagnostics" className="scroll-mt-4">
         <Card className="p-4 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="font-bold text-slate-900">
@@ -306,6 +308,8 @@ export function AccountScreen({
             <div>last banner error: {adsState?.lastBannerError || '—'}</div>
             <div>last video error: {adsState?.lastRewardedError || '—'}</div>
           </div>
+          {isAndroidApp() ? (
+            <>
           <Button
             variant="secondary"
             disabled={adsBusy}
@@ -391,6 +395,10 @@ export function AccountScreen({
               ))}
             </div>
           )}
+            </>
+          ) : (
+            <p className="text-xs text-slate-600">Browser preview can confirm this panel opens, but live AdMob checks are available only in the Android app.</p>
+          )}
           <button
             type="button"
             className="text-xs font-semibold text-brand-600 underline"
@@ -411,6 +419,7 @@ export function AccountScreen({
             any other message is a build or network problem.
           </div>
         </Card>
+        </section>
       )}
 
       {/* Unified frozen (sticky) action bar: Save primary, Logout secondary.

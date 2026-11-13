@@ -105,7 +105,7 @@ const detail = await readFile(new URL('../src/components/JobDetail.tsx', import.
 assert.ok(/<ShareJobButton job=\{job\}/.test(card), 'the card offers Share to every viewer')
 assert.ok(/<ShareJobButton job=\{job\}/.test(detail), 'the job page offers Share to every viewer')
 assert.ok(!/unlocked &&[\s\S]{0,80}<ShareJobButton/.test(card), 'Share is not gated behind the subscription')
-assert.ok(/border-t border-\[#eef1f8\] px-3\.5 py-2\.5 sm:px-4">[\s\S]{0,1400}?<ShareJobButton job=\{job\} icon/.test(card), 'the card share rides in the compact footer strip, costing no extra card block')
+assert.ok(/border-t border-\[#eef1f8\] px-3 py-1\.5 sm:px-3\.5">[\s\S]{0,1400}?<ShareJobButton job=\{job\} icon/.test(card), 'the card share rides in the compact footer strip, costing no extra card block')
 assert.ok(!/displays the share row/.test(card) && !/justify-end">\s*\{showUnlockButton/.test(card), 'no extra action row is added to the card')
 assert.ok(/<ShareJobButton job=\{job\} icon \/>/.test(detail), 'the job page offers the plain share glyph')
 assert.ok(!/<ShareJobButton job=\{job\} \/>/.test(detail), 'and no longer spends a full-width button on it')

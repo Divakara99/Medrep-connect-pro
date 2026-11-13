@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { BackButton, Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
+import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
@@ -186,14 +186,10 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50" key={version}>
+    <div className="min-h-[100dvh] bg-slate-50">
       {/* Header */}
       <header className="glass-bar sticky top-0 z-30 border-b border-white/60">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-          <BackButton
-            onClick={stepBack}
-            label={tab === 'dashboard' ? 'Leave the admin panel' : 'Back to the dashboard'}
-          />
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2">
           <div className="min-w-0 flex-1">
             <Wordmark size="text-sm" />
           </div>
