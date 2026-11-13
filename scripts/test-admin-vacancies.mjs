@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { duplicateRemovalIds, groupDuplicateVacancies } from '../src/data/vacancyDuplicateGroups.ts'
+import { vacancyTemplateDataUrl } from '../src/data/vacancyTemplate.ts'
 
 /**
  * Admin vacancy list: one back step, one deleted row, no auto-created columns,
@@ -77,9 +78,9 @@ const admin = await read('src/screens/AdminScreen.tsx')
 assert.match(admin, /const stepBack = useCallback\(\(\) => \{/, 'the admin panel has one back step')
 assert.match(admin, /if \(tab !== 'dashboard'\) \{\s*setTab\('dashboard'\)/, 'back from a section returns to the dashboard')
 assert.match(admin, /useBackHandler\(true, stepBack\)/, 'the phone back button follows the same steps')
-assert.match(admin, /<BackButton\s*onClick=\{stepBack\}/, 'the header arrow uses the same steps — never a straight sign-out')
-assert.doesNotMatch(admin, /BackButton onClick=\{\(\) => setExitOpen\(true\)\}/, 'no arrow signs the admin out directly')
-assert.match(admin, /label=\{tab === 'dashboard' \? 'Leave the admin panel' : 'Back to the dashboard'\}/, 'the arrow says where it goes')
+assert.doesNotMatch(admin, /<BackButton/, 'the crowded header back button is removed; phone back navigation remains')
+assert.doesNotMatch(admin, /<div className="min-h-\[100dvh\] bg-slate-50" key=\{version\}>/, 'data refreshes must not remount and reset the entire admin interface')
+assert.match(admin, /<Wordmark size="text-sm" \/>/, 'the compact admin header retains the app name')
 
 // The list itself is server-backed, so an emptied cache cannot look like a
 // deleted catalogue.
@@ -103,6 +104,11 @@ assert.match(admin, /deleteReasonProblem\(duplicateReason\)/, 'duplicate removal
 
 // ------------------------------------------------------- pasted text is opt-in
 const form = await read('src/components/VacancyForm.tsx')
+const templateUrl = vacancyTemplateDataUrl()
+assert.match(templateUrl, /^data:image\/svg\+xml;charset=utf-8,/, 'the downloadable template is an image, not a text attachment')
+assert.ok(decodeURIComponent(templateUrl.split(',')[1]).includes('CONTACT NUMBER'), 'the template covers contact details')
+assert.match(form, /download="medrep-vacancy-template\.svg"/, 'image upload includes a downloadable vacancy template')
+assert.match(form, /Fill the downloaded image in an editor/, 'admins are told how to complete and upload the image template')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
 assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')
@@ -125,4 +131,4 @@ assert.match(admin, /sm:grid-cols-\[minmax\(0,2\.2fr\)_minmax\(0,1fr\)_minmax\(0
 assert.match(admin, /function postedOn\(ms: number\): string/, 'the Posted column has one shared date format')
 assert.doesNotMatch(admin, /w-10 h-10 rounded-lg bg-brand-100/, 'the stacked avatar card is gone')
 
-console.log('admin vacancies: back steps to the dashboard, one delete removes one row and can be undone, pasted text is opt-in, duplicates are previewed — passed')
+console.log('admin vacancies: compact header without remounts, phone back steps, one-row delete/undo, opt-in text review, duplicates previewed, image template — passed')

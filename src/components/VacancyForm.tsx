@@ -8,6 +8,7 @@ import { teamPostVacancy } from '../data/vacancyTeam'
 import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
 import { readVacancyImageText } from '../data/vacancyOcr'
 import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplicateCheck, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
+import { vacancyTemplateDataUrl } from '../data/vacancyTemplate'
 
 /**
  * The vacancy form, shared by the administrator (post, edit, pin) and the
@@ -430,6 +431,14 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
             </div>
             {sourceMode === 'image' ? (
               <div className="space-y-2">
+                <a
+                  href={vacancyTemplateDataUrl()}
+                  download="medrep-vacancy-template.svg"
+                  className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
+                >
+                  ⬇ Download image vacancy template
+                </a>
+                <p className="text-xs leading-snug text-slate-600">Fill the downloaded image in an editor (or print and photograph it), then upload the completed image below. A clear poster or screenshot works too.</p>
                 <Input
                   type="file"
                   accept="image/*"

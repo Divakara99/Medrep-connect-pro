@@ -84,8 +84,8 @@ assert.match(ui, /--ad-reserve, 0px/, 'sheets still clear the native ads banner'
 
 // 5. Screens use the hero block rather than ad-hoc gradients ------------------
 assert.match(home, /className="hero-mesh/, 'the feed opens with the shared hero')
-assert.match(home, /rounded-\[24px\] px-4 py-3\.5/, 'the welcome hero uses compact padding')
-assert.match(home, /mt-3 grid grid-cols-3 gap-1\.5/, 'the welcome statistics use tight spacing')
+assert.match(home, /rounded-2xl px-3 py-2\.5/, 'the welcome hero uses compact padding')
+assert.match(home, /mt-2 flex items-center gap-1\.5/, 'the welcome statistics use tight inline spacing')
 assert.match(priority, /from-amber-300 via-amber-400 to-orange-500/, 'priority keeps its own warm hero')
 assert.match(priority, /rounded-\[28px\]/, 'both heroes use the same radius')
 

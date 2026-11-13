@@ -77,39 +77,29 @@ export function HomeScreen({
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-4">
-      {/* Hero — one deep gradient block with the greeting, the live counts and
-          the founder credit, so the first screen answers "what is this?" at a
-          glance. No plan promotion here: the feed is about jobs. */}
-      <section className="hero-mesh hairline relative overflow-hidden rounded-[24px] px-4 py-3.5 text-white shadow-[0_20px_42px_-30px_rgba(23,37,84,0.8)]">
-        <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full border border-white/15" />
-        <div aria-hidden className="pointer-events-none absolute -right-5 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-20 -left-12 h-40 w-40 rounded-full bg-sky-400/20 blur-3xl" />
-
-        <div className="relative flex flex-wrap items-center justify-between gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/90 ring-1 ring-white/25">
-            <span aria-hidden>✦</span> India&apos;s pharma job network
-          </span>
+      {/* Compact welcome banner: the greeting, one-line purpose and quick counts
+          share a shallow card so the first few vacancies stay on screen. */}
+      <section className="hero-mesh hairline relative overflow-hidden rounded-2xl px-3 py-2.5 text-white shadow-[0_14px_30px_-24px_rgba(23,37,84,0.8)]">
+        <div aria-hidden className="pointer-events-none absolute -right-12 -top-14 h-32 w-32 rounded-full border border-white/15" />
+        <div className="relative flex items-center justify-between gap-2">
+          <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-white/90">✦ India&apos;s pharma job network</span>
           <CreatorCredit variant="dark" size="sm" />
         </div>
-
-        <h1 className="relative mt-2 text-xl font-extrabold leading-tight sm:text-2xl">
-          Hi{' '}
-          <span className="rounded-xl bg-amber-300 px-2 py-0.5 text-slate-900 shadow-sm">{firstName}</span>{' '}
-          <span aria-hidden>👋</span>
-        </h1>
-        <p className="relative mt-1 max-w-md text-xs leading-snug text-white/80">
-          MR and ABM roles come first, then genuine openings of every kind across India.
-        </p>
-
-        <div className="relative mt-3 grid grid-cols-3 gap-1.5">
+        <div className="relative mt-1 flex min-w-0 items-baseline gap-1.5">
+          <h1 className="shrink-0 text-base font-extrabold leading-tight">
+            Hi <span className="rounded-lg bg-amber-300 px-1.5 py-0.5 text-slate-900">{firstName}</span> 👋
+          </h1>
+          <p className="min-w-0 truncate text-[11px] leading-tight text-white/80">MR &amp; ABM first · genuine openings across India</p>
+        </div>
+        <div className="relative mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-white/90">
           {[
             { value: stats.total, label: 'live jobs' },
             { value: stats.mr, label: 'MR roles' },
             { value: stats.pinned, label: 'pinned' },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-white/10 px-2.5 py-1.5 ring-1 ring-white/20">
-              <div className="text-lg font-extrabold leading-none">{item.value}</div>
-              <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/75">{item.label}</div>
+          ].map((item, index) => (
+            <div key={item.label} className="rounded-lg bg-white/10 px-2 py-1 ring-1 ring-white/15">
+              <span className="font-extrabold">{item.value}</span> <span className="text-white/75">{item.label}</span>
+              {index < 2 && <span className="sr-only"> · </span>}
             </div>
           ))}
         </div>
