@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import {
   actorLabel,
   deleteReasonProblem,
   headquartersProblem,
+  isPharmaSalesCategory,
+  requiredHeadquartersProblem,
   normalizeIndianMobile,
   parseHeadquarters,
   serializeHeadquarters,
@@ -30,6 +33,13 @@ assert.deepEqual(parseHeadquarters('Hyderabad HO\r\nBengaluru HQ'), ['Hyderabad 
 assert.equal(serializeHeadquarters([' Hyderabad HO ', '', ' Bengaluru HQ ']), 'Hyderabad HO\nBengaluru HQ')
 assert.equal(headquartersProblem(['x'.repeat(119)]), null)
 assert.match(headquartersProblem(['x'.repeat(120), 'y']) ?? '', /within 120 characters/)
+assert.equal(isPharmaSalesCategory('MR'), true)
+assert.equal(isPharmaSalesCategory('ABM'), true)
+assert.equal(isPharmaSalesCategory('Finance'), false)
+assert.match(requiredHeadquartersProblem('MR', ['']) ?? '', /at least one HQ/)
+assert.match(requiredHeadquartersProblem('ABM', ['  ']) ?? '', /at least one HQ/)
+assert.equal(requiredHeadquartersProblem('MR', ['Hyderabad HO']), null)
+assert.equal(requiredHeadquartersProblem('Finance', ['']), null, 'HQ is not required for non-pharma roles')
 assert.equal(normalizeIndianMobile('+91 90352 80940'), '9035280940')
 assert.equal(normalizeIndianMobile('09066411078'), '9066411078')
 assert.equal(normalizeIndianMobile('9066411078'), '9066411078')
@@ -101,4 +111,17 @@ const totals = paymentTotals([
 ])
 assert.deepEqual(totals, { paidCount: 2, paidAmount: 448, pendingCount: 1, waitingBankCheck: 1, failedCount: 2 })
 
-console.log('vacancy rules: HQ entries, delete reasons, activity totals, payment labels and totals passed')
+const [form, card, detail] = await Promise.all([
+  readFile(new URL('../src/components/VacancyForm.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/JobCard.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/JobDetail.tsx', import.meta.url), 'utf8'),
+])
+assert.match(form, /pharmaFields && \([\s\S]*HQ \(required for MR\/ABM\)/, 'the form only shows the HQ field for MR/ABM and marks it required')
+assert.match(form, /requiredHeadquartersProblem\(category, hqEntries\)/, 'the form validates an HQ for pharma-sales roles')
+assert.match(form, /hq: pharmaFields \? serializeHeadquarters\(hqEntries\) : ''/, 'switching to other categories clears pharma-only HQ data on save')
+assert.match(card, /isPharmaSalesCategory\(job\.category\)[\s\S]*HQ \{hqEntries\.join\(', '\)\}/, 'the list card shows HQ only for MR/ABM')
+assert.match(detail, /isPharmaSalesCategory\(job\.category\)[\s\S]*hqItems\.map\(\(hq, index\) => \(\{[\s\S]*`HQ \$\{index \+ 1\}`/, 'multiple HQs receive individual HQ 1, HQ 2 labels in the detail view')
+assert.match(detail, /isPharmaSalesCategory\(job\.category\)[\s\S]*label: 'Division'/, 'the detail view shows pharma-only division fields')
+assert.match(detail, /\.filter\(\(field\) => field\.value\.trim\(\)\)/, 'empty optional detail fields are omitted instead of shown as dashes')
+
+console.log('vacancy rules: role-specific HQ requirements, details, delete reasons and payment totals passed')

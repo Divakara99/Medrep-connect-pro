@@ -71,10 +71,21 @@ export function serializeHeadquarters(entries: readonly string[]): string {
   return entries.map((entry) => entry.trim()).filter(Boolean).join('\n')
 }
 
+export function isPharmaSalesCategory(category: string): boolean {
+  return category === 'MR' || category === 'ABM'
+}
+
 export function headquartersProblem(entries: readonly string[]): string | null {
   return serializeHeadquarters(entries).length > MAX_HQ_TEXT_LENGTH
     ? `Keep the combined HQ entries within ${MAX_HQ_TEXT_LENGTH} characters.`
     : null
+}
+
+/** MR and ABM postings need at least one HQ; other categories do not use HQ. */
+export function requiredHeadquartersProblem(category: string, entries: readonly string[]): string | null {
+  if (!isPharmaSalesCategory(category)) return null
+  if (!serializeHeadquarters(entries)) return 'Enter at least one HQ for MR and ABM vacancies.'
+  return headquartersProblem(entries)
 }
 
 export type ActorRole = 'admin' | 'vacancy_editor' | 'system' | 'earlier'

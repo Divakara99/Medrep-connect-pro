@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { Button, Badge, Modal } from './ui'
 import { descriptionPoints, type Job } from '../data/jobs'
-import { normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
+import { isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
@@ -117,7 +117,26 @@ export function JobDetail({
   const fullDetails = Boolean(job && (unlocked || paidWindow.active))
   const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
-  const hqItems = job ? parseHeadquarters(job.hq) : []
+  const isPharmaRole = Boolean(job && isPharmaSalesCategory(job.category))
+  const hqItems = job && isPharmaRole ? parseHeadquarters(job.hq) : []
+  const publicFields: { label: string; value: string; multiline?: boolean }[] = job
+    ? [
+        { label: 'Role', value: job.title },
+        { label: 'City', value: job.location },
+        ...(isPharmaRole ? [
+          ...hqItems.map((hq, index) => ({
+            label: hqItems.length > 1 ? `HQ ${index + 1}` : 'HQ',
+            value: hq,
+          })),
+          { label: 'Division', value: job.division ?? '' },
+        ] : []),
+        { label: 'Experience', value: job.experience ?? '' },
+        { label: 'Qualification', value: job.qualification ?? '' },
+        { label: 'Age limit', value: job.ageLimit ?? '' },
+        { label: 'Vacancies', value: job.vacancyCount ?? '' },
+        { label: 'Salary', value: job.salary ?? '' },
+      ].filter((field) => field.value.trim())
+    : []
 
   return (
     <Modal open={!!job} onClose={onClose} onBack={onClose} title={job?.title}>
@@ -141,18 +160,12 @@ export function JobDetail({
             </div>
           </div>
 
-          {/* Always public and never blurred: role, city, HQ, division,
-              experience, salary and posted date. */}
+          {/* Public details only: pharma-specific fields appear only on MR/ABM roles,
+              while optional empty fields are omitted instead of showing dashes. */}
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <Field label="Role" value={job.title} />
-            <Field label="City" value={job.location} />
-            <Field label={hqItems.length > 1 ? 'HQs' : 'HQ'} value={hqItems.length > 0 ? hqItems.join('\n') : '—'} multiline={hqItems.length > 1} />
-            <Field label="Division" value={job.division || '—'} />
-            <Field label="Experience" value={job.experience || '—'} />
-            <Field label="Qualification" value={job.qualification || '—'} />
-            <Field label="Age limit" value={job.ageLimit || '—'} />
-            <Field label="Vacancies" value={job.vacancyCount || '—'} />
-            <Field label="Salary" value={job.salary || '—'} />
+            {publicFields.map((field) => (
+              <Field key={field.label} label={field.label} value={field.value} multiline={field.multiline} />
+            ))}
           </div>
 
           {(job.extraFields?.length ?? 0) > 0 && (

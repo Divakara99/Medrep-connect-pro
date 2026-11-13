@@ -80,36 +80,36 @@ export function HomeScreen({
       {/* Hero — one deep gradient block with the greeting, the live counts and
           the founder credit, so the first screen answers "what is this?" at a
           glance. No plan promotion here: the feed is about jobs. */}
-      <section className="hero-mesh hairline relative overflow-hidden rounded-[28px] px-5 py-5 text-white shadow-[0_28px_60px_-34px_rgba(23,37,84,0.95)]">
-        <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full border border-white/15" />
-        <div aria-hidden className="pointer-events-none absolute -right-6 -top-10 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-        <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
+      <section className="hero-mesh hairline relative overflow-hidden rounded-[24px] px-4 py-3.5 text-white shadow-[0_20px_42px_-30px_rgba(23,37,84,0.8)]">
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full border border-white/15" />
+        <div aria-hidden className="pointer-events-none absolute -right-5 -top-8 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-20 -left-12 h-40 w-40 rounded-full bg-sky-400/20 blur-3xl" />
 
-        <div className="relative flex flex-wrap items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90 ring-1 ring-white/25">
+        <div className="relative flex flex-wrap items-center justify-between gap-1.5">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/90 ring-1 ring-white/25">
             <span aria-hidden>✦</span> India&apos;s pharma job network
           </span>
           <CreatorCredit variant="dark" size="sm" />
         </div>
 
-        <h1 className="relative mt-3 text-2xl font-extrabold leading-tight sm:text-3xl">
+        <h1 className="relative mt-2 text-xl font-extrabold leading-tight sm:text-2xl">
           Hi{' '}
           <span className="rounded-xl bg-amber-300 px-2 py-0.5 text-slate-900 shadow-sm">{firstName}</span>{' '}
           <span aria-hidden>👋</span>
         </h1>
-        <p className="relative mt-1.5 max-w-md text-sm leading-relaxed text-white/80">
+        <p className="relative mt-1 max-w-md text-xs leading-snug text-white/80">
           MR and ABM roles come first, then genuine openings of every kind across India.
         </p>
 
-        <div className="relative mt-4 grid grid-cols-3 gap-2">
+        <div className="relative mt-3 grid grid-cols-3 gap-1.5">
           {[
             { value: stats.total, label: 'live jobs' },
             { value: stats.mr, label: 'MR roles' },
             { value: stats.pinned, label: 'pinned' },
           ].map((item) => (
-            <div key={item.label} className="rounded-2xl bg-white/10 px-3 py-2 ring-1 ring-white/20 backdrop-blur-sm">
-              <div className="text-xl font-extrabold leading-none">{item.value}</div>
-              <div className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/75">{item.label}</div>
+            <div key={item.label} className="rounded-xl bg-white/10 px-2.5 py-1.5 ring-1 ring-white/20">
+              <div className="text-lg font-extrabold leading-none">{item.value}</div>
+              <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/75">{item.label}</div>
             </div>
           ))}
         </div>
@@ -251,21 +251,22 @@ export function HomeScreen({
         )}
       </div>
 
-      {/* Founder credit — one quiet card at the end of the feed. */}
-      <footer className="pt-2">
-        <div className="rounded-3xl bg-white/80 px-4 py-4 text-center ring-1 ring-slate-200/80 backdrop-blur-sm">
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">App created by</div>
-          <div className="mt-1 text-lg font-extrabold tracking-tight text-slate-900">Mr. {CREATOR.name}</div>
-          <div className="text-sm font-semibold text-brand-700">{CREATOR.role}</div>
+      {/* Compact founder credit — keep the feed focused on vacancies. */}
+      <footer className="pt-0.5">
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-slate-200/80">
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-xs font-extrabold text-slate-800">App by Mr. {CREATOR.name}</div>
+            <div className="truncate text-[10px] font-medium text-slate-500">{CREATOR.role}</div>
+          </div>
           <button
             type="button"
             onClick={() => setAboutOpen(true)}
-            className="mt-2 text-xs font-bold text-brand-700 underline underline-offset-4"
+            className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-brand-700"
           >
-            Read more about the app
+            About
           </button>
         </div>
-        <p className="mt-3 text-center text-xs text-slate-500">MedRep Connect Pro · {CREATOR.tagline}</p>
+        <p className="mt-1.5 text-center text-[10px] leading-tight text-slate-500">MedRep Connect Pro · {CREATOR.tagline}</p>
       </footer>
     </div>
   )

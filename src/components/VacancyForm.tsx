@@ -3,7 +3,7 @@ import { Badge, Button, Input, Label, Modal, Select, Textarea } from './ui'
 import { addJob, CATEGORIES, descriptionPoints, updateJob, type Job } from '../data/jobs'
 import { cleanExtraFields, extraFieldProblem, EXTRA_FIELD_LIMIT, type ExtraField } from '../data/extraFields'
 import { findConfidentialContact } from '../data/jobDescription'
-import { digitsOnly, hasNonPhoneCharacters, mobileNumberProblem, MOBILE_DIGITS, MOBILE_MAX_DIGITS, MAX_HQ_TEXT_LENGTH, headquartersProblem, normalizeIndianMobile, parseHeadquarters, serializeHeadquarters } from '../data/vacancyRules'
+import { digitsOnly, hasNonPhoneCharacters, mobileNumberProblem, MOBILE_DIGITS, MOBILE_MAX_DIGITS, MAX_HQ_TEXT_LENGTH, isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters, requiredHeadquartersProblem, serializeHeadquarters } from '../data/vacancyRules'
 import { teamPostVacancy } from '../data/vacancyTeam'
 import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
 import { readVacancyImageText } from '../data/vacancyOcr'
@@ -104,6 +104,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
   } | null>(null)
   const [duplicatePrompt, setDuplicatePrompt] = useState<{ result: VacancyDuplicateCheck; approvalKey: string } | null>(null)
   const [approvedDuplicateReview, setApprovedDuplicateReview] = useState<string | null>(null)
+  const pharmaFields = isPharmaSalesCategory(category)
 
   /**
    * Mobile fields accept digits only. A letter is refused as it is typed and
@@ -140,8 +141,8 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       managerAltPhone,
       managerEmail,
       location,
-      hq: serializeHeadquarters(hqEntries),
-      division,
+      hq: pharmaFields ? serializeHeadquarters(hqEntries) : '',
+      division: pharmaFields ? division : '',
       category,
       salary,
       experience,
@@ -360,7 +361,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       setError('Title, company, and location are required.')
       return
     }
-    const hqProblem = headquartersProblem(hqEntries)
+    const hqProblem = requiredHeadquartersProblem(category, hqEntries)
     setHqError(hqProblem)
     if (hqProblem) {
       setError(null)
@@ -677,40 +678,45 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
             <Label>City</Label>
             <Input value={location} onChange={(e) => setLocation(e.target.value)} />
           </div>
-          <div className="sm:col-span-2 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>HQ (headquarters)</Label>
-              <Button type="button" variant="secondary" onClick={addHq}>
-                + Add HQ
-              </Button>
-            </div>
-            <div className="space-y-2">
-              {hqEntries.map((entry, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <Input
-                    value={entry}
-                    onChange={(event) => updateHq(index, event.target.value)}
-                    placeholder={index === 0 ? 'Optional · e.g. Hyderabad HO' : `HQ ${index + 1}`}
-                    aria-label={`HQ entry ${index + 1}`}
-                    maxLength={MAX_HQ_TEXT_LENGTH}
-                    aria-invalid={hqError ? true : undefined}
-                    aria-describedby={hqError ? 'vacancy-hq-error' : undefined}
-                  />
-                  {index > 0 && (
-                    <Button type="button" variant="ghost" className="shrink-0 px-3" onClick={() => removeHq(index)} aria-label={`Remove HQ ${index + 1}`}>
-                      Remove
-                    </Button>
-                  )}
+          {pharmaFields && (
+            <>
+              <div className="sm:col-span-2 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>HQ (required for MR/ABM)</Label>
+                  <Button type="button" variant="secondary" onClick={addHq}>
+                    + Add HQ
+                  </Button>
                 </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-500">Add each head office in its own box. Combined HQ entries can be up to {MAX_HQ_TEXT_LENGTH} characters.</p>
-            {hqError && <p id="vacancy-hq-error" role="alert" className="text-sm font-bold text-red-700">{hqError}</p>}
-          </div>
-          <div>
-            <Label>Division</Label>
-            <Input value={division} onChange={(e) => setDivision(e.target.value)} placeholder="Optional · e.g. Cardiology" />
-          </div>
+                <div className="space-y-2">
+                  {hqEntries.map((entry, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={entry}
+                        onChange={(event) => updateHq(index, event.target.value)}
+                        placeholder={index === 0 ? 'Required · e.g. Hyderabad HO' : `HQ ${index + 1}`}
+                        aria-label={`HQ entry ${index + 1}`}
+                        aria-required={index === 0}
+                        maxLength={MAX_HQ_TEXT_LENGTH}
+                        aria-invalid={hqError ? true : undefined}
+                        aria-describedby={hqError ? 'vacancy-hq-error' : undefined}
+                      />
+                      {index > 0 && (
+                        <Button type="button" variant="ghost" className="shrink-0 px-3" onClick={() => removeHq(index)} aria-label={`Remove HQ ${index + 1}`}>
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500">Add each head office in its own box. At least one HQ is required. Combined entries can be up to {MAX_HQ_TEXT_LENGTH} characters.</p>
+                {hqError && <p id="vacancy-hq-error" role="alert" className="text-sm font-bold text-red-700">{hqError}</p>}
+              </div>
+              <div>
+                <Label>Division (optional)</Label>
+                <Input value={division} onChange={(e) => setDivision(e.target.value)} placeholder="e.g. Cardiology" />
+              </div>
+            </>
+          )}
           <div>
             <Label>Salary</Label>
             <Input value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="₹2-3 LPA" />
