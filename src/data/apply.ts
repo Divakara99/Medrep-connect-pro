@@ -4,6 +4,7 @@ import type { ResumeRecord } from './resume'
 import { profileCompletionIssues, refreshProfile, type Profile } from './profile'
 import { CREATOR } from './creator'
 import { PLAY_STORE_URL } from './jobShareText'
+import { normalizeWhatsAppNumber } from './vacancyRules'
 import { mirror, supabase } from './supabase'
 
 /**
@@ -125,14 +126,6 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
   return { subject, body: lines.join('\n') }
 }
 
-function normalizePhone(raw?: string): string {
-  let p = (raw || '').replace(/[^\d+]/g, '')
-  if (p.startsWith('+')) p = p.slice(1)
-  if (p.startsWith('0')) p = '91' + p.slice(1)
-  if (p.length === 10) p = '91' + p
-  return p
-}
-
 /**
  * Open the mail/WhatsApp composer WITHOUT unloading the app, so the user stays
  * on the applications screen and still sees the confirmation. A detached anchor
@@ -169,9 +162,11 @@ export async function openApplication(
   }
 
   const emailTo = (job.managerEmail || '').trim()
-  const phoneTo = normalizePhone(job.contact)
+  // Use the primary contact when valid; otherwise the vacancy's alternate
+  // manager mobile is still a valid WhatsApp destination.
+  const phoneTo = normalizeWhatsAppNumber(job.contact) || normalizeWhatsAppNumber(job.managerAltPhone)
   const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo)
-  const hasPhone = phoneTo.length >= 10
+  const hasPhone = Boolean(phoneTo)
   const channel = preferredChannel ?? (hasEmail ? 'email' : hasPhone ? 'whatsapp' : null)
   if (!channel) return { ok: false, error: 'No manager email or contact number on this job — please notify admin.' }
   if (channel === 'email' && !hasEmail) return { ok: false, error: 'No valid manager email is available for this vacancy.' }

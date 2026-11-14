@@ -5,6 +5,7 @@ import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
 import { MAX_ADDRESS_LENGTH, addressProblem } from '../data/userAddress'
+import { INDIAN_CITY_SUGGESTIONS, INDIAN_STATES_AND_UTS } from '../data/profileLocations'
 
 export type ProfileEditorHandle = {
   save: () => Promise<Profile | null>
@@ -17,15 +18,24 @@ export const ProfileEditor = forwardRef<
     phone?: string
     onSaved?: (p: Profile) => void
     onResumeChange?: (resume: ResumeRecord | null) => void
+    readOnly?: boolean
+    onRequestEdit?: () => void
   }
 >(function ProfileEditor(
-  { email, phone, onSaved, onResumeChange },
+  { email, phone, onSaved, onResumeChange, readOnly = false, onRequestEdit },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
     const saved = getProfile(email)
     return { ...saved, phone: saved.phone || phone }
   })
+  const [cityChoice, setCityChoice] = useState(() => {
+    if (!p.city) return ''
+    return INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === p.city?.toLowerCase()) ? p.city : '__other__'
+  })
+  const [languagesText, setLanguagesText] = useState(() => (p.languages ?? []).join(', '))
+  const [skillsText, setSkillsText] = useState(() => (p.skills ?? []).join(', '))
+  const [rolesText, setRolesText] = useState(() => (p.preferredRoles ?? []).join(', '))
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   // Never overwrite fields the user has already started typing into.
@@ -38,6 +48,12 @@ export const ProfileEditor = forwardRef<
     refreshProfile(email).then((remote) => {
       if (!alive || dirty.current) return
       setP((prev) => ({ ...remote, phone: prev.phone || remote.phone || phone }))
+      setCityChoice(remote.city
+        ? INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === remote.city?.toLowerCase()) ? remote.city : '__other__'
+        : '')
+      setLanguagesText((remote.languages ?? []).join(', '))
+      setSkillsText((remote.skills ?? []).join(', '))
+      setRolesText((remote.preferredRoles ?? []).join(', '))
     })
     return () => { alive = false }
   }, [email, phone])
@@ -82,6 +98,12 @@ export const ProfileEditor = forwardRef<
       const saved = await saveProfile({ ...p, email, phone: phoneResult.phone })
       dirty.current = false
       setP(saved)
+      setCityChoice(saved.city
+        ? INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === saved.city?.toLowerCase()) ? saved.city : '__other__'
+        : '')
+      setLanguagesText((saved.languages ?? []).join(', '))
+      setSkillsText((saved.skills ?? []).join(', '))
+      setRolesText((saved.preferredRoles ?? []).join(', '))
       setSavedMsg('Profile saved.')
       setTimeout(() => setSavedMsg(null), 2000)
       onSaved?.(saved)
@@ -95,18 +117,31 @@ export const ProfileEditor = forwardRef<
   useImperativeHandle(ref, () => ({ save }), [save])
 
   const split = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
-  const join = (arr: string[] = []) => arr.join(', ')
   const completionIssues = profileCompletionIssues(p)
 
   return (
     <div className="space-y-4 pb-4">
 
       <Card className={`p-4 space-y-2 ${completionIssues.length === 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-bold text-slate-900">Application profile</div>
-          <Badge color={completionIssues.length === 0 ? 'green' : 'amber'}>
-            {completionIssues.length === 0 ? 'Ready to apply' : `${completionIssues.length} required item${completionIssues.length === 1 ? '' : 's'} left`}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge color={completionIssues.length === 0 ? 'green' : 'amber'}>
+              {completionIssues.length === 0 ? 'Ready to apply' : `${completionIssues.length} required item${completionIssues.length === 1 ? '' : 's'} left`}
+            </Badge>
+            {readOnly && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-3 py-1.5 text-sm"
+                onClick={onRequestEdit}
+                aria-label="Edit profile"
+                title="Edit profile"
+              >
+                <PencilIcon /> Edit
+              </Button>
+            )}
+          </div>
         </div>
         {completionIssues.length > 0 ? (
           <>
@@ -120,6 +155,7 @@ export const ProfileEditor = forwardRef<
         )}
       </Card>
 
+      <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-90">
       <ResumeCard onResumeChange={onResumeChange} />
 
       <Card className="p-4 space-y-3">
@@ -131,11 +167,45 @@ export const ProfileEditor = forwardRef<
           </div>
           <div>
             <EditLabel label="City" inputId="profile-city" />
-            <Input id="profile-city" value={p.city ?? ''} onChange={(e) => update({ city: e.target.value })} placeholder="e.g. Hyderabad" />
+            <Select
+              id="profile-city"
+              autoComplete="address-level2"
+              value={cityChoice}
+              onChange={(e) => {
+                setCityChoice(e.target.value)
+                update({ city: e.target.value === '__other__' ? '' : e.target.value })
+              }}
+            >
+              <option value="">Select city</option>
+              {p.city && !INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === p.city?.toLowerCase()) && <option value="__other__">Other / not listed</option>}
+              {INDIAN_CITY_SUGGESTIONS.map((city) => <option key={city} value={city}>{city}</option>)}
+              {!p.city || INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === p.city?.toLowerCase())
+                ? <option value="__other__">Other / not listed</option>
+                : null}
+            </Select>
+            {cityChoice === '__other__' && (
+              <Input
+                className="mt-2"
+                id="profile-city-custom"
+                value={p.city ?? ''}
+                onChange={(e) => update({ city: e.target.value })}
+                placeholder="Type your city or town"
+                aria-label="Type your city or town"
+              />
+            )}
           </div>
           <div>
             <EditLabel label="State" inputId="profile-state" />
-            <Input id="profile-state" value={p.state ?? ''} onChange={(e) => update({ state: e.target.value })} placeholder="e.g. Telangana" />
+            <Select
+              id="profile-state"
+              autoComplete="address-level1"
+              value={p.state ?? ''}
+              onChange={(e) => update({ state: e.target.value })}
+            >
+              <option value="">Select state / union territory</option>
+              {p.state && !INDIAN_STATES_AND_UTS.includes(p.state as typeof INDIAN_STATES_AND_UTS[number]) && <option value={p.state}>{p.state} (saved)</option>}
+              {INDIAN_STATES_AND_UTS.map((state) => <option key={state} value={state}>{state}</option>)}
+            </Select>
           </div>
           <div className="sm:col-span-2">
             <EditLabel label="Address (optional)" inputId="profile-address" />
@@ -176,15 +246,36 @@ export const ProfileEditor = forwardRef<
 
         <div>
           <EditLabel label="Languages (comma separated)" inputId="profile-languages" />
-          <Input id="profile-languages" value={join(p.languages)} onChange={(e) => update({ languages: split(e.target.value) })} placeholder="English, Telugu, Hindi" />
+          <Input
+            id="profile-languages"
+            type="text"
+            inputMode="text"
+            value={languagesText}
+            onChange={(e) => { setLanguagesText(e.target.value); update({ languages: split(e.target.value) }) }}
+            placeholder="English, Telugu, Hindi"
+          />
         </div>
         <div>
           <EditLabel label="Skills (comma separated)" inputId="profile-skills" />
-          <Input id="profile-skills" value={join(p.skills)} onChange={(e) => update({ skills: split(e.target.value) })} placeholder="Sales, RCPA, Detailing, Excel" />
+          <Input
+            id="profile-skills"
+            type="text"
+            inputMode="text"
+            value={skillsText}
+            onChange={(e) => { setSkillsText(e.target.value); update({ skills: split(e.target.value) }) }}
+            placeholder="Sales, RCPA, Detailing, Excel"
+          />
         </div>
         <div>
           <EditLabel label="Preferred roles (comma separated)" inputId="profile-roles" />
-          <Input id="profile-roles" value={join(p.preferredRoles)} onChange={(e) => update({ preferredRoles: split(e.target.value) })} placeholder="MR, ABM, Field Sales" />
+          <Input
+            id="profile-roles"
+            type="text"
+            inputMode="text"
+            value={rolesText}
+            onChange={(e) => { setRolesText(e.target.value); update({ preferredRoles: split(e.target.value) }) }}
+            placeholder="MR, ABM, Field Sales"
+          />
         </div>
         <div>
           <EditLabel label="Bio" inputId="profile-bio" />
@@ -231,6 +322,7 @@ export const ProfileEditor = forwardRef<
           </div>
         ))}
       </Card>
+      </fieldset>
 
       {/* Inline save status message above the sticky bar */}
       {saveError && (

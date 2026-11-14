@@ -7,6 +7,7 @@ import {
   isPharmaSalesCategory,
   requiredHeadquartersProblem,
   normalizeIndianMobile,
+  normalizeWhatsAppNumber,
   parseHeadquarters,
   serializeHeadquarters,
   paymentStatusLabel,
@@ -43,6 +44,9 @@ assert.equal(requiredHeadquartersProblem('Finance', ['']), null, 'HQ is not requ
 assert.equal(normalizeIndianMobile('+91 90352 80940'), '9035280940')
 assert.equal(normalizeIndianMobile('09066411078'), '9066411078')
 assert.equal(normalizeIndianMobile('9066411078'), '9066411078')
+assert.equal(normalizeWhatsAppNumber('9066411078'), '919066411078')
+assert.equal(normalizeWhatsAppNumber('+91 90352 80940'), '919035280940')
+assert.equal(normalizeWhatsAppNumber('invalid'), '')
 
 const row = (overrides) => ({
   id: 1,

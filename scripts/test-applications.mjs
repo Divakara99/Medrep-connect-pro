@@ -126,6 +126,7 @@ try {
   const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
   assert.match(applySource, /preferredChannel\?: 'email' \| 'whatsapp'/, 'the selected channel is passed into the application opener')
   assert.match(applySource, /if \(channel === 'email' && !hasEmail\)/, 'email selection requires a valid manager email')
+  assert.match(applySource, /normalizeWhatsAppNumber\(job\.contact\) \|\| normalizeWhatsAppNumber\(job\.managerAltPhone\)/, 'WhatsApp can use the primary or alternate manager mobile')
   assert.match(applySource, /if \(channel === 'whatsapp' && !hasPhone\)/, 'WhatsApp selection requires a valid manager number')
   assert.match(applyUi, /<span className="block text-sm font-bold text-slate-900">WhatsApp<\/span>/, 'the apply sheet offers WhatsApp explicitly')
   assert.match(applyUi, /aria-label="Apply now — choose WhatsApp or email"/, 'job details expose an Apply now action')

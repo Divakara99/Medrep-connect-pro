@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { Button, Badge, Modal } from './ui'
 import { descriptionPoints, type Job } from '../data/jobs'
-import { isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
+import { isPharmaSalesCategory, normalizeIndianMobile, normalizeWhatsAppNumber, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { resumeDownloadUrl } from '../data/resume'
@@ -325,8 +325,12 @@ export function ApplyConfirmSheet({
 }) {
   const email = (job?.managerEmail || '').trim()
   const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  const phone = (job?.contact || '').replace(/\D/g, '')
-  const hasPhone = phone.length >= 10
+  const phoneSource = [job?.contact, job?.managerAltPhone].find((value) => Boolean(normalizeWhatsAppNumber(value)))
+  const phone = normalizeWhatsAppNumber(phoneSource)
+  const hasPhone = Boolean(phone)
+  const phoneLabel = phoneSource === job?.managerAltPhone && phoneSource
+    ? `+91 ${normalizeIndianMobile(phoneSource)}`
+    : phoneSource || ''
 
   return (
     <Modal open={!!job} onClose={onClose} title="Choose how to apply">
@@ -344,7 +348,7 @@ export function ApplyConfirmSheet({
             <span aria-hidden="true" className="text-xl">💬</span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-bold text-slate-900">WhatsApp</span>
-              <span className="block truncate text-xs text-slate-600">{hasPhone ? job.contact : 'No manager contact number on file'}</span>
+              <span className="block truncate text-xs text-slate-600">{hasPhone ? phoneLabel : 'No manager contact number on file'}</span>
             </span>
             <span className="shrink-0 text-sm font-bold text-emerald-800">{busy && channel === 'whatsapp' ? 'Opening…' : 'Open →'}</span>
           </button>
