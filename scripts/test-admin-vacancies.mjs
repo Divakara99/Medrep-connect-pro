@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { duplicateRemovalIds, groupDuplicateVacancies } from '../src/data/vacancyDuplicateGroups.ts'
+import { parseCsv, VACANCY_CSV_HEADERS } from '../src/data/vacancyCsv.ts'
 
 /**
  * Admin vacancy list: one back step, one deleted row, no auto-created columns,
@@ -49,6 +50,16 @@ assert.deepEqual(pinned[0].remove.map((job) => job.id), ['old'])
 assert.deepEqual(groupDuplicateVacancies([{ ...base, id: 'a' }]), [])
 assert.deepEqual(groupDuplicateVacancies([]), [])
 
+// ------------------------------------------------------------- CSV batches
+assert.deepEqual(VACANCY_CSV_HEADERS.slice(4, 7), ['Contact number', 'Alternate contact', 'Manager email'], 'phone and email fields have separate template columns')
+const csvRows = parseCsv('Title,Company,Category,Contact number,Alternate contact,Manager email,City,HQ,Job description\r\nMR,Acme,MR,9876543210,9123456780,hr@acme.com,Hyderabad,Hyderabad HO,"Doctors, clinics and stockists"\r\n')
+assert.equal(csvRows.length, 1, 'one vacancy is parsed per CSV data row')
+assert.equal(csvRows[0].contact, '9876543210')
+assert.equal(csvRows[0].alternateContact, '9123456780')
+assert.equal(csvRows[0].managerEmail, 'hr@acme.com')
+assert.equal(csvRows[0].description, 'Doctors, clinics and stockists', 'quoted commas inside cell data are preserved')
+assert.throws(() => parseCsv('Title,Company\nA,B'), /Missing required columns/, 'the batch importer refuses incomplete templates')
+
 // ------------------------------------------------------------ one row delete
 const jobs = await read('src/data/jobs.ts')
 const deleteJob = jobs.slice(jobs.indexOf('export async function deleteJob'))
@@ -95,6 +106,15 @@ assert.ok(admin.includes('setTabHistory((history) => [...history, tab])'), 'admi
 assert.match(admin, /const previous = tabHistory\[tabHistory\.length - 1\][\s\S]*setTabHistory\(\(history\) => history\.slice\(0, -1\)\)/, 'the back button returns through page history')
 assert.doesNotMatch(admin, /<div className="min-h-\[100dvh\] bg-slate-50" key=\{version\}>/, 'data refreshes must not remount and reset the entire admin interface')
 assert.match(admin, /<Wordmark size="text-sm" \/>/, 'the compact admin header retains the app name')
+assert.match(admin, /<BulkVacancyUpload onComplete=\{onBulkComplete\} \/>/, 'the vacancies page offers batch CSV upload')
+assert.match(admin, /<div className="relative min-w-\[12rem\] flex-1">[\s\S]*?<svg aria-hidden="true"[\s\S]*?<Input[\s\S]*?aria-label="Search vacancies"/, 'the vacancy search icon stays inside its search field')
+const bulkUpload = await read('src/components/BulkVacancyUpload.tsx')
+const bulkTemplate = await read('public/templates/vacancy-bulk-template.csv')
+assert.match(bulkUpload, /await addJob\(draft\)/, 'one batch submission posts each validated vacancy')
+assert.match(bulkUpload, /await checkVacancyDuplicates\(duplicateFields\(row\.draft\)\)/, 'batch posts pass the existing duplicate review first')
+assert.match(bulkUpload, /one number per phone column/, 'phone columns accept one number each')
+assert.match(bulkUpload, /HQ is required for MR\/ABM under the current posting rules/, 'batch upload preserves the MR/ABM HQ rule')
+assert.deepEqual(bulkTemplate.trim().split(','), VACANCY_CSV_HEADERS, 'the downloadable CSV template has distinct contact and email columns')
 const paymentsStart = admin.indexOf('function PaymentsTab(')
 const paymentsEnd = admin.indexOf('\nfunction ', paymentsStart + 1)
 const paymentsTab = admin.slice(paymentsStart, paymentsEnd)
@@ -128,19 +148,25 @@ assert.match(admin, /deleteReasonProblem\(duplicateReason\)/, 'duplicate removal
 // ------------------------------------------------------- pasted text is opt-in
 const form = await read('src/components/VacancyForm.tsx')
 const jpgTemplate = await readFile(new URL('../public/templates/vacancy-template.jpg', import.meta.url))
-const docTemplate = await read('public/templates/vacancy-template.doc')
+const docxTemplate = await readFile(new URL('../public/templates/vacancy-template.docx', import.meta.url))
+const docxText = docxTemplate.toString('utf8')
 const imageTemplate = await read('public/templates/vacancy-template.svg')
 assert.deepEqual([...jpgTemplate.subarray(0, 3)], [0xff, 0xd8, 0xff], 'the image template is an actual JPEG file')
 assert.match(form, /templates\/vacancy-template\.jpg/, 'vacancy upload offers a downloadable JPG template')
-assert.match(form, /templates\/vacancy-template\.doc/, 'vacancy upload offers a downloadable Word template')
-for (const template of [docTemplate, imageTemplate]) {
-  assert.match(template, />Data</, 'the template has a Data column')
-  assert.match(template, />Entry</, 'the template has a blank Entry column')
-  assert.match(template, /Contact number/i, 'the template covers contact details')
-  assert.match(template, /50 characters/i, 'each entry box allows 50 or more characters')
-}
+assert.match(form, /templates\/vacancy-template\.docx/, 'vacancy upload offers an editable Word document')
+assert.deepEqual([...docxTemplate.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'the editable Word template is a real DOCX ZIP package')
+assert.match(docxText, /<w:t[^>]*>Data<\/w:t>/, 'the Word template has a Data column')
+assert.match(docxText, /<w:t[^>]*>Entry<\/w:t>/, 'the Word template has an editable Entry column')
+assert.match(docxText, /Contact number/, 'the Word template covers contact details')
+assert.match(docxText, /Alternate contact number/, 'the alternate contact has its own field')
+assert.match(docxText, /Manager email/, 'email has its own field')
+assert.match(docxText, /50 characters/, 'each Word entry box is sized for a long response')
+assert.match(imageTemplate, />Data</, 'the image template has a Data column')
+assert.match(imageTemplate, />Entry</, 'the image template has an Entry column')
+assert.match(imageTemplate, /Contact number/i, 'the image template covers contact details')
+assert.match(imageTemplate, /50 characters/i, 'the image template advertises the entry capacity')
 assert.match(form, /room for at least 50 characters in each Entry box/, 'admins are told the entry capacity')
-assert.match(form, /Fill the JPG directly or complete the Word document/, 'admins are told how to complete and upload the templates')
+assert.match(form, /Fill the Word file directly, then copy its text into “Paste text”/, 'admins are told how to complete and upload the editable document')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
 assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')

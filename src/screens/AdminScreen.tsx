@@ -3,6 +3,7 @@ import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../c
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
+import { BulkVacancyUpload } from '../components/BulkVacancyUpload'
 import { VacancyTeamAdmin } from '../components/VacancyTeamAdmin'
 import { Wordmark } from '../components/Logo'
 import { CREATOR } from '../data/creator'
@@ -724,6 +725,12 @@ function VacanciesTab({ onMutate, onNotice }: {
     onMutate()
   }
 
+  async function onBulkComplete(count: number) {
+    await reload().catch(() => undefined)
+    onMutate()
+    if (count > 0) onNotice(`Uploaded ${count} ${count === 1 ? 'vacancy' : 'vacancies'} from the CSV batch.`)
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -741,17 +748,24 @@ function VacanciesTab({ onMutate, onNotice }: {
           <Button onClick={openNew}>+ Post vacancy</Button>
         </div>
       </div>
+      <BulkVacancyUpload onComplete={onBulkComplete} />
       {/* Filters: find one vacancy without scrolling the whole catalogue, and
           see at a glance which ones are waiting for an answer. */}
       <Card className="space-y-2 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Input
-            aria-label="Search vacancies"
-            className="min-w-[12rem] flex-1 text-sm"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search title, company, city, manager or poster"
-          />
+          <div className="relative min-w-[12rem] flex-1">
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.2-3.2" />
+            </svg>
+            <Input
+              aria-label="Search vacancies"
+              className="w-full !pl-9 text-sm"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search title, company, city, manager or poster"
+            />
+          </div>
           <Select aria-label="Filter by city" className="w-auto text-sm" value={city} onChange={(event) => setCity(event.target.value)}>
             <option value="all">All cities</option>
             {cityChoices.map((option) => <option key={option} value={option}>{option}</option>)}

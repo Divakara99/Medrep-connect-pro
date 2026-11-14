@@ -153,7 +153,7 @@ export const TUTORIAL_LANGUAGES: TutorialLanguage[] = [
       },
       {
         title: 'Apply in one tap',
-        body: 'Complete your profile and resume once, open any job and tap Apply. Your email app or WhatsApp opens with the application ready, and you always review it before sending. That is all — welcome to MedRep Pro.',
+        body: 'Complete your profile and resume once, open any job and tap Apply. Choose WhatsApp or email; the selected app opens with your application ready. Review it there before sending. That is all — welcome to MedRep Pro.',
       },
     ],
   },

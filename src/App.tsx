@@ -75,8 +75,7 @@ export default function App() {
   const [pendingApplyJob, setPendingApplyJob] = useState<Job | null>(null)
   const [profileGateOpen, setProfileGateOpen] = useState(false)
   const [profileMissing, setProfileMissing] = useState<string[]>([])
-  const [applyChannel, setApplyChannel] = useState<'email' | 'whatsapp'>('email')
-  const [applyTarget, setApplyTarget] = useState<string>('')
+  const [applyChannel, setApplyChannel] = useState<'email' | 'whatsapp' | null>(null)
   const [resume, setResume] = useState<ResumeRecord | null>(null)
   const [applyBusy, setApplyBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -501,14 +500,35 @@ export default function App() {
   }
 
   function openApplyConfirmation(job: Job) {
-    const email = (job.managerEmail || '').trim()
-    const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    const phone = (job.contact || '').replace(/[^\d]/g, '')
-    const hasPhone = phone.replace(/^0/, '').replace(/^91/, '').length === 10 || phone.length >= 10
-    setApplyChannel(hasEmail ? 'email' : hasPhone ? 'whatsapp' : 'email')
-    setApplyTarget(hasEmail ? email : (job.contact || ''))
+    setApplyChannel(null)
     setSelectedJob(null)
     setApplyJob(job)
+  }
+
+  async function selectApplicationChannel(channel: 'email' | 'whatsapp') {
+    if (!applyJob || !user || applyBusy) return
+    const job = applyJob
+    setApplyChannel(channel)
+    setApplyBusy(true)
+    try {
+      const result = await openApplication(user, job, resume, channel)
+      if (result.ok) {
+        const opened = result.channel === 'email'
+          ? `Mail app opened — send to ${job.manager || 'manager'} ✉️`
+          : `WhatsApp opened — message ${job.manager || 'manager'} 💬`
+        showToast(result.historyError ? `${opened} ${result.historyError}` : opened)
+        setApplyJob(null)
+        setApplyChannel(null)
+      } else {
+        showToast(result.error)
+        setApplyChannel(null)
+      }
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : 'The application could not be opened.')
+      setApplyChannel(null)
+    } finally {
+      setApplyBusy(false)
+    }
   }
 
   async function requestApplication(job: Job) {
@@ -850,27 +870,15 @@ export default function App() {
       <ApplyConfirmSheet
         job={applyJob}
         channel={applyChannel}
-        target={applyTarget}
         resume={resume}
         busy={applyBusy}
-        onClose={() => { if (!applyBusy) setApplyJob(null) }}
-        onConfirm={() => {
-          if (!applyJob || !user || applyBusy) return
-          setApplyBusy(true)
-          void openApplication(user, applyJob, resume)
-            .then((result) => {
-              if (result.ok) {
-                const opened = result.channel === 'email'
-                  ? `Mail app opened — send to ${applyJob.manager || 'manager'} ✉️`
-                  : `WhatsApp opened — message ${applyJob.manager || 'manager'} 💬`
-                showToast(result.historyError ? `${opened} ${result.historyError}` : opened)
-                setApplyJob(null)
-              } else {
-                showToast(result.error)
-              }
-            })
-            .finally(() => setApplyBusy(false))
+        onClose={() => {
+          if (!applyBusy) {
+            setApplyJob(null)
+            setApplyChannel(null)
+          }
         }}
+        onSelectChannel={(channel) => { void selectApplicationChannel(channel) }}
       />
 
       {toast && (
