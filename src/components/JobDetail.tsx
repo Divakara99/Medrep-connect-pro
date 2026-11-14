@@ -5,16 +5,10 @@ import { descriptionPoints, type Job } from '../data/jobs'
 import { isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
-import { RESUME_RETENTION_DAYS, resumeDownloadUrl } from '../data/resume'
+import { resumeDownloadUrl } from '../data/resume'
 import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
 import { jobUnlockLabel } from '../data/jobUnlock'
 import { ShareJobButton } from './ShareJobButton'
-
-function resolveChannel(job: Job): { channel: 'email' | 'whatsapp'; target: string } {
-  const email = (job.managerEmail || '').trim()
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { channel: 'email', target: email }
-  return { channel: 'whatsapp', target: job.contact || '' }
-}
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -115,7 +109,6 @@ export function JobDetail({
   // behaves like a pass for this sheet — and only for this sheet.
   const paidWindow = usePaidUnlockWindow(job ?? { jobUnlocked: false, jobUnlockExpiresAt: undefined })
   const fullDetails = Boolean(job && (unlocked || paidWindow.active))
-  const { channel } = job ? resolveChannel(job) : { channel: 'email' as const }
   const points = job ? descriptionPoints(job.description) : []
   const isPharmaRole = Boolean(job && isPharmaSalesCategory(job.category))
   const hqItems = job && isPharmaRole ? parseHeadquarters(job.hq) : []
@@ -290,7 +283,7 @@ export function JobDetail({
             </>
           ) : (
             <Button className="w-full" onClick={() => onApply(job)}>
-              {channel === 'email' ? '✉️ Apply via Email to Manager' : '💬 Apply via WhatsApp (no email on file)'}
+              ✉️ Apply
             </Button>
           )}
           <div className="flex items-center gap-2">
@@ -318,100 +311,67 @@ function Field({ label, value, multiline = false }: { label: string; value: stri
 export function ApplyConfirmSheet({
   job,
   channel,
-  target,
   resume,
   onClose,
-  onConfirm,
+  onSelectChannel,
   busy = false,
 }: {
   job: Job | null
-  channel: 'email' | 'whatsapp'
-  target: string
+  channel: 'email' | 'whatsapp' | null
   resume?: ResumeRecord | null
   onClose: () => void
-  onConfirm: () => void
+  onSelectChannel: (channel: 'email' | 'whatsapp') => void
   busy?: boolean
 }) {
+  const email = (job?.managerEmail || '').trim()
+  const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const phone = (job?.contact || '').replace(/\D/g, '')
+  const hasPhone = phone.length >= 10
+
   return (
-    <Modal open={!!job} onClose={onClose} title={channel === 'email' ? 'Send application email' : 'Send WhatsApp message'}>
+    <Modal open={!!job} onClose={onClose} title="Choose how to apply">
       {job && (
-        <div className="space-y-4">
-          {channel === 'email' ? (
-            <div className="rounded-xl bg-gradient-to-br from-brand-50 to-indigo-50 p-4 ring-1 ring-brand-200 text-sm text-slate-800">
-              <div className="flex items-start gap-2">
-                <div className="text-xl">✉️</div>
-                <div>
-                  Tapping <span className="font-bold">Send</span> opens your mail app (Gmail / Outlook / Apple Mail) with a
-                  fully pre-filled application addressed to the hiring manager. You stay on this screen.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-green-50 p-4 ring-1 ring-emerald-200 text-sm text-slate-800">
-              <div className="flex items-start gap-2">
-                <div className="text-xl">💬</div>
-                <div>
-                  No manager email is on file for this vacancy — so tapping <span className="font-bold">Send</span> opens
-                  WhatsApp in a new tab with a pre-filled message to the manager.
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-xl ring-1 ring-slate-200 p-3 text-sm space-y-1">
-            {channel === 'email' ? (
-              <>
-                <div><span className="font-semibold text-slate-900">To:</span> {target || CREATOR.adminEmail}</div>
-                <div><span className="font-semibold text-slate-900">Cc:</span> {CREATOR.adminEmail}</div>
-                <div><span className="font-semibold text-slate-900">Subject:</span> Application for {job.title} at {job.company}</div>
-              </>
-            ) : (
-              <>
-                <div><span className="font-semibold text-slate-900">WhatsApp to:</span> {target || job.contact}</div>
-                <div><span className="font-semibold text-slate-900">Manager:</span> {job.manager || '—'}</div>
-              </>
-            )}
-            <div><span className="font-semibold text-slate-900">Role:</span> {job.title}</div>
-            <div><span className="font-semibold text-slate-900">City:</span> {job.location}</div>
-          </div>
-
+        <div className="space-y-3">
+          <p className="text-sm text-slate-700">
+            Choose WhatsApp or email for <span className="font-bold">{job.title}</span> at {job.company || 'this company'}.
+          </p>
+          <button
+            type="button"
+            onClick={() => onSelectChannel('whatsapp')}
+            disabled={busy || !hasPhone}
+            className="flex w-full items-center gap-3 rounded-xl bg-emerald-50 p-3 text-left ring-1 ring-emerald-200 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span aria-hidden="true" className="text-xl">💬</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-slate-900">WhatsApp</span>
+              <span className="block truncate text-xs text-slate-600">{hasPhone ? job.contact : 'No manager contact number on file'}</span>
+            </span>
+            <span className="shrink-0 text-sm font-bold text-emerald-800">{busy && channel === 'whatsapp' ? 'Opening…' : 'Open →'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectChannel('email')}
+            disabled={busy || !hasEmail}
+            className="flex w-full items-center gap-3 rounded-xl bg-brand-50 p-3 text-left ring-1 ring-brand-200 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span aria-hidden="true" className="text-xl">✉️</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-slate-900">Email</span>
+              <span className="block truncate text-xs text-slate-600">{hasEmail ? email : 'No manager email on file'}</span>
+            </span>
+            <span className="shrink-0 text-sm font-bold text-brand-800">{busy && channel === 'email' ? 'Opening…' : 'Open →'}</span>
+          </button>
           {resume ? (
-            <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50/50 p-3 space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="text-xl">📎</div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-900 truncate">{resume.fileName}</div>
-                  {/* Kept short and unbreakable so the auto-delete message stays
-                      on one line on a phone. */}
-                  <div className="text-xs text-slate-600 mt-0.5 whitespace-nowrap">
-                    Private · auto-deleted after {RESUME_RETENTION_DAYS} days
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-amber-900">
-                A browser mail link cannot carry a file. Tap <span className="font-bold">Download resume</span>, then attach
-                that file in the mail app that opens next.
-              </p>
-              <ResumeDownloadButton resume={resume} />
+            <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900 ring-1 ring-amber-200">
+              To attach your resume to an email, download it here first; then attach it after your mail app opens.
+              <div className="mt-2"><ResumeDownloadButton resume={resume} /></div>
             </div>
           ) : (
-            <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-              No resume uploaded yet — add one in <span className="font-bold">Account → Profile details</span> so you can attach it to
-              every application.
-            </div>
+            <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 ring-1 ring-slate-200">
+              Your chosen app opens with a prepared application. Review it there, then tap Send.
+            </p>
           )}
-
-          <div className="text-xs text-slate-500">
-            {channel === 'email'
-              ? 'Your mail app will open — simply tap Send after reviewing.'
-              : 'WhatsApp opens in a new tab with a pre-formatted message — tap Send to deliver it to the manager.'}
-            {' '}The application is also listed under Account → My applications.
-          </div>
-
-          <Button className="w-full" onClick={onConfirm} disabled={busy}>
-            {busy ? 'Preparing…' : channel === 'email' ? '✉️ Open mail app & send' : '💬 Open WhatsApp & send'}
-          </Button>
-          <Button variant="ghost" className="w-full" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" className="w-full" onClick={onClose} disabled={busy}>Cancel</Button>
         </div>
       )}
     </Modal>

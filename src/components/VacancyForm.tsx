@@ -439,14 +439,14 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                     ⬇ Download JPG template
                   </a>
                   <a
-                    href={`${import.meta.env.BASE_URL}templates/vacancy-template.doc`}
-                    download="medrep-vacancy-template.doc"
+                    href={`${import.meta.env.BASE_URL}templates/vacancy-template.docx`}
+                    download="medrep-vacancy-template.docx"
                     className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
                   >
-                    ⬇ Download Word template
+                    ⬇ Download editable Word template
                   </a>
                 </div>
-                <p className="text-xs leading-snug text-slate-600">Both templates have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the JPG directly or complete the Word document and export/photograph it as an image before uploading. A clear vacancy poster also works.</p>
+                <p className="text-xs leading-snug text-slate-600">The JPG and editable Word template have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the Word file directly, then copy its text into “Paste text” or upload a screenshot. Use the CSV batch template on the Vacancies page to post multiple roles together.</p>
                 <Input
                   type="file"
                   accept="image/*"

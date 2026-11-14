@@ -121,7 +121,17 @@ try {
   const { rows: [aal1Count] } = await db.query('SELECT count(*)::int AS count FROM public.applications')
   assert.equal(aal1Count.count, 0, 'password-only admins stay locked out')
 
-  console.log('applications SQL: verified identity, owner-only history and admin review passed')
+  const applySource = await readFile(new URL('../src/data/apply.ts', import.meta.url), 'utf8')
+  const applyUi = await readFile(new URL('../src/components/JobDetail.tsx', import.meta.url), 'utf8')
+  const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.match(applySource, /preferredChannel\?: 'email' \| 'whatsapp'/, 'the selected channel is passed into the application opener')
+  assert.match(applySource, /if \(channel === 'email' && !hasEmail\)/, 'email selection requires a valid manager email')
+  assert.match(applySource, /if \(channel === 'whatsapp' && !hasPhone\)/, 'WhatsApp selection requires a valid manager number')
+  assert.match(applyUi, /<span className="block text-sm font-bold text-slate-900">WhatsApp<\/span>/, 'the apply sheet offers WhatsApp explicitly')
+  assert.match(applyUi, /<span className="block text-sm font-bold text-slate-900">Email<\/span>/, 'the apply sheet offers email explicitly')
+  assert.match(appSource, /openApplication\(user, job, resume, channel\)/, 'selecting a channel opens the matching composer')
+
+  console.log('applications: verified identity, owner-only history, admin review, and explicit WhatsApp/email routing passed')
 } finally {
   await db.close()
 }

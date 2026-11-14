@@ -157,6 +157,7 @@ export async function openApplication(
   user: User,
   job: Job,
   resume?: ResumeRecord | null,
+  preferredChannel?: 'email' | 'whatsapp',
 ): Promise<OpenApplicationResult> {
   const profile = await refreshProfile(user.email)
   const missingProfileDetails = profileCompletionIssues(profile, user.phone)
@@ -169,24 +170,18 @@ export async function openApplication(
 
   const emailTo = (job.managerEmail || '').trim()
   const phoneTo = normalizePhone(job.contact)
+  const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo)
+  const hasPhone = phoneTo.length >= 10
+  const channel = preferredChannel ?? (hasEmail ? 'email' : hasPhone ? 'whatsapp' : null)
+  if (!channel) return { ok: false, error: 'No manager email or contact number on this job — please notify admin.' }
+  if (channel === 'email' && !hasEmail) return { ok: false, error: 'No valid manager email is available for this vacancy.' }
+  if (channel === 'whatsapp' && !hasPhone) return { ok: false, error: 'No valid manager contact number is available for WhatsApp.' }
 
-  let channel: 'email' | 'whatsapp' = 'email'
-  let to = emailTo
-  let href = ''
-  const { subject, body } = buildTextContent(user, job, profile, 'email')
-
-  if (emailTo && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo)) {
-    channel = 'email'
-    to = emailTo
-    href = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(CREATOR.adminEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  } else if (phoneTo.length >= 10) {
-    channel = 'whatsapp'
-    to = phoneTo
-    const whatsapp = buildTextContent(user, job, profile, 'whatsapp')
-    href = `https://wa.me/${to}?text=${encodeURIComponent(whatsapp.body)}`
-  } else {
-    return { ok: false, error: 'No manager email or contact number on this job — please notify admin.' }
-  }
+  const to = channel === 'email' ? emailTo : phoneTo
+  const { subject, body } = buildTextContent(user, job, profile, channel)
+  const href = channel === 'email'
+    ? `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(CREATOR.adminEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    : `https://wa.me/${to}?text=${encodeURIComponent(body)}`
 
   const record: ApplicationRecord = {
     id: '',
