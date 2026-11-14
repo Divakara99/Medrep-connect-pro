@@ -10,7 +10,7 @@ import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
-import { getProfile, refreshProfile, saveProfile, type Profile } from '../data/profile'
+import { getProfile, profileCompletionIssues, refreshProfile, saveProfile, type Profile } from '../data/profile'
 import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
 import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
 import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
@@ -38,6 +38,8 @@ export function AccountScreen({
   const editorRef = useRef<ProfileEditorHandle>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const [photoPath, setPhotoPath] = useState(() => getProfile(user.email).photoPath ?? '')
+  const [profileEditing, setProfileEditing] = useState(() => profileCompletionIssues(getProfile(user.email), user.phone).length > 0)
+  const profileModeTouched = useRef(profileEditing)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const visiblePhotoUrl = photoPath ? photoUrl : null
   const [photoBusy, setPhotoBusy] = useState(false)
@@ -66,10 +68,15 @@ export function AccountScreen({
   useEffect(() => {
     let alive = true
     refreshProfile(user.email).then((profile) => {
-      if (alive) setPhotoPath(profile.photoPath ?? '')
+      if (alive) {
+        setPhotoPath(profile.photoPath ?? '')
+        if (!profileModeTouched.current) {
+          setProfileEditing(profileCompletionIssues(profile, user.phone).length > 0)
+        }
+      }
     })
     return () => { alive = false }
-  }, [user.email])
+  }, [user.email, user.phone])
 
   useEffect(() => {
     let alive = true
@@ -214,7 +221,15 @@ export function AccountScreen({
         ref={editorRef}
         email={user.email}
         phone={user.phone}
+        readOnly={!profileEditing}
+        onRequestEdit={() => {
+          profileModeTouched.current = true
+          setProfileEditing(true)
+        }}
         onSaved={(profile) => {
+          profileModeTouched.current = true
+          const complete = profileCompletionIssues(profile, user.phone).length === 0
+          setProfileEditing(!complete)
           onSubscribed({ ...user, phone: profile.phone })
           onProfileSaved(profile)
         }}
@@ -439,6 +454,8 @@ export function AccountScreen({
           <Button
             variant="primary"
             className="flex-1"
+            disabled={!profileEditing}
+            title={!profileEditing ? 'Tap Edit profile above to make changes' : 'Save profile'}
             onClick={() => editorRef.current?.save()}
           >
             💾 Save profile
