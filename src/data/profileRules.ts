@@ -56,7 +56,7 @@ export function profileCompletionIssues(
     const row = item as Record<string, unknown>
     return Boolean(text(row.degree) && text(row.institution) && text(row.year))
   })
-  if (!hasCompleteEducation) issues.push('one education entry with degree, institution, and year')
+  if (!hasCompleteEducation) issues.push('one education entry with degree, institution, and pass-out year')
 
   if (text(profile.bio).length < PROFILE_BIO_MIN_LENGTH) {
     issues.push(`a short profile summary (at least ${PROFILE_BIO_MIN_LENGTH} characters)`)

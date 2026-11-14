@@ -37,8 +37,8 @@ export function unlockActive(
 
 /**
  * True while a paid ₹5 unlock for this job is still running. The server already
- * withholds the fields once the hour is up; this only keeps an open sheet from
- * showing stale values until the next read.
+ * withholds the fields once the 24-hour window is up; this only keeps an open
+ * sheet from showing stale values until the next read.
  */
 export function paidUnlockActive(
   job: Pick<Job, 'jobUnlocked' | 'jobUnlockExpiresAt'>,
@@ -52,6 +52,8 @@ export function paidUnlockActive(
 /** "9 min left", "40 s left" — never negative. */
 export function formatUnlockRemaining(remainingMs: number): string {
   if (remainingMs <= 0) return '0 s'
+  if (remainingMs >= 24 * 60 * 60 * 1000) return `${Math.ceil(remainingMs / (24 * 60 * 60 * 1000))} d`
+  if (remainingMs >= 60 * 60 * 1000) return `${Math.ceil(remainingMs / (60 * 60 * 1000))} h`
   const seconds = Math.ceil(remainingMs / 1000)
   if (seconds < 60) return `${seconds} s`
   return `${Math.ceil(seconds / 60)} min`

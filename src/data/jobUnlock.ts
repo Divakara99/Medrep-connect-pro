@@ -10,10 +10,10 @@ import {
 /**
  * The ₹5 single-job unlock.
  *
- * One vacancy, the full contact block, bought once and kept for that job — it
- * does not run out and it never renews. The server owns the price (500 paise)
- * and the permanence (`expires_at = 'infinity'`); this module only drives
- * Razorpay Checkout and waits for the verified result.
+ * One vacancy's full contact block, bought for 24 hours with no auto-renewal.
+ * The server owns the price (500 paise) and expiry; this module only drives
+ * Razorpay Checkout and waits for the verified result. Older permanent unlocks
+ * remain valid.
  *
  * One price, both places: ₹5 on medrepconnect.in and ₹5 inside the Android app.
  *
@@ -27,6 +27,7 @@ import {
  * again without touching anything else.
  */
 export const JOB_UNLOCK_PRICE_RUPEES = 5
+export const JOB_UNLOCK_VALIDITY_HOURS = 24
 
 /** The ₹5 unlock inside the Android app. Off = website only. */
 const ANDROID_IN_APP_JOB_UNLOCK = true
@@ -42,7 +43,7 @@ export function paidJobUnlockAvailable(): boolean {
 export type JobUnlockPrefill = { name?: string; email?: string }
 
 export function jobUnlockLabel(): string {
-  return `₹${JOB_UNLOCK_PRICE_RUPEES} · Unlock this job`
+  return `₹${JOB_UNLOCK_PRICE_RUPEES} · Unlock this job (${JOB_UNLOCK_VALIDITY_HOURS}h)`
 }
 
 /**
@@ -86,7 +87,8 @@ export async function buyJobUnlock(
         void (async () => {
           try {
             const verified = await verifyJobUnlock(response)
-            // A permanent unlock has no expiry — that is a success, not a miss.
+            // Legacy permanent unlocks return no expiry; new unlocks return
+            // their verified 24-hour expiry.
             if (verified.ok && (verified.permanent || verified.expiresAt)) {
               succeed(verified.expiresAt ?? 'permanent')
               return

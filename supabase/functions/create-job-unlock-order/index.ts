@@ -3,7 +3,8 @@ import { jsonResponse, readJson } from '../_shared/http.ts'
 import { createRazorpayOrder, razorpayCredentials } from '../_shared/razorpay.ts'
 
 /**
- * One-time price of one job's full contact details, in paise; the unlock is permanent.
+ * One-time price of one job's full contact details, in paise; each new unlock
+ * is valid for 24 hours.
  *
  * ₹5 is decided HERE, on the server, and nowhere else. The browser cannot send
  * an amount, so it cannot buy the contact for less. The same number is repeated in
@@ -50,7 +51,7 @@ Deno.serve(async (request: Request) => {
       notes: {
         user_id: context.user.id,
         job_id: jobId,
-        unlock: 'job_contact_permanent',
+        unlock: 'job_contact_24h',
         payment_record_id: recordId,
       },
     })

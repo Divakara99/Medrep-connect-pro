@@ -67,8 +67,8 @@ export function PlanInfoPage({ inApp, onClose }: { inApp: boolean; onClose: () =
               pass, or starts a fresh one if the old pass already ended.
             </li>
             <li>
-              The ₹5 job unlock is separate and permanent: it stays open for that one job and is never counted down with
-              a pass.
+              The ₹5 job unlock is separate: it opens that one job's full contacts for 24 hours. All-jobs passes remain
+              active for the duration shown on the selected plan.
             </li>
           </ul>
         </section>

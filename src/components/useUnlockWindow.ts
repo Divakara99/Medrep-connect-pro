@@ -28,8 +28,8 @@ export function useUnlockWindow(job: Pick<Job, 'companyUnlocked' | 'unlockExpire
 }
 
 /**
- * Paid ₹5 unlock status for one job. A permanent unlock has no expiry; older
- * time-limited rows are still handled safely if any remain during rollout.
+ * Paid ₹5 unlock status for one job. New purchases expire after 24 hours;
+ * legacy permanent rows have no expiry and remain active.
  */
 export function usePaidUnlockWindow(job: Pick<Job, 'jobUnlocked' | 'jobUnlockExpiresAt'>) {
   const [now, setNow] = useState(() => Date.now())

@@ -34,7 +34,7 @@ import { adaptiveBannerHeightPx, bannerAllowedOnTab, rewardedUnlockOffered, type
 import { isAndroidApp } from './data/platform'
 import { adsDiagnostics, initAds, preloadRewardedUnlock, showRewardedUnlock, type RewardedOutcome } from './data/ads'
 import { pollForCompanyUnlock } from './data/companyUnlocks'
-import { buyJobUnlock, paidJobUnlockAvailable } from './data/jobUnlock'
+import { buyJobUnlock, JOB_UNLOCK_VALIDITY_HOURS, paidJobUnlockAvailable } from './data/jobUnlock'
 
 type View = 'loading' | 'login' | 'admin-login' | 'admin-mfa' | 'vacancy-login' | 'user' | 'admin' | 'vacancy'
 
@@ -78,7 +78,7 @@ export default function App() {
   const [applyChannel, setApplyChannel] = useState<'email' | 'whatsapp' | null>(null)
   const [resume, setResume] = useState<ResumeRecord | null>(null)
   const [applyBusy, setApplyBusy] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ text: string; tone: 'neutral' | 'success' | 'warning' } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifTick, setNotifTick] = useState(0)
@@ -470,7 +470,7 @@ export default function App() {
   }, [user, unlocked, unlockingJobId])
 
   /**
-   * ₹5 → one job's full contact, kept for that job (website only).
+   * ₹5 → one job's full contact for 24 hours (website and Android app).
    *
    * The purchase is verified server-side; the app then re-reads the projection
    * so the sheet shows what the database actually allows, not what the browser
@@ -484,7 +484,7 @@ export default function App() {
       const fresh = await loadVisibleJobs()
       setJobs(fresh)
       setSelectedJob((current) => (current ? fresh.find((candidate) => candidate.id === current.id) ?? current : current))
-      showToast('Unlocked ✓ This job\'s full contact stays open from now on')
+      showToast(`Unlocked ✓ This job's full contact is open for ${JOB_UNLOCK_VALIDITY_HOURS} hours`, 'success')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'The ₹5 unlock could not be completed.')
     } finally {
@@ -494,9 +494,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, buyingUnlockId])
 
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2200)
+  function showToast(msg: string, tone: 'neutral' | 'success' | 'warning' = 'neutral') {
+    setToast({ text: msg, tone })
+    setTimeout(() => setToast(null), 2800)
   }
 
   function openApplyConfirmation(job: Job) {
@@ -551,15 +551,15 @@ export default function App() {
     const missing = profileCompletionIssues(profile)
     setProfileMissing(missing)
     if (missing.length > 0) {
-      showToast('Profile saved. Complete the remaining required details to apply.')
+      showToast('Profile saved. Complete the remaining required details shown above.', 'warning')
       return
     }
     const job = pendingApplyJob
     setPendingApplyJob(null)
     setProfileGateOpen(false)
     goBackInApp()
-    openApplyConfirmation(job)
-    showToast('Profile complete — continuing your application.')
+    setSelectedJob(job)
+    showToast('Profile saved — back to the job. Tap Apply now to choose WhatsApp or email.', 'success')
   }
 
   if (view === 'loading') {
@@ -882,8 +882,8 @@ export default function App() {
       />
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg animate-fade-in">
-          {toast}
+        <div className={`fixed bottom-24 left-1/2 z-40 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full px-4 py-2 text-center text-sm font-semibold text-white shadow-lg animate-fade-in ${toast.tone === 'success' ? 'bg-emerald-600' : toast.tone === 'warning' ? 'bg-amber-600' : 'bg-slate-900'}`} role="status" aria-live="polite">
+          {toast.text}
         </div>
       )}
 
