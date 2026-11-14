@@ -39,6 +39,12 @@ export function normalizeIndianMobile(raw: string): string {
   return digits
 }
 
+/** Convert a vacancy's Indian mobile to a WhatsApp-ready country-prefixed number. */
+export function normalizeWhatsAppNumber(raw?: string): string {
+  const local = normalizeIndianMobile(raw || '')
+  return local.length === MOBILE_DIGITS ? `91${local}` : ''
+}
+
 /** True when the typed text contains something no phone number contains. */
 export function hasNonPhoneCharacters(raw: string): boolean {
   // Formatting characters (space + - ( ) . /) are allowed and simply dropped;
