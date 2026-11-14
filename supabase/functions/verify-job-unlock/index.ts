@@ -3,17 +3,18 @@ import { jsonResponse, readJson } from '../_shared/http.ts'
 import { captureRazorpayPayment, fetchRazorpayPayment, verifyCheckoutSignature } from '../_shared/razorpay.ts'
 
 /**
- * Verifies one ₹5 job unlock. The unlock is permanent for that job.
+ * Verifies one ₹5 job unlock. New purchases reveal one job's full contacts for
+ * 24 hours; permanent unlocks made before the validity change remain active.
  *
  * Nothing the browser says is trusted: the order must belong to this user, the
  * amount in the pending row is 500 paise, Razorpay must confirm that exact
- * amount on that exact order, and the payment must be captured. The row is
- * stamped 'paid' with expires_at = 'infinity', which list_visible_jobs() reads
- * as "this job is unlocked for good". Replaying the same payment returns the
- * same row instead of charging twice.
+ * amount on that exact order, and the payment must be captured. The database
+ * also enforces the 24-hour expiry so an older deployed function cannot grant
+ * an unlimited new unlock. Replaying a payment returns the same row.
  */
 const JOB_UNLOCK_PRICE_PAISE = 500
-const JOB_UNLOCK_NEVER_EXPIRES = 'infinity'
+const JOB_UNLOCK_VALIDITY_HOURS = 24
+const LEGACY_PERMANENT_EXPIRY = 'infinity'
 
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return optionsResponse()
@@ -48,10 +49,15 @@ Deno.serve(async (request: Request) => {
     if (stored.razorpay_payment_id !== paymentId) {
       return jsonResponse({ error: 'This order was already confirmed by a different payment.' }, 409)
     }
+    const permanent = stored.expires_at === LEGACY_PERMANENT_EXPIRY
+    if (!permanent && (!stored.expires_at || Date.parse(stored.expires_at) <= Date.now())) {
+      return jsonResponse({ error: 'This 24-hour unlock has expired. Reopen the job to unlock it again.' }, 410)
+    }
     return jsonResponse({
       ok: true,
       jobId: stored.job_id,
-      expiresAt: stored.expires_at === JOB_UNLOCK_NEVER_EXPIRES ? null : stored.expires_at,
+      expiresAt: permanent ? null : stored.expires_at,
+      permanent,
       alreadyConfirmed: true,
     })
   }
@@ -95,17 +101,19 @@ Deno.serve(async (request: Request) => {
       }, 202)
     }
 
-    const now = new Date()
+    const paidAt = new Date()
+    const expiresAt = new Date(paidAt.getTime() + JOB_UNLOCK_VALIDITY_HOURS * 60 * 60 * 1000)
     // Only a still-pending row can be paid, and only once: the UNIQUE
-    // razorpay_payment_id constraint backs this up at the database level.
+    // razorpay_payment_id constraint backs this up at the database level. The
+    // trigger stamps the same 24-hour window even if an older function version
+    // sends a permanent expiry.
     const { data: updated, error: updateError } = await context.adminClient
       .from('job_unlocks')
       .update({
         razorpay_payment_id: paymentId,
         payment_status: 'paid',
-        paid_at: now.toISOString(),
-        // Permanent: 'infinity' keeps the row valid without a countdown.
-        expires_at: JOB_UNLOCK_NEVER_EXPIRES,
+        paid_at: paidAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
       })
       .eq('razorpay_order_id', orderId)
       .eq('user_id', context.user.id)
@@ -128,7 +136,7 @@ Deno.serve(async (request: Request) => {
         .eq('user_id', context.user.id)
         .maybeSingle()
       if (current?.razorpay_payment_id === paymentId) {
-        const permanent = current.expires_at === JOB_UNLOCK_NEVER_EXPIRES
+        const permanent = current.expires_at === LEGACY_PERMANENT_EXPIRY
         return jsonResponse({
           ok: true,
           jobId: current.job_id,
@@ -143,8 +151,8 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({
       ok: true,
       jobId: updated.job_id,
-      expiresAt: null,
-      permanent: true,
+      expiresAt: updated.expires_at,
+      permanent: false,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Payment verification failed.'

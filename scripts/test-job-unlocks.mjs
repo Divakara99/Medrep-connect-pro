@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises'
 /**
  * The ₹5 single-job unlock, in four rules:
  *
- *   1. One payment buys ONE job, permanently — never a pass, never a
- *      subscription, never a repeat charge for the same vacancy.
+ *   1. One payment buys ONE job for 24 hours — never a pass, never a
+ *      subscription; older permanent unlocks are grandfathered.
  *   2. The price is decided on the server (500 paise), and the database refuses
  *      any other amount. The browser never sends money.
  *   3. Only a verified, captured Razorpay payment can open it; users can read
@@ -19,6 +19,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 const sql = await read('supabase/job_unlocks.sql')
 const permanentSql = await read('supabase/job_unlock_permanent.sql')
+const durationSql = await read('supabase/job_unlock_24h.sql')
 const createFn = await read('supabase/functions/create-job-unlock-order/index.ts')
 const verifyFn = await read('supabase/functions/verify-job-unlock/index.ts')
 const buyer = await read('src/data/jobUnlock.ts')
@@ -27,7 +28,7 @@ const jobs = await read('src/data/jobs.ts')
 const detail = await read('src/components/JobDetail.tsx')
 const app = await read('src/App.tsx')
 
-// 1. One job, one permanent payment -------------------------------------------
+// 1. One job, one verified 24-hour payment -----------------------------------
 assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.job_unlocks/, 'paid unlocks have their own table')
 assert.match(sql, /CONSTRAINT job_unlocks_order_unique UNIQUE \(razorpay_order_id\)/, 'one row per Razorpay order')
 assert.match(sql, /CONSTRAINT job_unlocks_payment_unique UNIQUE \(razorpay_payment_id\)/, 'one row per Razorpay payment')
@@ -67,14 +68,16 @@ assert.match(createFn, /user_id: context\.user\.id/, 'the order belongs to the s
 assert.match(createFn, /payment_status: 'pending'/, 'a new order reveals nothing yet')
 assert.match(createFn, /notes: \{[\s\S]*job_id: jobId/, 'the job travels with the gateway order')
 
-// 5. Verification: signature, exact amount, capture, permanent ---------------
-assert.match(verifyFn, /const JOB_UNLOCK_NEVER_EXPIRES = 'infinity'/, 'a paid unlock never lapses')
+// 5. Verification: signature, exact amount, capture, 24-hour expiry ---------
+assert.match(verifyFn, /const JOB_UNLOCK_VALIDITY_HOURS = 24/, 'a new paid unlock lasts 24 hours')
 assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation is not charged twice')
 assert.match(verifyFn, /verifyCheckoutSignature\(secret, orderId, paymentId, signature\)/, 'the signature is verified server-side')
 assert.match(verifyFn, /payment\.amount !== JOB_UNLOCK_PRICE_PAISE/, 'a payment of any other amount is refused')
-assert.match(verifyFn, /payment\.status !== 'captured'/, 'only a captured payment grants the permanent unlock')
+assert.match(verifyFn, /payment\.status !== 'captured'/, 'only a captured payment grants an unlock')
 assert.match(verifyFn, /\.eq\('payment_status', 'pending'\)/, 'only a pending row can be paid')
-assert.match(verifyFn, /expires_at: JOB_UNLOCK_NEVER_EXPIRES/, 'the server stamps the permanent unlock')
+assert.match(verifyFn, /paidAt\.getTime\(\) \+ JOB_UNLOCK_VALIDITY_HOURS \* 60 \* 60 \* 1000/, 'the Edge Function computes exactly 24 hours')
+assert.match(verifyFn, /expires_at: expiresAt\.toISOString\(\)/, 'the server stamps the expiry')
+assert.match(verifyFn, /LEGACY_PERMANENT_EXPIRY/, 'old permanent unlocks continue to be recognized')
 assert.match(verifyFn, /alreadyConfirmed: true/, 'a replayed confirmation returns the same unlock')
 assert.match(verifyFn, /\.eq\('user_id', context\.user\.id\)/, 'orders are scoped to their owner')
 assert.ok(
@@ -101,12 +104,13 @@ assert.match(detail, /paidUnlock\?\.available && \(/, 'the ₹5 button appears o
 assert.match(detail, /jobUnlockLabel\(\)/, 'the button shows the price and the window')
 assert.match(detail, /Full contact unlocked for this job/, 'an active paid unlock is stated on the sheet')
 // Both unlock buttons must fit one line on a phone: short labels, no fillers.
-assert.match(buyer, /· Unlock this job`/, 'the ₹5 button reads "Unlock this job"')
-assert.doesNotMatch(buyer, /Unlock this job for good/, 'the "for good" tail is gone from the button')
+assert.match(buyer, /JOB_UNLOCK_VALIDITY_HOURS = 24/, 'single-job validity is centralized at 24 hours')
+assert.match(buyer, /Unlock this job \(\$\{JOB_UNLOCK_VALIDITY_HOURS\}h\)/, 'the ₹5 button states its 24-hour validity')
+assert.doesNotMatch(buyer, /Unlock this job for good/, 'the permanent-only button text is gone')
 assert.match(detail, /🔓 Unlock all jobs/, 'the pass button reads "Unlock all jobs"')
 assert.doesNotMatch(detail, /Unlock manager contact/, 'the long pass label is gone')
 assert.match(detail, /grid grid-cols-2 gap-2/, 'the ₹5 and pass choices share one row')
-assert.match(detail, /₹5 unlocks this job; a pass unlocks all jobs\./, 'the row clarifies the two choices')
+assert.match(detail, /₹5 unlocks this job for \$\{JOB_UNLOCK_VALIDITY_HOURS\} hours;/, 'the row clarifies the single-job validity')
 assert.match(detail, /onClick=\{onSubscribe\}/, 'the pass button invokes its selection action')
 assert.match(app, /onSubscribe=\{openPlansFromJob\}/, 'tapping Unlock all jobs shifts to pass selection')
 assert.match(app, /setPassReturnJob\(selectedJob\)[\s\S]{0,100}setSelectedJob\(null\)[\s\S]{0,100}navigate\('plans'\)/, 'pass selection remembers the originating job')
@@ -117,12 +121,15 @@ assert.match(app, /available: paidJobUnlockAvailable\(\) && !unlocked/, 'the app
 assert.match(app, /await buyJobUnlock\(\{ id: job\.id, title: job\.title \}/, 'the buy runs through the verified helper')
 assert.match(app, /const fresh = await loadVisibleJobs\(\)/, 'after paying, the server projection is re-read')
 
-// 9. The unlock is permanent for that job, enforced in the database ----------
-assert.match(permanentSql, /ALTER COLUMN expires_at SET DEFAULT 'infinity'/, 'new rows never lapse')
-assert.match(permanentSql, /UPDATE public\.job_unlocks[\s\S]*SET expires_at = 'infinity'/, 'already-paid unlocks stop counting down')
-assert.match(permanentSql, /CREATE TRIGGER job_unlocks_permanent/, 'the rule is enforced on every write')
-assert.match(permanentSql, /NEW\.expires_at := 'infinity'/, 'even an older caller cannot hand out an expiring unlock')
-assert.match(permanentSql, /ju\.expires_at < 'infinity'::timestamptz/, 'the app is told "no countdown", not a date')
-assert.doesNotMatch(buyer, /for 1 hour|1 hour/i, 'the ₹5 unlock is no longer described as one hour')
+// 9. New unlocks expire after 24 hours; previously paid rows are grandfathered
+assert.match(permanentSql, /UPDATE public\.job_unlocks[\s\S]*SET expires_at = 'infinity'/, 'the previous migration preserved paid unlock promises')
+assert.match(durationSql, /DROP TRIGGER IF EXISTS job_unlocks_permanent/, 'the permanent trigger is removed')
+assert.match(durationSql, /ALTER COLUMN expires_at DROP DEFAULT/, 'new pending rows do not default to infinity')
+assert.match(durationSql, /NEW\.expires_at := NEW\.paid_at \+ interval '24 hours'/, 'the database enforces the 24-hour window')
+assert.match(durationSql, /OLD\.payment_status IS DISTINCT FROM 'paid'/, 'expiry is set only when a payment first becomes paid')
+assert.doesNotMatch(durationSql, /UPDATE public\.job_unlocks\s+SET/, 'existing paid unlocks are not shortened')
+assert.match(detail, /₹5 unlocks this job for \$\{JOB_UNLOCK_VALIDITY_HOURS\} hours; a pass unlocks all jobs for its plan validity\./, 'the two access durations are made clear')
+assert.match(buyer, /24 hours/, 'the single-job duration is described in the purchase helper')
+assert.match(buyer, /succeed\(verified\.expiresAt \?\? 'permanent'\)/, 'verified expiry or legacy permanence is returned to the app')
 
-console.log('job unlock: ₹5 on web and Android buys one job for good, server-priced and verified, own-row reads only — passed')
+console.log('job unlock: 24-hour single-job access, legacy paid rows grandfathered, server-priced and verified — passed')

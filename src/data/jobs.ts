@@ -45,9 +45,9 @@ export type Job = {
    */
   unlockExpiresAt?: string | null
   /**
-   * Paid ₹5 single-job unlock: the whole contact block for THIS vacancy,
-   * permanently after server verification. The app mirrors the server projection;
-   * it never decides access itself.
+   * Paid ₹5 single-job unlock: the whole contact block for THIS vacancy for
+   * 24 hours after server verification; older paid rows may remain permanent.
+   * The app mirrors the server projection; it never decides access itself.
    */
   jobUnlocked?: boolean
   jobUnlockExpiresAt?: string | null

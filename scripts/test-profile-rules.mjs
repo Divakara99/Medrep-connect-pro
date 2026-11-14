@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { PROFILE_BIO_MIN_LENGTH, profileCompletionIssues } from '../src/data/profileRules.ts'
 
 const completeProfile = {
@@ -27,7 +28,7 @@ assert.deepEqual(emptyIssues, [
   'at least one language',
   'at least one skill',
   'at least one preferred role',
-  'one education entry with degree, institution, and year',
+  'one education entry with degree, institution, and pass-out year',
   `a short profile summary (at least ${PROFILE_BIO_MIN_LENGTH} characters)`,
 ])
 
@@ -44,5 +45,11 @@ assert.deepEqual(profileCompletionIssues({
   ...completeProfile,
   bio: 'x'.repeat(PROFILE_BIO_MIN_LENGTH),
 }), [], 'the minimum-length bio is accepted')
+
+const editor = await readFile(new URL('../src/components/ProfileEditor.tsx', import.meta.url), 'utf8')
+const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+assert.match(editor, /EditLabel label="Subject"/, 'education calls the field Subject')
+assert.match(editor, /EditLabel label="Pass-out year"/, 'education labels the completion year clearly')
+assert.match(app, /setSelectedJob\(job\)[\s\S]*Profile saved — back to the job[\s\S]*'success'/, 'a completed profile returns to the job with a green success toast')
 
 console.log('profile rules: required job-ready details, phone formats, education, bio, and fresher path passed')

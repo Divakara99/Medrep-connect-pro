@@ -7,7 +7,7 @@ import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { resumeDownloadUrl } from '../data/resume'
 import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
-import { jobUnlockLabel } from '../data/jobUnlock'
+import { JOB_UNLOCK_VALIDITY_HOURS, jobUnlockLabel } from '../data/jobUnlock'
 import { ShareJobButton } from './ShareJobButton'
 
 function timeAgo(ts: number): string {
@@ -277,13 +277,13 @@ export function JobDetail({
               </div>
               <p className="text-center text-xs font-medium text-slate-500">
                 {paidUnlock?.available
-                  ? '₹5 unlocks this job; a pass unlocks all jobs.'
+                  ? `₹5 unlocks this job for ${JOB_UNLOCK_VALIDITY_HOURS} hours; a pass unlocks all jobs for its plan validity.`
                   : 'Choose a pass to unlock all job contacts.'}
               </p>
             </>
           ) : (
-            <Button className="w-full" onClick={() => onApply(job)}>
-              ✉️ Apply
+            <Button className="w-full" onClick={() => onApply(job)} aria-label="Apply now — choose WhatsApp or email">
+              ✉️ Apply now
             </Button>
           )}
           <div className="flex items-center gap-2">

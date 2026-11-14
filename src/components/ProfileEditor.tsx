@@ -202,9 +202,9 @@ export const ProfileEditor = forwardRef<
           <div key={e.id} className="rounded-xl ring-1 ring-slate-200 p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div><EditLabel label="Degree" inputId={`education-${e.id}-degree`} /><Input id={`education-${e.id}-degree`} placeholder="Degree" value={e.degree} onChange={(ev) => updateEdu(e.id, { degree: ev.target.value })} /></div>
-              <div><EditLabel label="Field" inputId={`education-${e.id}-field`} /><Input id={`education-${e.id}-field`} placeholder="Field" value={e.field} onChange={(ev) => updateEdu(e.id, { field: ev.target.value })} /></div>
+              <div><EditLabel label="Subject" inputId={`education-${e.id}-field`} /><Input id={`education-${e.id}-field`} placeholder="Subject" value={e.field} onChange={(ev) => updateEdu(e.id, { field: ev.target.value })} /></div>
               <div className="sm:col-span-2"><EditLabel label="Institution" inputId={`education-${e.id}-institution`} /><Input id={`education-${e.id}-institution`} placeholder="Institution" value={e.institution} onChange={(ev) => updateEdu(e.id, { institution: ev.target.value })} /></div>
-              <div><EditLabel label="Year" inputId={`education-${e.id}-year`} /><Input id={`education-${e.id}-year`} placeholder="Year" value={e.year} onChange={(ev) => updateEdu(e.id, { year: ev.target.value })} /></div>
+              <div><EditLabel label="Pass-out year" inputId={`education-${e.id}-year`} /><Input id={`education-${e.id}-year`} placeholder="e.g. 2023" value={e.year} onChange={(ev) => updateEdu(e.id, { year: ev.target.value })} /></div>
               <div className="flex items-end justify-end"><Button variant="ghost" onClick={() => removeEdu(e.id)}>Remove</Button></div>
             </div>
           </div>
