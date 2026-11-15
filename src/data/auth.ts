@@ -431,7 +431,11 @@ export async function deleteUserAccount(userId: string): Promise<{ ok: true } | 
 export async function logout(): Promise<void> {
   activeUser = null
   adminUsersCache = []
-  await supabase.auth.signOut()
+  // A user tapping Log out expects this device to leave the session. Supabase's
+  // default global sign-out calls the Auth server and can leave the UI waiting
+  // on a network request; local scope clears this session without that roundtrip.
+  const { error } = await supabase.auth.signOut({ scope: 'local' })
+  if (error) throw error
 }
 
 /** The current session user, refreshed by Auth events and getAuthSnapshot(). */

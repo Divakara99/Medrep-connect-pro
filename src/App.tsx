@@ -396,12 +396,11 @@ export default function App() {
     // server-owned subscription has been loaded.
   }
 
-  async function onLogout() {
+  function onLogout() {
     clearPaymentCache(); clearResumeCache(); clearMyApplicationCache(); clearSupportCache()
     clearJobs()
     clearProfileCache()
     clearNotificationCache()
-    await doLogout()
     setRecoveryMode(false)
     setUser(null)
     setSelectedJob(null)
@@ -409,7 +408,12 @@ export default function App() {
     setPendingApplyJob(null)
     setProfileGateOpen(false)
     setProfileMissing([])
+    // Switch screens immediately. A rejected Auth request must not leave the
+    // admin console mounted or create an unhandled promise from a button click.
     setView(portalLoginView)
+    void doLogout().catch((error: unknown) => {
+      console.error('Could not clear the local Supabase session during sign-out.', error)
+    })
   }
 
   function openJob(j: Job) {

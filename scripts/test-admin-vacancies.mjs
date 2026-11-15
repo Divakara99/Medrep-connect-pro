@@ -85,6 +85,11 @@ assert.match(jobs, /export async function loadDeletedVacancies/, 'the bin can be
 
 // ------------------------------------------------------------- back navigation
 const admin = await read('src/screens/AdminScreen.tsx')
+const app = await read('src/App.tsx')
+const auth = await read('src/data/auth.ts')
+assert.match(admin, /onClick=\{\(\) => \{\s*setAdminMenuOpen\(false\)\s*onExit\(\)\s*\}\}/, 'the admin-menu logout button reaches the app exit handler')
+assert.match(app, /function onLogout\(\) \{[\s\S]*?setView\(portalLoginView\)[\s\S]*?void doLogout\(\)\.catch/, 'logout returns to the correct portal immediately and handles sign-out failure')
+assert.match(auth, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/, 'logout clears this device without waiting on a global sign-out request')
 const dashboardStart = admin.indexOf('function DashboardTab(')
 const dashboardEnd = admin.indexOf('function SupabaseSyncStatus()', dashboardStart)
 const dashboard = admin.slice(dashboardStart, dashboardEnd)
