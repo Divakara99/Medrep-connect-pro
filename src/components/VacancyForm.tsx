@@ -74,6 +74,8 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
   const [hqError, setHqError] = useState<string | null>(null)
   const [division, setDivision] = useState(start?.division ?? '')
   const [category, setCategory] = useState<Exclude<Job['category'], 'All'>>((start?.category as Exclude<Job['category'], 'All'> | undefined) ?? 'MR')
+  const [manualRolePosition, setManualRolePosition] = useState(Boolean(start?.rolePosition))
+  const [customRolePosition, setCustomRolePosition] = useState(start?.rolePosition ?? '')
   const [salary, setSalary] = useState(start?.salary ?? '')
   const [experience, setExperience] = useState(start?.experience ?? '')
   const [qualification, setQualification] = useState(start?.qualification ?? '')
@@ -160,7 +162,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
     switch (key) {
       case 'title': return title
       case 'company': return company
-      case 'category': return category
+      case 'category': return manualRolePosition ? customRolePosition : category
       case 'manager': return manager
       case 'contact': return contact
       case 'managerAltPhone': return managerAltPhone
@@ -212,7 +214,11 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       setHqError(null)
     }
     if (fields.division?.trim()) setDivision(fields.division.trim())
-    if (fields.category) setCategory(fields.category)
+    if (fields.category) {
+      setCategory(fields.category)
+      setManualRolePosition(false)
+      setCustomRolePosition('')
+    }
     if (fields.salary?.trim()) setSalary(fields.salary.trim())
     if (fields.experience?.trim()) setExperience(fields.experience.trim())
     if (fields.qualification?.trim()) setQualification(fields.qualification.trim())
@@ -327,6 +333,8 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
     setHqEntries(savedHqEntries.length > 0 ? savedHqEntries : [''])
     setDivision(job?.division ?? '')
     setCategory(job?.category ?? 'MR')
+    setManualRolePosition(Boolean(job?.rolePosition))
+    setCustomRolePosition(job?.rolePosition ?? '')
     setSalary(job?.salary ?? '')
     setExperience(job?.experience ?? '')
     setQualification(job?.qualification ?? '')
@@ -363,6 +371,18 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       setError('Title, company, and location are required.')
       return
     }
+    if (manualRolePosition) {
+      const position = customRolePosition.trim()
+      if (position.length < 2 || position.length > 80) {
+        setError('Enter a Role/Position using 2 to 80 characters.')
+        return
+      }
+      const confidentialPosition = findConfidentialContact(position)
+      if (confidentialPosition) {
+        setError('Role/Position cannot contain contact details.')
+        return
+      }
+    }
     const hqProblem = requiredHeadquartersProblem(category, hqEntries)
     setHqError(hqProblem)
     if (hqProblem) {
@@ -397,6 +417,10 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
         setDuplicatePrompt({ result: duplicateResult, approvalKey })
         return
       }
+      const savedFields = {
+        ...fields,
+        rolePosition: manualRolePosition ? customRolePosition.trim() : undefined,
+      }
       let posterPath = job?.posterPath
       if (sourceImage) {
         const uploaded = await uploadVacancyPoster(sourceImage)
@@ -406,15 +430,15 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       }
       if (mode === 'team') {
         // The team posts through the database function: no pinning, no editing.
-        const result = await teamPostVacancy({ ...fields, posterPath })
+        const result = await teamPostVacancy({ ...savedFields, posterPath })
         if (!result.ok) throw new Error(result.error)
       } else if (job) {
-        await updateJob(job.id, { ...fields, pinned, posterPath, extraFields: cleanExtraFields(extraFields) })
+        await updateJob(job.id, { ...savedFields, pinned, posterPath, extraFields: cleanExtraFields(extraFields) })
         if (job.posterPath && job.posterPath !== posterPath) {
           try { await deleteVacancyPoster(job.posterPath) } catch (cleanupError) { console.warn('Old vacancy poster cleanup failed:', cleanupError) }
         }
       } else {
-        await addJob({ ...fields, pinned, posterPath, extraFields: cleanExtraFields(extraFields) })
+        await addJob({ ...savedFields, pinned, posterPath, extraFields: cleanExtraFields(extraFields) })
       }
       newlyUploadedPoster = undefined
       if (!job) resetDraft()
@@ -648,11 +672,37 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
           </div>
           <div>
             <Label>Role/Position</Label>
-            <Select value={category} onChange={(e) => setCategory(e.target.value as Exclude<Job['category'], 'All'>)}>
+            <Select
+              value={manualRolePosition ? '__manual_role_position__' : category}
+              onChange={(event) => {
+                if (event.target.value === '__manual_role_position__') {
+                  setManualRolePosition(true)
+                  setCategory('Field')
+                } else {
+                  setManualRolePosition(false)
+                  setCustomRolePosition('')
+                  setCategory(event.target.value as Exclude<Job['category'], 'All'>)
+                }
+              }}
+            >
               {CATEGORIES.filter((c) => c !== 'All').map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+              <option value="__manual_role_position__">Other — enter manually</option>
             </Select>
+            {manualRolePosition && (
+              <div className="mt-2">
+                <Label>Enter Role/Position</Label>
+                <Input
+                  value={customRolePosition}
+                  onChange={(event) => setCustomRolePosition(event.target.value)}
+                  maxLength={80}
+                  placeholder="e.g. Key Account Manager"
+                  aria-label="Enter custom Role/Position"
+                />
+                <p className="mt-1 text-xs text-slate-500">2–80 characters · contact details are not allowed.</p>
+              </div>
+            )}
           </div>
           <div>
             <Label>Manager</Label>

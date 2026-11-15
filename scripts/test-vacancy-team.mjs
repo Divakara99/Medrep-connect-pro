@@ -61,6 +61,8 @@ try {
     CREATE ROLE authenticated;
     CREATE ROLE service_role;
     CREATE SCHEMA auth;
+    CREATE SCHEMA storage;
+    CREATE TABLE storage.objects (bucket_id text, name text);
     CREATE TABLE auth.users (id uuid PRIMARY KEY, email text);
     INSERT INTO auth.users (id, email) VALUES
       ('${adminId}', 'admin@example.org'),
@@ -123,6 +125,9 @@ try {
   const duplicateMigration = await readFile(new URL('../supabase/vacancy_duplicate_check.sql', import.meta.url), 'utf8')
   await db.exec(duplicateMigration)
   await db.exec(duplicateMigration) // The new RPC and field projections are repeatable.
+  const manualRoleMigration = await readFile(new URL('../supabase/role_position_manual_entry.sql', import.meta.url), 'utf8')
+  await db.exec(manualRoleMigration)
+  await db.exec(manualRoleMigration) // Custom Role/Position persistence is repeatable.
 
   // 1. Backfill: earlier vacancies are counted once, labelled 'earlier'.
   await asAdmin()
@@ -135,13 +140,15 @@ try {
   await asTeam()
   const posted = (await db.query(
     `SELECT public.employee_post_vacancy($1::jsonb) AS job`,
-    [JSON.stringify(fields({ contact: '+91 98765 43210', managerEmail: 'hr@acme.example' }))],
+    [JSON.stringify(fields({ category: 'Field', rolePosition: 'Key Account Manager', contact: '+91 98765 43210', managerEmail: 'hr@acme.example' }))],
   )).rows[0].job
   assert.match(posted.id, /^[0-9a-f-]{36}$/)
   assert.equal(posted.title, 'Medical Representative')
   await asAdmin() // the raw table is admin-only; check what was written
   const stored = (await db.query(`SELECT data FROM public.vacancies WHERE id = $1`, [posted.id])).rows[0].data
   assert.equal(stored.postedBy, 'team@example.org')
+  assert.equal(stored.category, 'Field', 'custom Role/Position uses Field only as its internal group')
+  assert.equal(stored.rolePosition, 'Key Account Manager', 'the custom Role/Position is persisted verbatim')
   assert.equal(stored.pinned, false, 'the team cannot pin vacancies')
   assert.equal(stored.qualification, 'B.Pharm')
   assert.equal(stored.ageLimit, 'Below 30 years')
@@ -156,7 +163,7 @@ try {
   // contains a public summary, never contacts or the public description text.
   const exactDuplicate = (await db.query(
     `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
-    [JSON.stringify(fields())],
+    [JSON.stringify(fields({ category: 'Field', rolePosition: 'Key Account Manager' }))],
   )).rows[0].result
   assert.equal(exactDuplicate.status, 'exact')
   assert.equal(exactDuplicate.matches[0].id, posted.id)
@@ -165,7 +172,7 @@ try {
   }
   const possibleDuplicate = (await db.query(
     `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
-    [JSON.stringify(fields({ qualification: '' }))],
+    [JSON.stringify(fields({ category: 'Field', rolePosition: 'Key Account Manager', qualification: '' }))],
   )).rows[0].result
   assert.equal(possibleDuplicate.status, 'possible', 'missing optional details are labelled possible, not exact')
   assert.equal(possibleDuplicate.matches[0].matchType, 'possible')
@@ -176,7 +183,7 @@ try {
   assert.equal(differentVacancy.status, 'none', 'a conflicting salary does not count as a duplicate')
   const excluded = (await db.query(
     `SELECT public.check_vacancy_duplicates($1::jsonb, $2::text) AS result`,
-    [JSON.stringify(fields()), posted.id],
+    [JSON.stringify(fields({ category: 'Field', rolePosition: 'Key Account Manager' })), posted.id],
   )).rows[0].result
   assert.equal(excluded.status, 'none', 'editing excludes its own row from duplicate checks')
 
@@ -187,7 +194,7 @@ try {
   await asTeam()
   const legacyPossible = (await db.query(
     `SELECT public.check_vacancy_duplicates($1::jsonb, NULL) AS result`,
-    [JSON.stringify(fields())],
+    [JSON.stringify(fields({ category: 'Field', rolePosition: 'Key Account Manager' }))],
   )).rows[0].result
   assert.equal(legacyPossible.status, 'possible')
   assert.equal(legacyPossible.matches[0].id, posted.id)
@@ -201,6 +208,7 @@ try {
   // 3. Validation and the shared description guard still apply.
   await rejects(db.query(`SELECT public.employee_post_vacancy($1::jsonb)`, [JSON.stringify(fields({ title: 'x' }))]), /title of 2 to 120/)
   await rejects(db.query(`SELECT public.employee_post_vacancy($1::jsonb)`, [JSON.stringify(fields({ category: 'Sales' }))]), /valid category/)
+  await rejects(db.query(`SELECT public.employee_post_vacancy($1::jsonb)`, [JSON.stringify(fields({ category: 'Field', rolePosition: 'x' }))]), /Role\/Position/)
   await rejects(db.query(`SELECT public.employee_post_vacancy($1::jsonb)`, [JSON.stringify(fields({ description: 'mail hr@acme.example' }))]), /Remove the email/)
 
   // 4. The team has no direct table access.
@@ -215,7 +223,7 @@ try {
   const listed = (await db.query(`SELECT public.employee_list_vacancies() AS job`)).rows.map((r) => r.job)
   assert.ok(listed.some((job) => job.id === posted.id))
   for (const job of listed) {
-    assert.deepEqual(Object.keys(job).sort(), ['ageLimit', 'category', 'company', 'id', 'location', 'postedAt', 'postedBy', 'qualification', 'title', 'vacancyCount'])
+    assert.deepEqual(Object.keys(job).sort(), ['ageLimit', 'category', 'company', 'fillCheck', 'id', 'location', 'postedAt', 'postedBy', 'qualification', 'rolePosition', 'title', 'vacancyCount'])
   }
 
   // 6. Delete needs a real reason. A deleted vacancy cannot be deleted again.
@@ -226,20 +234,22 @@ try {
 
   // 7. Admin can post and delete, and both are audited. Missing reasons are recorded as such.
   await asAdmin()
-  await db.query(`INSERT INTO public.vacancies (id, data) VALUES ('admin-new', '{"title":"Admin Post","company":"Admin Co","location":"Mumbai","category":"Finance"}')`)
+  await db.query(`INSERT INTO public.vacancies (id, data) VALUES ('admin-new', '{"title":"Admin Post","company":"Admin Co","location":"Mumbai","category":"Field","rolePosition":"Regional Sales Lead"}')`)
   await db.query(`UPDATE public.vacancies SET data = '{"deleted":true,"deletedAt":1720000000000}' WHERE id = 'admin-new'`)
   await db.query(`UPDATE public.vacancies SET data = data || '{"deleted":true,"deletedAt":1720000000001,"deleteReason":"Duplicate entry"}' WHERE id = 'old-live'`)
 
   // 8. Admin reads the whole activity log. Actor, reason and title are all present.
-  rows = (await db.query(`SELECT action, vacancy_id, title, actor_role, actor_email, reason FROM public.vacancy_audit ORDER BY id`)).rows
+  rows = (await db.query(`SELECT action, vacancy_id, title, role_position, actor_role, actor_email, reason FROM public.vacancy_audit ORDER BY id`)).rows
   const teamAdded = rows.find((r) => r.action === 'added' && r.vacancy_id === posted.id)
   assert.deepEqual([teamAdded.actor_role, teamAdded.actor_email], ['vacancy_editor', 'team@example.org'])
+  assert.equal(teamAdded.role_position, 'Key Account Manager', 'the audit stores the custom Role/Position')
   const teamDeleted = rows.find((r) => r.action === 'deleted' && r.vacancy_id === posted.id)
   assert.equal(teamDeleted.reason, 'Position filled by another agency')
   assert.equal(teamDeleted.title, 'Medical Representative', 'title is kept after the tombstone')
   assert.equal(teamDeleted.actor_role, 'vacancy_editor')
   const adminAdded = rows.find((r) => r.action === 'added' && r.vacancy_id === 'admin-new')
   assert.deepEqual([adminAdded.actor_role, adminAdded.actor_email], ['admin', 'admin@example.org'])
+  assert.equal(adminAdded.role_position, 'Regional Sales Lead', 'admin audit snapshots retain custom Role/Position')
   const adminDeleted = rows.find((r) => r.action === 'deleted' && r.vacancy_id === 'admin-new')
   assert.equal(adminDeleted.reason, 'No reason recorded')
   const adminReasoned = rows.find((r) => r.action === 'deleted' && r.vacancy_id === 'old-live')

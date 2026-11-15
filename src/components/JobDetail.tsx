@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { Button, Badge, Modal } from './ui'
-import { descriptionPoints, type Job } from '../data/jobs'
+import { descriptionPoints, rolePositionLabel, type Job } from '../data/jobs'
 import { isPharmaSalesCategory, normalizeIndianMobile, normalizeWhatsAppNumber, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
@@ -166,7 +166,7 @@ export function JobDetail({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge color="brand">{job.category}</Badge>
+                <Badge color="brand">{rolePositionLabel(job)}</Badge>
                 {job.pinned && <Badge color="amber">★ Pinned priority</Badge>}
               </div>
               <div className="text-sm text-slate-600 mt-1">

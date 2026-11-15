@@ -104,6 +104,7 @@ export type AuditRow = {
   company: string
   location: string
   category: string
+  rolePosition: string
   actorRole: ActorRole
   actorEmail: string
   reason: string | null

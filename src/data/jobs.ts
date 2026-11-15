@@ -58,7 +58,10 @@ export type Job = {
   location: string
   hq?: string
   division?: string
+  /** Internal filter group; custom positions use Field plus rolePosition. */
   category: Exclude<JobCategory, 'All'>
+  /** Optional public free-text role label when Other/manual entry is selected. */
+  rolePosition?: string
   salary?: string
   experience?: string
   qualification?: string
@@ -74,6 +77,10 @@ export type Job = {
   extraFields?: ExtraField[]
   /** "Is this still open?" — the ask to the team and their answer. */
   fillCheck?: FillCheck
+}
+
+export function rolePositionLabel(job: Pick<Job, 'category' | 'rolePosition'>): string {
+  return job.rolePosition?.trim() || job.category
 }
 
 const LEGACY_JOBS_KEY = 'mrc_jobs_v1'
@@ -124,6 +131,7 @@ function parseJob(value: unknown): Job | null {
     hq: typeof row.hq === 'string' ? row.hq : undefined,
     division: typeof row.division === 'string' ? row.division : undefined,
     category: row.category as Job['category'],
+    rolePosition: typeof row.rolePosition === 'string' ? row.rolePosition : undefined,
     salary: typeof row.salary === 'string' ? row.salary : undefined,
     experience: typeof row.experience === 'string' ? row.experience : undefined,
     qualification: typeof row.qualification === 'string' ? row.qualification : undefined,
@@ -194,7 +202,7 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
   const notice = broadcast({
     kind: 'job-posted',
     jobTitle: job.title,
-    category: job.category,
+    category: rolePositionLabel(job),
     location: job.location,
     pinned: job.pinned,
   }, { meta: { jobId: job.id } })
@@ -204,7 +212,7 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
 
 const CONTENT_FIELDS: (keyof Job)[] = [
   'title', 'company', 'manager', 'contact', 'managerAltPhone', 'managerEmail',
-  'location', 'hq', 'division', 'category', 'salary', 'experience', 'qualification', 'ageLimit', 'vacancyCount', 'description',
+  'location', 'hq', 'division', 'category', 'rolePosition', 'salary', 'experience', 'qualification', 'ageLimit', 'vacancyCount', 'description',
   'extraFields',
 ]
 
@@ -267,6 +275,7 @@ export type DeletedVacancy = {
   company: string
   location: string
   category: string
+  rolePosition?: string
   salary?: string
   experience?: string
   qualification?: string
@@ -284,7 +293,7 @@ export type DeletedVacancy = {
 }
 
 type DeletedRow = { id: string; data: unknown }
-type AuditSnapshot = { title: string; company: string; location: string; category: string }
+type AuditSnapshot = { title: string; company: string; location: string; category: string; rolePosition: string }
 
 /**
  * The last thing the activity log knows about each deleted vacancy. Used only
@@ -295,17 +304,18 @@ async function auditSnapshots(): Promise<Map<string, AuditSnapshot>> {
   const snapshots = new Map<string, AuditSnapshot>()
   const { data, error } = await supabase
     .from('vacancy_audit')
-    .select('vacancy_id,title,company,location,category,created_at')
+    .select('vacancy_id,title,company,location,category,role_position,created_at')
     .order('created_at', { ascending: false })
     .limit(500)
   if (error) return snapshots
-  for (const row of (data ?? []) as { vacancy_id: string; title: string; company: string; location: string; category: string }[]) {
+  for (const row of (data ?? []) as { vacancy_id: string; title: string; company: string; location: string; category: string; role_position?: string }[]) {
     const current = snapshots.get(row.vacancy_id)
     const next = {
       title: row.title ?? '',
       company: row.company ?? '',
       location: row.location ?? '',
       category: row.category ?? '',
+      rolePosition: row.role_position ?? '',
     }
     // Newest first: keep the first row that actually carries a title.
     if (!current || (!current.title && next.title)) snapshots.set(row.vacancy_id, next)
@@ -343,6 +353,7 @@ export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
       company: text('company') || audit?.company || '',
       location: keptLocation || audit?.location || '',
       category: keptCategory || audit?.category || '',
+      rolePosition: text('rolePosition') || audit?.rolePosition || undefined,
       salary: text('salary') || undefined,
       experience: text('experience') || undefined,
       qualification: text('qualification') || undefined,
@@ -473,7 +484,7 @@ export function filterJobs(
   return jobs.filter((j) => {
     if (opts.category && opts.category !== 'All' && j.category !== opts.category) return false
     if (q) {
-      const hay = `${j.title} ${j.company ?? ''} ${j.category} ${j.description ?? ''}`.toLowerCase()
+      const hay = `${j.title} ${j.company ?? ''} ${rolePositionLabel(j)} ${j.description ?? ''}`.toLowerCase()
       if (!hay.includes(q)) return false
     }
     if (loc && !j.location.toLowerCase().includes(loc)) return false

@@ -193,7 +193,7 @@ export function VacancyTeamAdmin() {
               row.title || '—',
               row.company || '—',
               row.location || '—',
-              row.category || '—',
+              row.rolePosition || row.category || '—',
               actorLabel(row),
             ]}
           />

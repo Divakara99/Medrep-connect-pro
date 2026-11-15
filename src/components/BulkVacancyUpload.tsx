@@ -41,23 +41,29 @@ function prepareRow(row: VacancyCsvRow, index: number): PreparedRow {
   const company = row.company.trim()
   const location = row.city.trim()
   const category = row.category.trim()
+  const rolePosition = row.rolePosition.trim() || category
+  const validCategory = CATEGORIES.find((option) => option !== 'All' && option === rolePosition) as Exclude<Job['category'], 'All'> | undefined
+  const savedCategory = validCategory ?? (rolePosition ? 'Field' : undefined)
   if (!title) errors.push('Title is required.')
   if (!company) errors.push('Company is required.')
   if (!location) errors.push('City is required.')
-  if (!CATEGORIES.some((option) => option !== 'All' && option === category)) errors.push('Choose a valid category.')
+  if (!rolePosition) errors.push('Role/Position is required.')
+  if (rolePosition && !validCategory) {
+    if (rolePosition.length < 2 || rolePosition.length > 80) errors.push('Role/Position must be 2 to 80 characters.')
+    if (findConfidentialContact(rolePosition)) errors.push('Role/Position cannot contain contact details.')
+  }
   const contactProblem = mobileNumberProblem(row.contact)
   if (contactProblem) errors.push(`Contact number: ${contactProblem}`)
   const alternateProblem = mobileNumberProblem(row.alternateContact, { optional: true })
   if (alternateProblem) errors.push(`Alternate contact: ${alternateProblem}`)
   if (row.managerEmail && !emailPattern.test(row.managerEmail.trim())) errors.push('Manager email is not valid.')
   const hqEntries = row.hq.split(/[;\r\n]+/).map((entry) => entry.trim()).filter(Boolean)
-  const hqProblem = requiredHeadquartersProblem(category, hqEntries)
+  const hqProblem = requiredHeadquartersProblem(savedCategory ?? '', hqEntries)
   if (hqProblem) errors.push(`HQ: ${hqProblem}`)
   const descriptionProblem = findConfidentialContact(row.description)
   if (descriptionProblem) errors.push(descriptionProblem)
 
-  const validCategory = CATEGORIES.find((option) => option !== 'All' && option === category) as Exclude<Job['category'], 'All'> | undefined
-  if (errors.length || !validCategory) return { rowNumber: index + 2, title: title || `CSV row ${index + 2}`, errors }
+  if (errors.length || !savedCategory) return { rowNumber: index + 2, title: title || `CSV row ${index + 2}`, errors }
 
   return {
     rowNumber: index + 2,
@@ -66,7 +72,8 @@ function prepareRow(row: VacancyCsvRow, index: number): PreparedRow {
     draft: {
       title,
       company,
-      category: validCategory,
+      category: savedCategory,
+      rolePosition: validCategory ? undefined : rolePosition,
       manager: row.manager.trim() || undefined,
       contact: digitsOnly(row.contact),
       managerAltPhone: row.alternateContact.trim() ? normalizeIndianMobile(row.alternateContact) : undefined,
@@ -174,7 +181,7 @@ export function BulkVacancyUpload({ onComplete }: { onComplete: (count: number) 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-slate-900">Upload multiple vacancies</h3>
-          <p className="mt-0.5 text-xs text-slate-600">Fill one vacancy per CSV row, then upload the validated batch in one action.</p>
+          <p className="mt-0.5 text-xs text-slate-600">Fill one vacancy per CSV row. Enter a listed Role/Position or type a custom one; then upload the validated batch.</p>
         </div>
         <a
           href={`${import.meta.env.BASE_URL}templates/vacancy-bulk-template.csv`}

@@ -11,6 +11,7 @@ import { APP_VERSION_LABEL } from '../data/version'
 import { currentUser, deleteUserAccount, getUsers, grantManualAccess, refreshAdminUsers, type User } from '../data/auth'
 import {
   CATEGORIES,
+  rolePositionLabel,
   deleteJob,
   getJobs,
   getLegacyJobs,
@@ -497,7 +498,7 @@ function VacanciesTab({ onMutate, onNotice }: {
   const visibleJobs = useMemo(() => {
     const text = query.trim().toLowerCase()
     return jobs.filter((job) => {
-      if (text && !`${job.title} ${job.company} ${job.location} ${job.category} ${job.manager ?? ''} ${job.postedBy ?? ''}`.toLowerCase().includes(text)) return false
+      if (text && !`${job.title} ${job.company} ${job.location} ${rolePositionLabel(job)} ${job.manager ?? ''} ${job.postedBy ?? ''}`.toLowerCase().includes(text)) return false
       if (city !== 'all' && job.location !== city) return false
       if (filterCategory !== 'all' && job.category !== filterCategory) return false
       if (fillFilter === 'unasked' && fillCheckState(job.fillCheck) !== 'none') return false
@@ -572,6 +573,7 @@ function VacanciesTab({ onMutate, onNotice }: {
       company: item.company,
       location: item.location,
       category: (item.category || 'MR') as Job['category'],
+      rolePosition: item.rolePosition,
     })
     setFormSeq((value) => value + 1)
     setOpen(true)
@@ -857,14 +859,14 @@ function VacanciesTab({ onMutate, onNotice }: {
                 )}
                 {/* Phone-only meta, so no column is lost on a small screen. */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
-                  <Badge color="brand">{j.category}</Badge>
+                  <Badge color="brand">{rolePositionLabel(j)}</Badge>
                   <span className="text-xs font-medium text-slate-600">📍 {j.location}</span>
                   <span className="text-xs text-slate-400">· {postedOn(j.postedAt)}</span>
                 </div>
               </div>
               <div className="hidden truncate text-sm text-slate-700 sm:block">{j.location}</div>
               <div className="hidden sm:block">
-                <Badge color="brand">{j.category}</Badge>
+                <Badge color="brand">{rolePositionLabel(j)}</Badge>
               </div>
               <div className="hidden text-xs font-medium text-slate-500 sm:block">{postedOn(j.postedAt)}</div>
               <div className="mt-2.5 flex items-center gap-1.5 sm:mt-0 sm:justify-end">
@@ -989,7 +991,7 @@ function VacanciesTab({ onMutate, onNotice }: {
                             ['Title', item.title],
                             ['Company', item.company],
                             ['City', item.location],
-                            ['Role/Position', item.category],
+                            ['Role/Position', item.rolePosition || item.category],
                             ['Salary', item.salary ?? ''],
                             ['Experience', item.experience ?? ''],
                             ['Qualification', item.qualification ?? ''],

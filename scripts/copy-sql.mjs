@@ -41,6 +41,7 @@ const MIGRATIONS = [
   { file: 'supabase/vacancy_fill_check.sql', what: '"Is this still open?" — the team sees the question and answers Open/Filled, stamped server-side' },
   { file: 'supabase/vacancy_employee_limit_50.sql', what: 'Database-enforced cap of 50 employee logins, including concurrent inserts' },
   { file: 'supabase/vacancy_posters.sql', what: 'Private vacancy poster bucket, admin uploads, entitled-user viewing, and posterPath projection' },
+  { file: 'supabase/role_position_manual_entry.sql', what: 'Manual Role/Position entry persisted publicly while keeping the existing Field filter group' },
 ]
 
 const root = fileURLToPath(new URL('..', import.meta.url))

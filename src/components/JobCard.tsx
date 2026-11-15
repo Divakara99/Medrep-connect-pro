@@ -1,6 +1,6 @@
 import { Card } from './ui'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
-import type { Job } from '../data/jobs'
+import { rolePositionLabel, type Job } from '../data/jobs'
 import { salaryParts } from '../data/salaryText'
 import { isPharmaSalesCategory, parseHeadquarters } from '../data/vacancyRules'
 import { useUnlockWindow } from './useUnlockWindow'
@@ -156,7 +156,7 @@ export function JobCard({
         <span className="max-w-full rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold !leading-tight text-sky-800 ring-1 ring-sky-100">
           {job.experience || 'Fresher'}
         </span>
-        <span className="max-w-full rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold !leading-tight text-violet-800 ring-1 ring-violet-100">{job.category}</span>
+        <span className="max-w-full rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold !leading-tight text-violet-800 ring-1 ring-violet-100">{rolePositionLabel(job)}</span>
         {isPharmaRole && job.division && (
           <span className="max-w-full rounded-full bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold !leading-tight text-indigo-800 ring-1 ring-indigo-100">{job.division}</span>
         )}

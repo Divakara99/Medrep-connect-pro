@@ -21,6 +21,7 @@ export type VacancyCsvRow = {
   title: string
   company: string
   category: string
+  rolePosition: string
   manager: string
   contact: string
   alternateContact: string
@@ -41,8 +42,8 @@ const HEADER_KEYS: Record<string, keyof VacancyCsvRow> = {
   'job title': 'title',
   company: 'company',
   category: 'category',
-  'role/position': 'category',
-  'role / position': 'category',
+  'role/position': 'rolePosition',
+  'role / position': 'rolePosition',
   manager: 'manager',
   'contact number': 'contact',
   contact: 'contact',
@@ -110,19 +111,20 @@ export function parseCsv(text: string): VacancyCsvRow[] {
 
   const headers = records[0].map((value) => value.trim().toLowerCase())
   const mappedHeaders = headers.map((header) => HEADER_KEYS[header])
-  const required = ['title', 'company', 'category', 'contact', 'city'] as const
+  const required = ['title', 'company', 'contact', 'city'] as const
   const available = new Set(mappedHeaders.filter((key): key is keyof VacancyCsvRow => Boolean(key)))
-  const missing = required.filter((key) => !available.has(key))
+  const missing: string[] = required.filter((key) => !available.has(key))
+  if (!available.has('rolePosition') && !available.has('category')) missing.push('rolePosition')
   if (missing.length) {
-    const labels: Record<(typeof required)[number], string> = {
-      title: 'Title', company: 'Company', category: 'Role/Position', contact: 'Contact number', city: 'City',
+    const labels: Record<string, string> = {
+      title: 'Title', company: 'Company', rolePosition: 'Role/Position', category: 'Role/Position', contact: 'Contact number', city: 'City',
     }
     throw new Error(`Missing required column${missing.length === 1 ? '' : 's'}: ${missing.map((key) => labels[key]).join(', ')}.`)
   }
 
   return records.slice(1).map((record) => {
     const row: VacancyCsvRow = {
-      title: '', company: '', category: '', manager: '', contact: '', alternateContact: '',
+      title: '', company: '', category: '', rolePosition: '', manager: '', contact: '', alternateContact: '',
       managerEmail: '', city: '', hq: '', division: '', salary: '', experience: '',
       qualification: '', ageLimit: '', vacancyCount: '', description: '',
     }
