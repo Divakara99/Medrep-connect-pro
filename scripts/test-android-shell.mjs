@@ -18,6 +18,12 @@ const activity = await readFile(
   new URL('../android/app/src/main/java/in/medrepconnect/app/MainActivity.java', import.meta.url),
   'utf8',
 )
+const [vacancyForm, bulkUpload, resumeCard, jobDetail] = await Promise.all([
+  '../src/components/VacancyForm.tsx',
+  '../src/components/BulkVacancyUpload.tsx',
+  '../src/components/ResumeCard.tsx',
+  '../src/components/JobDetail.tsx',
+].map((path) => readFile(new URL(path, import.meta.url), 'utf8')))
 
 // 1. The application theme must be a NoActionBar one. AppTheme inherits from
 //    Theme.AppCompat.Light.DarkActionBar, which is exactly how a title bar
@@ -73,7 +79,21 @@ assert.doesNotMatch(
   'the theme never paints splash artwork behind window chrome',
 )
 
-// 5. The stock Capacitor splash PNGs are gone: the launch screen is the
+// 5. WebView download attributes need a native handler on Android. The native
+//    bridge saves packaged templates directly into Downloads and routes signed
+//    remote files through Android DownloadManager.
+assert.match(activity, /setDownloadListener/, 'MainActivity handles WebView download links')
+assert.match(activity, /getAssets\(\)\.open\(assetName\)/, 'packaged templates are read from the APK assets')
+assert.match(activity, /MediaStore\.Downloads\.EXTERNAL_CONTENT_URI/, 'bundled files are saved in the public Downloads collection')
+assert.match(activity, /new DownloadManager\.Request\(Uri\.parse\(url\)\)/, 'remote file links use Android DownloadManager')
+assert.match(manifest, /WRITE_EXTERNAL_STORAGE[\s\S]*?android:maxSdkVersion="28"/, 'legacy storage permission is limited to Android 9 and earlier')
+assert.match(vacancyForm, /download="medrep-vacancy-template\.jpg"/, 'the poster template download is covered by the native handler')
+assert.match(vacancyForm, /download="medrep-vacancy-template\.docx"/, 'the editable template download is covered by the native handler')
+assert.match(bulkUpload, /download="medrep-vacancy-bulk-template\.csv"/, 'the bulk CSV download is covered by the native handler')
+assert.match(resumeCard, /anchor\.download = resume\.fileName/, 'the account resume download also uses the native handler')
+assert.match(jobDetail, /anchor\.download = resume\.fileName/, 'the apply-sheet resume download also uses the native handler')
+
+// 6. The stock Capacitor splash PNGs are gone: the launch screen is the
 //    standard Android 12+ splash (brand icon on white) back-ported to API 24.
 import { readdir } from 'node:fs/promises'
 
@@ -92,4 +112,4 @@ assert.match(
   'the launch icon is our own launcher mark',
 )
 
-console.log('android shell: no title bar, no stock splash — passed')
+console.log('android shell: no title bar, no stock splash, native downloads for templates and resumes — passed')
