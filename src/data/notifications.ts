@@ -7,6 +7,7 @@ import {
   isBroadcastNotification,
   isRefundNotification,
   notificationAudience,
+  notificationIsWithinRetention,
   notificationVisibleToEmail,
   privateNotificationTarget,
 } from './notificationPrivacy'
@@ -26,6 +27,10 @@ export type Notification = {
 
 const NOTIF_KEY = 'mrc_notifications_v1'
 const PERSONAL_NOTIF_KEY = 'mrc_private_notifications_v1'
+
+function isWithinNotificationRetention(notification: Notification, now = Date.now()): boolean {
+  return notificationIsWithinRetention(notification.createdAt, now)
+}
 
 /**
  * Notices and read state are held ONLINE, not in the browser.
@@ -61,8 +66,11 @@ function personalNotificationKey(email: string): string {
 }
 
 function mergeNotifications(existing: Notification[], incoming: Notification[]): Notification[] {
-  const known = new Set(existing.map((notification) => notification.id))
-  const merged = [...existing, ...incoming.filter((notification) => !known.has(notification.id))]
+  const recentExisting = existing.filter(isWithinNotificationRetention)
+  const known = new Set(recentExisting.map((notification) => notification.id))
+  const merged = [...recentExisting, ...incoming.filter((notification) =>
+    isWithinNotificationRetention(notification) && !known.has(notification.id),
+  )]
   merged.sort((a, b) => b.createdAt - a.createdAt)
   return merged.slice(0, 500)
 }
@@ -247,7 +255,8 @@ export function broadcast(ev: EventKind, opts?: BroadcastOptions): Notification 
 export function getNotifications(): Notification[] {
   const stored = read<Notification[]>(NOTIF_KEY, [])
   return stored.filter((notification) =>
-    Boolean(notification && typeof notification === 'object' && isBroadcastNotification(notification)),
+    Boolean(notification && typeof notification === 'object'
+      && isBroadcastNotification(notification) && isWithinNotificationRetention(notification)),
   )
 }
 
@@ -304,7 +313,7 @@ export async function refreshNotificationsFromServer(email: string): Promise<voi
 
     const remote = (data as unknown[])
       .map((value) => parseRemoteNotification(value, normalizedEmail))
-      .filter((notification): notification is Notification => notification !== null)
+      .filter((notification): notification is Notification => notification !== null && isWithinNotificationRetention(notification))
     const publicRemote = remote.filter((notification) => notification.target === 'all' && isBroadcastNotification(notification))
     const personalRemote = remote.filter((notification) =>
       Array.isArray(notification.target) && notificationVisibleToEmail(notification, normalizedEmail),

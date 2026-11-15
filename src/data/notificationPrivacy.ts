@@ -2,6 +2,14 @@
  * Privacy rules for notification audiences. Kept pure so client filtering and
  * tests use the same fail-closed rules.
  */
+export const NOTIFICATION_RETENTION_DAYS = 15
+const NOTIFICATION_RETENTION_MS = NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000
+
+/** Notifications at or beyond the 15-day cutoff stay visible. */
+export function notificationIsWithinRetention(createdAt: number, now = Date.now()): boolean {
+  return Number.isFinite(createdAt) && createdAt >= now - NOTIFICATION_RETENTION_MS
+}
+
 export type NotificationPrivacyShape = {
   type?: unknown
   title?: unknown

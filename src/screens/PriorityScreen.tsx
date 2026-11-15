@@ -22,22 +22,22 @@ export function PriorityScreen({ user, jobs, onOpenJob, onApply, onWatchUnlock, 
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-4">
-      <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-300 via-amber-400 to-orange-500 px-5 py-5 text-slate-900 shadow-[0_26px_55px_-32px_rgba(217,119,6,0.95)]">
-        <div aria-hidden className="pointer-events-none absolute -right-14 -top-16 h-48 w-48 rounded-full bg-white/30 blur-2xl" />
-        <div className="relative flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/60 text-2xl ring-1 ring-white/70">⭐</div>
-          <div>
-            <div className="text-lg font-extrabold tracking-tight">Priority jobs</div>
-            <p className="mt-0.5 max-w-md text-sm font-semibold text-amber-950/80">
-              Pinned by the admin — urgent MR and ABM openings appear first, before everything else.
+      <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-300 via-amber-400 to-orange-500 px-3 py-2.5 text-slate-900 shadow-[0_18px_35px_-28px_rgba(217,119,6,0.8)]">
+        <div aria-hidden className="pointer-events-none absolute -right-14 -top-16 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
+        <div className="relative flex items-center gap-2">
+          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-white/60 text-base ring-1 ring-white/70">⭐</div>
+          <div className="min-w-0">
+            <div className="text-sm font-extrabold tracking-tight">Priority jobs</div>
+            <p className="mt-0.5 line-clamp-1 max-w-md text-[11px] font-semibold text-amber-950/80">
+              Pinned by the admin — urgent MR and ABM openings appear first.
             </p>
           </div>
         </div>
-        <div className="relative mt-4 flex flex-wrap gap-2">
-          <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-amber-950 ring-1 ring-white/60">
+        <div className="relative mt-1.5 flex flex-wrap gap-1.5">
+          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold text-amber-950 ring-1 ring-white/60">
             📌 {pinned.length} pinned
           </span>
-          <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-amber-950 ring-1 ring-white/60">
+          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold text-amber-950 ring-1 ring-white/60">
             {jobs.length} live jobs
           </span>
         </div>

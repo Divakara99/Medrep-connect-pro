@@ -10,7 +10,7 @@ import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
 import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
-import { getProfile, profileCompletionIssues, refreshProfile, saveProfile, type Profile } from '../data/profile'
+import { getProfile, refreshProfile, saveProfile, type Profile } from '../data/profile'
 import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
 import { APP_BUILD_LABEL, APP_VERSION_LABEL } from '../data/version'
 import { adsDiagnostics, adsDiagnosticsText, pingAdSdk, probeAdNetwork, probeBanner, type NetworkProbe } from '../data/ads'
@@ -38,8 +38,7 @@ export function AccountScreen({
   const editorRef = useRef<ProfileEditorHandle>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const [photoPath, setPhotoPath] = useState(() => getProfile(user.email).photoPath ?? '')
-  const [profileEditing, setProfileEditing] = useState(() => profileCompletionIssues(getProfile(user.email), user.phone).length > 0)
-  const profileModeTouched = useRef(profileEditing)
+  const [profileEditing, setProfileEditing] = useState(false)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const visiblePhotoUrl = photoPath ? photoUrl : null
   const [photoBusy, setPhotoBusy] = useState(false)
@@ -68,12 +67,7 @@ export function AccountScreen({
   useEffect(() => {
     let alive = true
     refreshProfile(user.email).then((profile) => {
-      if (alive) {
-        setPhotoPath(profile.photoPath ?? '')
-        if (!profileModeTouched.current) {
-          setProfileEditing(profileCompletionIssues(profile, user.phone).length > 0)
-        }
-      }
+      if (alive) setPhotoPath(profile.photoPath ?? '')
     })
     return () => { alive = false }
   }, [user.email, user.phone])
@@ -222,14 +216,9 @@ export function AccountScreen({
         email={user.email}
         phone={user.phone}
         readOnly={!profileEditing}
-        onRequestEdit={() => {
-          profileModeTouched.current = true
-          setProfileEditing(true)
-        }}
+        onRequestEdit={() => setProfileEditing(true)}
         onSaved={(profile) => {
-          profileModeTouched.current = true
-          const complete = profileCompletionIssues(profile, user.phone).length === 0
-          setProfileEditing(!complete)
+          setProfileEditing(false)
           onSubscribed({ ...user, phone: profile.phone })
           onProfileSaved(profile)
         }}

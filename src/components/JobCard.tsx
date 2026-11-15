@@ -2,7 +2,7 @@ import { Card } from './ui'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import type { Job } from '../data/jobs'
 import { salaryParts } from '../data/salaryText'
-import { isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters } from '../data/vacancyRules'
+import { isPharmaSalesCategory, parseHeadquarters } from '../data/vacancyRules'
 import { useUnlockWindow } from './useUnlockWindow'
 import { ShareJobButton } from './ShareJobButton'
 
@@ -109,8 +109,8 @@ export function JobCard({
 
   return (
     <Card
-      className={`group overflow-hidden rounded-xl border-[#e4e8f0] bg-white shadow-[0_8px_20px_-18px_rgba(23,34,94,0.5)] ${
-        job.pinned ? 'ring-1 ring-amber-200' : ''
+      className={`group overflow-hidden rounded-xl border-2 border-slate-300 bg-white shadow-[0_10px_22px_-17px_rgba(23,34,94,0.5)] ${
+        job.pinned ? 'ring-1 ring-amber-300' : 'ring-1 ring-slate-300/60'
       }`}
     >
       <button type="button" onClick={onClick} className="w-full px-2.5 py-1.5 text-left sm:px-3">
@@ -201,14 +201,6 @@ export function JobCard({
         </div>
       )}
 
-      {unlocked && (
-        <div className="border-t border-[#eef1f8] px-3 py-2 text-xs text-slate-700">
-          Company: <span className="font-semibold text-slate-900">{job.company}</span>
-          {job.manager ? <> · Manager: <span className="font-semibold text-slate-900">{job.manager}</span></> : null}
-          {job.contact ? <> · Contact: <span className="font-semibold text-slate-900">{job.contact}</span></> : null}
-          {job.managerAltPhone ? <> · <span className="font-extrabold text-brand-700">+91</span> <span className="font-semibold text-slate-900">{normalizeIndianMobile(job.managerAltPhone)}</span></> : null}
-        </div>
-      )}
 
     </Card>
   )

@@ -42,6 +42,22 @@ export const INDIAN_STATES_AND_UTS = [
  * Common Indian city suggestions. The profile city field also accepts typing,
  * so applicants from smaller towns can enter a place not listed here.
  */
+export const INDIAN_LANGUAGES = [
+  'Assamese', 'Bengali', 'Bodo', 'Dogri', 'English', 'Gujarati', 'Hindi', 'Kannada',
+  'Kashmiri', 'Konkani', 'Maithili', 'Malayalam', 'Manipuri', 'Marathi', 'Nepali',
+  'Odia', 'Punjabi', 'Sanskrit', 'Santali', 'Sindhi', 'Tamil', 'Telugu', 'Urdu',
+] as const
+
+/** Common pharma field-sales and transferable job-seeker skills. */
+export const PROFILE_SKILLS = [
+  'Doctor Relationship Management', 'Chemist / Stockist Management', 'Product Detailing',
+  'RCPA', 'Prescription Generation', 'Territory Management', 'Field Sales',
+  'Pharmaceutical Sales', 'Sales Target Achievement', 'New Product Launches',
+  'Market Research', 'Competitor Analysis', 'Customer Relationship Management',
+  'Negotiation', 'Communication', 'Presentation', 'Team Management',
+  'Reporting and Excel', 'Lead Generation', 'Order Booking',
+] as const
+
 export const INDIAN_CITY_SUGGESTIONS = [
   'Agartala', 'Agra', 'Ahmedabad', 'Aizawl', 'Ajmer', 'Aligarh', 'Amravati',
   'Amritsar', 'Anand', 'Asansol', 'Aurangabad', 'Bengaluru', 'Bareilly',
