@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+import { Preferences } from '@capacitor/preferences'
 import { createClient, type User as SupabaseUser } from '@supabase/supabase-js'
 
 /**
@@ -10,11 +12,54 @@ const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4uiy6UZHkIjzAZssMfLWKQ_TwG6x7f
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL).replace(/\/+$/, '')
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_ANON_KEY
 
+/**
+ * Use native preferences for the Supabase refresh token in the Android/iOS app.
+ * WebView storage can be cleared by Android maintenance; Preferences survives
+ * app restarts and upgrades. Import any existing localStorage session once.
+ */
+export const supabaseAuthStorage = {
+  async getItem(key: string): Promise<string | null> {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const stored = await Preferences.get({ key })
+        if (stored.value !== null) return stored.value
+        const legacy = localStorage.getItem(key)
+        if (legacy !== null) {
+          await Preferences.set({ key, value: legacy })
+          localStorage.removeItem(key)
+        }
+        return legacy
+      } catch {
+        try { return localStorage.getItem(key) } catch { return null }
+      }
+    }
+    try { return localStorage.getItem(key) } catch { return null }
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Preferences.set({ key, value })
+        return
+      } catch {
+        // Retain browser fallback if the native plugin is temporarily unavailable.
+      }
+    }
+    try { localStorage.setItem(key, value) } catch { /* storage may be disabled */ }
+  },
+  async removeItem(key: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      try { await Preferences.remove({ key }) } catch { /* continue with web fallback */ }
+    }
+    try { localStorage.removeItem(key) } catch { /* storage may be disabled */ }
+  },
+}
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     persistSession: true,
+    storage: supabaseAuthStorage,
     storageKey: 'mrc_supabase_auth_v1',
   },
 })

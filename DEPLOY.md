@@ -41,7 +41,7 @@ If any step fails, stop and fix that step before continuing.
 Run the migrations **in this order**, in the Supabase project that matches `VITE_SUPABASE_URL`. Each file is safe to run again.
 
 ```bash
-npm run db:list          # shows the 14 files in the correct order
+npm run db:list          # shows the 25 files in the correct order
 npm run db:copy -- 1     # copies supabase/schema.sql to your clipboard
 ```
 
@@ -50,7 +50,7 @@ Then in the Supabase dashboard:
 1. Open **SQL Editor → New query**.
 2. Click in the editor and press **Ctrl+V** (Windows/Linux) or **⌘V** (Mac) to paste.
 3. Press **Run**. Wait for "Success", then go back to the terminal.
-4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 14`.
+4. Repeat for `npm run db:copy -- 2` through `npm run db:copy -- 25`.
 
 **Prefer one paste?** Run `npm run db:copy -- all`, paste once, and press **Run**. If an error appears, fix it and run the same paste again: the files are safe to re-run.
 
@@ -270,8 +270,9 @@ Run each file in the SQL Editor of the SAME project used by
 | 14 | `supabase/vacancy_duplicate_check.sql` | **New.** Adds optional qualification, age-limit and opening-count projections, persists those fields for vacancy employees, and exposes a role-checked duplicate-review RPC to admins and vacancy employees only. The RPC returns only safe public vacancy summaries. |
 | 15 | `supabase/notification_retention_15_days.sql` | Filters notices older than 15 days from `list_visible_notifications()` for every signed-in account. Rows remain stored for support/audit; this does not delete notification records. Run after the private-refund notification patch. |
 | 24 | `supabase/vacancy_employee_limit_50.sql` | **New.** Replaces the old single-login unique index with an advisory-lock trigger enforcing a hard maximum of 50 team logins, even under concurrent inserts. Run after `vacancy_team.sql`. |
+| 25 | `supabase/vacancy_posters.sql` | **New.** Creates private poster storage with admin-only uploads and subscriber/per-job-unlock viewing. Replaces `list_visible_jobs()` to return poster paths only with full contact access. Run after all unlock and vacancy migrations. |
 
-For a project that has already run migrations 1–12, apply the private-refund patch (`supabase/private_refund_notifications.sql`) and then the 15-day notification retention patch (`supabase/notification_retention_15_days.sql`); run the duplicate-vacancy patch (`supabase/vacancy_duplicate_check.sql`) as well if needed. Paste each into that project's Supabase SQL Editor and press **Run**, in that order. The retention patch changes only what the notification RPC returns: old rows are kept in the database. The 50-employee cap patch is `npm run db:copy -- 24`; run it after `vacancy_team.sql` (item 11) when preparing another project. Production's migration ledger already records `vacancy_employee_limit_50`.
+For a project that has already run migrations 1–12, apply the private-refund patch (`supabase/private_refund_notifications.sql`) and then the 15-day notification retention patch (`supabase/notification_retention_15_days.sql`); run the duplicate-vacancy patch (`supabase/vacancy_duplicate_check.sql`) as well if needed. Paste each into that project's Supabase SQL Editor and press **Run**, in that order. The retention patch changes only what the notification RPC returns: old rows are kept in the database. The 50-employee cap patch is `npm run db:copy -- 24`; run it after `vacancy_team.sql` (item 11) when preparing another project. The private vacancy-poster patch is item 25 and must be run last, after the unlock migrations. Existing projects should run `npm run db:copy -- 25` before deploying the frontend. Production's migration ledger already records `vacancy_employee_limit_50`.
 
 **Vacancy team logins (new).** The administrator can create up to 50 employee login IDs and passwords in **Admin → Vacancy team**. The limit is enforced by both the admin function and a database trigger, including under concurrent requests. Delete a login when that employee no longer needs access. Team members sign in at `/?portal=vacancy` and see one page: post a vacancy, and delete one with a required reason. The admin sees how many vacancies were added and deleted, who did it, and every deletion reason. The team cannot see users, payments, the audit log or other team logins. The login ID is the employee's email address, because the sign-in system requires one. Passwords must be 6 to 72 characters. New team accounts are created already confirmed, so no confirmation email is sent. Team logins use a password only (no authenticator code), so choose strong passwords and remove a login as soon as someone leaves.
 

@@ -9,6 +9,7 @@ import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from
 import { readVacancyImageText } from '../data/vacancyOcr'
 import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplicateCheck, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
 import { downloadTemplateInAndroid } from '../data/nativeDownloads'
+import { deleteVacancyPoster, uploadVacancyPoster } from '../data/vacancyPoster'
 
 /**
  * The vacancy form, shared by the administrator (post, edit, pin) and the
@@ -387,6 +388,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
     }
     setSaving(true)
     setError(null)
+    let newlyUploadedPoster: string | undefined
     try {
       const fields = collectDraftFields()
       const duplicateResult = await checkVacancyDuplicates(fields, job?.id)
@@ -395,18 +397,32 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
         setDuplicatePrompt({ result: duplicateResult, approvalKey })
         return
       }
+      let posterPath = job?.posterPath
+      if (sourceImage) {
+        const uploaded = await uploadVacancyPoster(sourceImage)
+        if (!uploaded.ok) throw new Error(uploaded.error)
+        posterPath = uploaded.path
+        newlyUploadedPoster = uploaded.path
+      }
       if (mode === 'team') {
         // The team posts through the database function: no pinning, no editing.
-        const result = await teamPostVacancy(fields)
+        const result = await teamPostVacancy({ ...fields, posterPath })
         if (!result.ok) throw new Error(result.error)
       } else if (job) {
-        await updateJob(job.id, { ...fields, pinned, extraFields: cleanExtraFields(extraFields) })
+        await updateJob(job.id, { ...fields, pinned, posterPath, extraFields: cleanExtraFields(extraFields) })
+        if (job.posterPath && job.posterPath !== posterPath) {
+          try { await deleteVacancyPoster(job.posterPath) } catch (cleanupError) { console.warn('Old vacancy poster cleanup failed:', cleanupError) }
+        }
       } else {
-        await addJob({ ...fields, pinned, extraFields: cleanExtraFields(extraFields) })
+        await addJob({ ...fields, pinned, posterPath, extraFields: cleanExtraFields(extraFields) })
       }
+      newlyUploadedPoster = undefined
       if (!job) resetDraft()
       onSaved()
     } catch (cause) {
+      if (newlyUploadedPoster) {
+        try { await deleteVacancyPoster(newlyUploadedPoster) } catch (cleanupError) { console.warn('Unattached vacancy poster cleanup failed:', cleanupError) }
+      }
       setError(cause instanceof Error ? cause.message : 'Could not save vacancy.')
     } finally { setSaving(false) }
   }
@@ -419,7 +435,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
           <section className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-indigo-50 p-3 space-y-3">
             <div>
               <div className="font-bold text-slate-900">✨ Fill fields from a vacancy poster or text</div>
-              <p className="text-xs text-slate-600 mt-1">OCR runs locally in this browser. It reads the text and shows what it found — you choose what to fill, and nothing is posted until you press Final Submit.</p>
+              <p className="text-xs text-slate-600 mt-1">OCR runs locally. Review and correct every value before posting. The selected image is attached securely to the vacancy and shown with contact details to eligible users.</p>
             </div>
             <div className="flex gap-2">
               <Button type="button" variant={sourceMode === 'image' ? 'primary' : 'secondary'} className="flex-1" onClick={() => setSourceMode('image')} disabled={extracting}>
@@ -452,7 +468,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                 <p className="text-xs leading-snug text-slate-600">The JPG and editable Word template have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the Word file directly, then copy its text into “Paste text” or upload a screenshot. Use the CSV batch template on the Vacancies page to post multiple roles together.</p>
                 <Input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   aria-label="Upload vacancy flyer or screenshot"
                   onChange={(event) => {
                     setSourceImage(event.target.files?.[0] ?? null)
@@ -461,7 +477,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                   }}
                   disabled={extracting}
                 />
-                <p className="text-xs text-slate-600">Photo or screenshot · up to 12 MB · supported text is English. The image stays on this device.</p>
+                <p className="text-xs text-slate-600">JPG, PNG or WebP · up to 8 MB. OCR is local; if you post, the selected image is securely attached to the vacancy.</p>
                 {sourceImage && <p className="text-xs font-semibold text-slate-700 truncate">Selected: {sourceImage.name}</p>}
               </div>
             ) : (

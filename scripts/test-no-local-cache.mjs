@@ -37,6 +37,7 @@ const sources = walk('src')
 // ---------- 1. Nothing is written to browser storage ----------
 
 const dataFiles = sources.filter((file) => !file.endsWith('src/data/storage.ts'))
+const authStorageFile = join('src', 'data', 'supabase.ts')
 
 // Storage writes used to go through `write(key, value)` from storage.ts, and a
 // few modules kept their own copy. Neither is allowed any more: the only
@@ -45,6 +46,7 @@ const writers = dataFiles.filter((file) => {
   const text = read(file)
   if (/import\s*\{[^}]*\bwrite\b[^}]*\}\s*from\s*'(\.\.?\/)+data\/storage'/.test(text)) return true
   if (/import\s*\{[^}]*\bwrite\b[^}]*\}\s*from\s*'\.\/storage'/.test(text)) return true
+  if (file === authStorageFile) return false // Supabase session adapter only
   return text.split('\n').some((line) => line.includes('localStorage.setItem') && !/^\s*(\/\/|\*)/.test(line))
 })
 check(
@@ -72,6 +74,14 @@ check(
   'the client does not fall back to the default storage key',
   !/persistSession:\s*false/.test(supabase),
   'session persistence was switched off; users would be signed out on reload',
+)
+check(
+  'native auth sessions persist through Capacitor Preferences',
+  /@capacitor\/preferences/.test(supabase) && /Preferences\.get/.test(supabase) && /Preferences\.set/.test(supabase),
+)
+check(
+  'existing Android WebView sessions migrate into native storage',
+  /localStorage\.getItem\(key\)/.test(supabase) && /Preferences\.set\(\{ key, value: legacy \}\)/.test(supabase),
 )
 
 const storage = read('src/data/storage.ts')
@@ -121,6 +131,7 @@ check(
 const readers = dataFiles.filter((file) => {
   if (file.endsWith('src/data/resume.ts')) return false // sweeps old resume blobs to delete them
   const text = read(file)
+  if (file === authStorageFile) return false // Supabase session adapter migrates legacy session only
   return text.split('\n').some((line) => {
     if (!/localStorage\.(getItem|length|key)\b/.test(line)) return false
     return !/^\s*(\/\/|\*|\/\*)/.test(line)

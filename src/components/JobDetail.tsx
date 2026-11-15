@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { unlockButtonLabel, type UnlockStage } from '../data/adConfig'
 import { Button, Badge, Modal } from './ui'
 import { descriptionPoints, type Job } from '../data/jobs'
@@ -6,9 +6,34 @@ import { isPharmaSalesCategory, normalizeIndianMobile, normalizeWhatsAppNumber, 
 import type { ResumeRecord } from '../data/resume'
 import { CREATOR } from '../data/creator'
 import { resumeDownloadUrl } from '../data/resume'
+import { vacancyPosterSignedUrl } from '../data/vacancyPoster'
 import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
 import { JOB_UNLOCK_VALIDITY_HOURS, jobUnlockLabel } from '../data/jobUnlock'
 import { ShareJobButton } from './ShareJobButton'
+
+function VacancyPoster({ path }: { path?: string }) {
+  const [loaded, setLoaded] = useState<{ path: string; url?: string; error?: string } | null>(null)
+  useEffect(() => {
+    let active = true
+    if (path) {
+      void vacancyPosterSignedUrl(path).then((url) => {
+        if (active) setLoaded({ path, url })
+      }).catch((cause: unknown) => {
+        if (active) setLoaded({ path, error: cause instanceof Error ? cause.message : 'Poster could not be loaded.' })
+      })
+    }
+    return () => { active = false }
+  }, [path])
+  if (!path) return null
+  const result = loaded?.path === path ? loaded : null
+  return (
+    <section className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200">
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Original vacancy poster · contact access</div>
+      {result?.url ? <a href={result.url} target="_blank" rel="noreferrer"><img src={result.url} alt="Original vacancy poster" className="mx-auto max-h-[70vh] w-auto rounded-xl object-contain" /></a>
+        : <p role={result?.error ? 'alert' : undefined} className="text-xs text-slate-600">{result?.error || 'Loading poster…'}</p>}
+    </section>
+  )
+}
 
 function timeAgo(ts: number): string {
   const d = Date.now() - ts
@@ -196,6 +221,8 @@ export function JobDetail({
               </ul>
             )}
           </div>
+
+          {fullDetails && <VacancyPoster path={job.posterPath} />}
 
           <div className="rounded-2xl bg-slate-50/70 p-3.5 ring-1 ring-slate-200">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">

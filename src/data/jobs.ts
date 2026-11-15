@@ -65,6 +65,8 @@ export type Job = {
   ageLimit?: string
   vacancyCount?: string
   description?: string
+  /** Private Supabase Storage object; revealed only with full contact access. */
+  posterPath?: string
   pinned?: boolean
   postedAt: number
   postedBy?: string
@@ -117,6 +119,7 @@ function parseJob(value: unknown): Job | null {
     managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,
     managerEmail: typeof row.managerEmail === 'string' ? row.managerEmail : undefined,
     description: typeof row.description === 'string' ? row.description : undefined,
+    posterPath: typeof row.posterPath === 'string' ? row.posterPath : undefined,
     location: row.location,
     hq: typeof row.hq === 'string' ? row.hq : undefined,
     division: typeof row.division === 'string' ? row.division : undefined,

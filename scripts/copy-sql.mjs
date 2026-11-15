@@ -40,6 +40,7 @@ const MIGRATIONS = [
   { file: 'supabase/vacancy_extra_fields.sql', what: 'Administrator-defined vacancy fields are returned with the public job projection' },
   { file: 'supabase/vacancy_fill_check.sql', what: '"Is this still open?" — the team sees the question and answers Open/Filled, stamped server-side' },
   { file: 'supabase/vacancy_employee_limit_50.sql', what: 'Database-enforced cap of 50 employee logins, including concurrent inserts' },
+  { file: 'supabase/vacancy_posters.sql', what: 'Private vacancy poster bucket, admin uploads, entitled-user viewing, and posterPath projection' },
 ]
 
 const root = fileURLToPath(new URL('..', import.meta.url))

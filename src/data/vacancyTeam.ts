@@ -168,6 +168,7 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
     ageLimit: fields.ageLimit ?? '',
     vacancyCount: fields.vacancyCount ?? '',
     description: fields.description ?? '',
+    posterPath: fields.posterPath ?? '',
   }
   const { data, error } = await supabase.rpc('employee_post_vacancy', { p_fields: payload })
   if (error) return { ok: false, error: error.message || 'The vacancy could not be posted.' }
