@@ -53,12 +53,15 @@ assert.deepEqual(groupDuplicateVacancies([]), [])
 // ------------------------------------------------------------- CSV batches
 assert.deepEqual(VACANCY_CSV_HEADERS.slice(4, 7), ['Contact number', 'Alternate contact', 'Manager email'], 'phone and email fields have separate template columns')
 const csvRows = parseCsv('Title,Company,Category,Contact number,Alternate contact,Manager email,City,HQ / Area,Job description\r\nMR,Acme,MR,9876543210,9123456780,hr@acme.com,Hyderabad,Hyderabad HO,"Doctors, clinics and stockists"\r\n')
+const rolePositionRows = parseCsv('Title,Company,Role/Position,Contact number,City\nMR,Acme,MR,9876543210,Hyderabad\n')
+assert.equal(rolePositionRows[0].category, 'MR', 'Role/Position is the visible CSV label and maps to the internal category field')
 assert.equal(csvRows.length, 1, 'one vacancy is parsed per CSV data row')
 assert.equal(csvRows[0].contact, '9876543210')
 assert.equal(csvRows[0].alternateContact, '9123456780')
 assert.equal(csvRows[0].managerEmail, 'hr@acme.com')
 assert.equal(csvRows[0].description, 'Doctors, clinics and stockists', 'quoted commas inside cell data are preserved')
 assert.throws(() => parseCsv('Title,Company\nA,B'), /Missing required columns/, 'the batch importer refuses incomplete templates')
+assert.throws(() => parseCsv('Title,Company\nA,B'), /Role\/Position/, 'CSV validation uses the user-facing Role/Position label')
 
 // ------------------------------------------------------------ one row delete
 const jobs = await read('src/data/jobs.ts')
@@ -163,6 +166,7 @@ assert.deepEqual([...docxTemplate.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'th
 assert.match(docxText, /<w:t[^>]*>Data<\/w:t>/, 'the Word template has a Data column')
 assert.match(docxText, /<w:t[^>]*>Entry<\/w:t>/, 'the Word template has an editable Entry column')
 assert.match(docxText, /<w:t[^>]*>HQ \/ Area<\/w:t>/, 'the editable Word template uses the HQ / Area label')
+assert.match(docxText, /<w:t[^>]*>Role\/Position<\/w:t>/, 'the editable Word template uses Role/Position, not Category')
 assert.doesNotMatch(docxText, /HQ \/ territory|HQ \(MR \/ ABM\)/, 'the editable Word template has no obsolete HQ label')
 assert.match(docxText, /Contact number/, 'the Word template covers contact details')
 assert.match(docxText, /Alternate contact number/, 'the alternate contact has its own field')
@@ -173,6 +177,7 @@ assert.match(docxText, /w:trHeight w:val="1500" w:hRule="atLeast"/, 'the single-
 assert.match(imageTemplate, />Data</, 'the image template has a Data column')
 assert.match(imageTemplate, />Entry</, 'the image template has an Entry column')
 assert.match(imageTemplate, />HQ \/ Area</, 'the image template source uses the HQ / Area label')
+assert.match(imageTemplate, />Role\/Position</, 'the image template source uses Role/Position, not Category')
 assert.doesNotMatch(imageTemplate, /HQ \(MR \/ ABM\)/, 'the image template source has no obsolete HQ label')
 assert.match(imageTemplate, /Contact number/i, 'the image template covers contact details')
 assert.match(imageTemplate, /50 characters/i, 'the image template advertises the entry capacity')
@@ -195,7 +200,7 @@ assert.match(admin, /const restoredTitle = await restoreJob\(target\.id\)/, 'Und
 assert.match(admin, /action\?: \{ label: string; run: \(\) => void \}/, 'the notice can carry one action')
 
 // ------------------------------------------------- the list reads as a table
-assert.match(admin, />\s*Vacancy\s*<\/span>\s*<span>City<\/span>\s*<span>Category<\/span>\s*<span>Posted<\/span>/, 'the vacancy list has column headings')
+assert.match(admin, />\s*Vacancy\s*<\/span>\s*<span>City<\/span>\s*<span>Role\/Position<\/span>\s*<span>Posted<\/span>/, 'the vacancy list has user-facing Role/Position column headings')
 assert.match(admin, /sm:grid-cols-\[minmax\(0,2\.2fr\)_minmax\(0,1fr\)_minmax\(0,1fr\)_minmax\(0,0\.8fr\)_auto\]/, 'each row uses the same column tracks as the heading')
 assert.match(admin, /function postedOn\(ms: number\): string/, 'the Posted column has one shared date format')
 assert.doesNotMatch(admin, /w-10 h-10 rounded-lg bg-brand-100/, 'the stacked avatar card is gone')

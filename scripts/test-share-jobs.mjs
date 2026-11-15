@@ -51,7 +51,7 @@ const text = shareJobText(job)
 
 // ---------- what the friend receives ----------
 assert.match(text, /Role: Medical Representative/)
-assert.match(text, /Category: MR/)
+assert.match(text, /Role\/Position: MR/)
 assert.match(text, /City: Mumbai \/ Pune/)
 assert.match(text, /HQ: Mumbai HO, Pune RO/, 'each HQ line is shared, on one line')
 assert.match(text, /Experience: 0–2 years/)

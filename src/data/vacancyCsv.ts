@@ -1,7 +1,7 @@
 export const VACANCY_CSV_HEADERS = [
   'Title',
   'Company',
-  'Category',
+  'Role/Position',
   'Manager',
   'Contact number',
   'Alternate contact',
@@ -41,6 +41,8 @@ const HEADER_KEYS: Record<string, keyof VacancyCsvRow> = {
   'job title': 'title',
   company: 'company',
   category: 'category',
+  'role/position': 'category',
+  'role / position': 'category',
   manager: 'manager',
   'contact number': 'contact',
   contact: 'contact',
@@ -113,7 +115,7 @@ export function parseCsv(text: string): VacancyCsvRow[] {
   const missing = required.filter((key) => !available.has(key))
   if (missing.length) {
     const labels: Record<(typeof required)[number], string> = {
-      title: 'Title', company: 'Company', category: 'Category', contact: 'Contact number', city: 'City',
+      title: 'Title', company: 'Company', category: 'Role/Position', contact: 'Contact number', city: 'City',
     }
     throw new Error(`Missing required column${missing.length === 1 ? '' : 's'}: ${missing.map((key) => labels[key]).join(', ')}.`)
   }

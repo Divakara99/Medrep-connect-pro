@@ -58,7 +58,7 @@ function postedOn(ts?: number): string {
 export function shareJobText(job: ShareableVacancy): string {
   const rows: Array<[string, string | undefined]> = [
     ['Role', job.title],
-    ['Category', job.category],
+    ['Role/Position', job.category],
     ['City', job.location],
     ['HQ', (job.hq || '').split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean).join(', ')],
     ['Division', job.division],

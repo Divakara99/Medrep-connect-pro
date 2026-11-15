@@ -770,8 +770,8 @@ function VacanciesTab({ onMutate, onNotice }: {
             <option value="all">All cities</option>
             {cityChoices.map((option) => <option key={option} value={option}>{option}</option>)}
           </Select>
-          <Select aria-label="Filter by category" className="w-auto text-sm" value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
-            <option value="all">All categories</option>
+          <Select aria-label="Filter by Role/Position" className="w-auto text-sm" value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
+            <option value="all">All Role/Positions</option>
             {CATEGORIES.filter((option) => option !== 'All').map((option) => <option key={option} value={option}>{option}</option>)}
           </Select>
           <Select
@@ -818,7 +818,7 @@ function VacanciesTab({ onMutate, onNotice }: {
         <div className="hidden items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]">
           <span>Vacancy</span>
           <span>City</span>
-          <span>Category</span>
+          <span>Role/Position</span>
           <span>Posted</span>
           <span className="text-right">Actions</span>
         </div>
@@ -989,7 +989,7 @@ function VacanciesTab({ onMutate, onNotice }: {
                             ['Title', item.title],
                             ['Company', item.company],
                             ['City', item.location],
-                            ['Category', item.category],
+                            ['Role/Position', item.category],
                             ['Salary', item.salary ?? ''],
                             ['Experience', item.experience ?? ''],
                             ['Qualification', item.qualification ?? ''],

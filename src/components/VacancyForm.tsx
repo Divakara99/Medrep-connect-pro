@@ -23,7 +23,7 @@ import { deleteVacancyPoster, uploadVacancyPoster } from '../data/vacancyPoster'
 const EXTRACTED_FIELDS: { key: keyof VacancyExtraction; label: string }[] = [
   { key: 'title', label: 'Title' },
   { key: 'company', label: 'Company' },
-  { key: 'category', label: 'Category' },
+  { key: 'category', label: 'Role/Position' },
   { key: 'manager', label: 'Manager' },
   { key: 'contact', label: 'Contact number' },
   { key: 'managerAltPhone', label: 'Alternate number' },
@@ -647,7 +647,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
             <Input value={company} onChange={(e) => setCompany(e.target.value)} />
           </div>
           <div>
-            <Label>Category</Label>
+            <Label>Role/Position</Label>
             <Select value={category} onChange={(e) => setCategory(e.target.value as Exclude<Job['category'], 'All'>)}>
               {CATEGORIES.filter((c) => c !== 'All').map((c) => (
                 <option key={c} value={c}>{c}</option>
@@ -888,7 +888,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
           </div>
         )}
         <p className="text-sm font-medium text-slate-700">
-          <span className="font-bold">Public to every signed-in user:</span> title, category, city, salary, experience,
+          <span className="font-bold">Public to every signed-in user:</span> title, role/position, city, salary, experience,
           qualification, age limit, number of vacancies, posted date, HQ entries, division, the description above, and
           every extra detail added here.
           <span className="font-bold"> Locked until an active subscription:</span> company name, manager name, manager
@@ -913,7 +913,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                 {duplicatePrompt.result.status === 'exact' && 'Review the existing listing below. Post explicitly to continue, or choose Don’t Post to discard this draft.'}
                 {duplicatePrompt.result.status === 'possible' && 'The employer, role, city and matching details overlap. Check whether this is the same active opening.'}
                 {duplicatePrompt.result.status === 'none' && 'You may continue to review the form. Nothing has been published yet.'}
-                {duplicatePrompt.result.status === 'incomplete' && `Complete title, company, city and category; ${job ? 'Save changes' : 'Final Submit'} will check again before saving.`}
+                {duplicatePrompt.result.status === 'incomplete' && `Complete title, company, city and Role/Position; ${job ? 'Save changes' : 'Final Submit'} will check again before saving.`}
               </p>
             </div>
             {duplicatePrompt.result.matches.length > 0 && (

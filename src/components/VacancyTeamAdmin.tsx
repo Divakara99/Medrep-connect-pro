@@ -187,7 +187,7 @@ export function VacancyTeamAdmin() {
           <ActivityTable
             empty="No vacancies have been added."
             rows={addedRows}
-            columns={['When', 'Vacancy', 'Company', 'City', 'Category', 'Added by']}
+            columns={['When', 'Vacancy', 'Company', 'City', 'Role/Position', 'Added by']}
             render={(row) => [
               dateTime(row.createdAt),
               row.title || '—',

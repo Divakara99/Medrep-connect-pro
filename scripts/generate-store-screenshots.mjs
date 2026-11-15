@@ -398,7 +398,7 @@ const details = frame([
   rect(32, 1416, W - 64, 268, { r: 26, fill: C.white, stroke: C.line }),
   text(64, 1476, 'Job details', { size: 30, weight: 700 }),
   ...[
-    ['Category', 'MR (Medical Representative)'],
+    ['Role/Position', 'MR (Medical Representative)'],
     ['Experience', '0-6 months'],
     ['Salary', '2.8 to 3.30 LPA'],
     ['Location', 'Tumkur, Karnataka'],
