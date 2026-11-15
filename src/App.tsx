@@ -206,8 +206,18 @@ export default function App() {
     const restore = (resetTab = false) => {
       const request = ++generation
       void getAuthSnapshot()
-        .then((snapshot) => { if (mounted && request === generation) applyAuthSnapshot(snapshot, resetTab) })
-        .catch(() => { if (mounted && request === generation) setView(portalLoginView) })
+        .then((snapshot) => {
+          if (!mounted || request !== generation) return
+          setAuthTimedOut(false)
+          applyAuthSnapshot(snapshot, resetTab)
+        })
+        .catch(() => {
+          // A failed session/profile check is not a logout. Keep the auth
+          // storage untouched and let the connection/retry screen handle it.
+          // Showing the sign-in screen here makes a transient network or MFA
+          // lookup error look like the saved session was discarded.
+          if (mounted && request === generation) setAuthTimedOut(true)
+        })
     }
     const unsubscribe = onAuthStateChange((event) => {
       if (!mounted) return
@@ -588,10 +598,12 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setView(portalLoginView)}
+              onClick={() => {
+                void doLogout().then(() => setView(portalLoginView)).catch(() => undefined)
+              }}
               className="w-full rounded-2xl bg-white/10 px-4 py-3 text-base font-bold text-white ring-1 ring-white/30 transition hover:bg-white/15 active:scale-95"
             >
-              Go to sign in
+              Log out
             </button>
           </div>
         ) : (

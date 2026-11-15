@@ -71,9 +71,9 @@ check(
   'storageKey missing from the Supabase client',
 )
 check(
-  'the client does not fall back to the default storage key',
-  !/persistSession:\s*false/.test(supabase),
-  'session persistence was switched off; users would be signed out on reload',
+  'the Supabase session persists until local logout',
+  /persistSession:\s*true/.test(supabase) && /autoRefreshToken:\s*true/.test(supabase),
+  'the saved refresh token must survive reloads and refresh access tokens automatically',
 )
 check(
   'native auth sessions persist through Capacitor Preferences',
@@ -82,6 +82,13 @@ check(
 check(
   'existing Android WebView sessions migrate into native storage',
   /localStorage\.getItem\(key\)/.test(supabase) && /Preferences\.set\(\{ key, value: legacy \}\)/.test(supabase),
+)
+const authSource = read('src/data/auth.ts')
+check('logout explicitly clears the local Supabase session', /signOut\(\{ scope: 'local' \}\)/.test(authSource))
+const app = read('src/App.tsx')
+check(
+  'a failed session check does not send the user to sign-in',
+  /A failed session\/profile check is not a logout[\s\S]*?setAuthTimedOut\(true\)/.test(app),
 )
 
 const storage = read('src/data/storage.ts')
