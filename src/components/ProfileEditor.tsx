@@ -5,7 +5,8 @@ import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
 import { MAX_ADDRESS_LENGTH, addressProblem } from '../data/userAddress'
-import { INDIAN_CITY_SUGGESTIONS, INDIAN_STATES_AND_UTS } from '../data/profileLocations'
+import { INDIAN_CITY_SUGGESTIONS, INDIAN_LANGUAGES, INDIAN_STATES_AND_UTS, PROFILE_SKILLS } from '../data/profileLocations'
+import { MultiSelectDropdown, SearchableDropdown } from './ProfileDropdowns'
 
 export type ProfileEditorHandle = {
   save: () => Promise<Profile | null>
@@ -33,8 +34,6 @@ export const ProfileEditor = forwardRef<
     if (!p.city) return ''
     return INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === p.city?.toLowerCase()) ? p.city : '__other__'
   })
-  const [languagesText, setLanguagesText] = useState(() => (p.languages ?? []).join(', '))
-  const [skillsText, setSkillsText] = useState(() => (p.skills ?? []).join(', '))
   const [rolesText, setRolesText] = useState(() => (p.preferredRoles ?? []).join(', '))
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -51,8 +50,6 @@ export const ProfileEditor = forwardRef<
       setCityChoice(remote.city
         ? INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === remote.city?.toLowerCase()) ? remote.city : '__other__'
         : '')
-      setLanguagesText((remote.languages ?? []).join(', '))
-      setSkillsText((remote.skills ?? []).join(', '))
       setRolesText((remote.preferredRoles ?? []).join(', '))
     })
     return () => { alive = false }
@@ -101,8 +98,6 @@ export const ProfileEditor = forwardRef<
       setCityChoice(saved.city
         ? INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === saved.city?.toLowerCase()) ? saved.city : '__other__'
         : '')
-      setLanguagesText((saved.languages ?? []).join(', '))
-      setSkillsText((saved.skills ?? []).join(', '))
       setRolesText((saved.preferredRoles ?? []).join(', '))
       setSavedMsg('Profile saved.')
       setTimeout(() => setSavedMsg(null), 2000)
@@ -130,16 +125,15 @@ export const ProfileEditor = forwardRef<
               {completionIssues.length === 0 ? 'Ready to apply' : `${completionIssues.length} required item${completionIssues.length === 1 ? '' : 's'} left`}
             </Badge>
             {readOnly && (
-              <Button
+              <button
                 type="button"
-                variant="secondary"
-                className="px-3 py-1.5 text-sm"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-800 ring-1 ring-brand-200 transition hover:bg-brand-100 active:scale-95"
                 onClick={onRequestEdit}
-                aria-label="Edit profile"
+                aria-label="Enable profile editing"
                 title="Edit profile"
               >
-                <PencilIcon /> Edit
-              </Button>
+                <PencilIcon />
+              </button>
             )}
           </div>
         </div>
@@ -167,22 +161,19 @@ export const ProfileEditor = forwardRef<
           </div>
           <div>
             <EditLabel label="City" inputId="profile-city" />
-            <Select
+            <SearchableDropdown
               id="profile-city"
-              autoComplete="address-level2"
               value={cityChoice}
-              onChange={(e) => {
-                setCityChoice(e.target.value)
-                update({ city: e.target.value === '__other__' ? '' : e.target.value })
+              placeholder="Search or select a city"
+              options={[
+                ...INDIAN_CITY_SUGGESTIONS.map((city) => ({ value: city, label: city })),
+                { value: '__other__', label: 'Other / not listed' },
+              ]}
+              onChange={(value) => {
+                setCityChoice(value)
+                update({ city: value === '__other__' ? '' : value })
               }}
-            >
-              <option value="">Select city</option>
-              {p.city && !INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === p.city?.toLowerCase()) && <option value="__other__">Other / not listed</option>}
-              {INDIAN_CITY_SUGGESTIONS.map((city) => <option key={city} value={city}>{city}</option>)}
-              {!p.city || INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === p.city?.toLowerCase())
-                ? <option value="__other__">Other / not listed</option>
-                : null}
-            </Select>
+            />
             {cityChoice === '__other__' && (
               <Input
                 className="mt-2"
@@ -196,16 +187,18 @@ export const ProfileEditor = forwardRef<
           </div>
           <div>
             <EditLabel label="State" inputId="profile-state" />
-            <Select
+            <SearchableDropdown
               id="profile-state"
-              autoComplete="address-level1"
               value={p.state ?? ''}
-              onChange={(e) => update({ state: e.target.value })}
-            >
-              <option value="">Select state / union territory</option>
-              {p.state && !INDIAN_STATES_AND_UTS.includes(p.state as typeof INDIAN_STATES_AND_UTS[number]) && <option value={p.state}>{p.state} (saved)</option>}
-              {INDIAN_STATES_AND_UTS.map((state) => <option key={state} value={state}>{state}</option>)}
-            </Select>
+              placeholder="Search or select a state / UT"
+              options={[
+                ...INDIAN_STATES_AND_UTS.map((state) => ({ value: state, label: state })),
+                ...(p.state && !INDIAN_STATES_AND_UTS.includes(p.state as typeof INDIAN_STATES_AND_UTS[number])
+                  ? [{ value: p.state, label: `${p.state} (saved)` }]
+                  : []),
+              ]}
+              onChange={(value) => update({ state: value })}
+            />
           </div>
           <div className="sm:col-span-2">
             <EditLabel label="Address (optional)" inputId="profile-address" />
@@ -245,25 +238,23 @@ export const ProfileEditor = forwardRef<
         </div>
 
         <div>
-          <EditLabel label="Languages (comma separated)" inputId="profile-languages" />
-          <Input
+          <EditLabel label="Languages" inputId="profile-languages" />
+          <MultiSelectDropdown
             id="profile-languages"
-            type="text"
-            inputMode="text"
-            value={languagesText}
-            onChange={(e) => { setLanguagesText(e.target.value); update({ languages: split(e.target.value) }) }}
-            placeholder="English, Telugu, Hindi"
+            value={p.languages ?? []}
+            options={[...INDIAN_LANGUAGES]}
+            placeholder="Select languages"
+            onChange={(languages) => update({ languages })}
           />
         </div>
         <div>
-          <EditLabel label="Skills (comma separated)" inputId="profile-skills" />
-          <Input
+          <EditLabel label="Skills" inputId="profile-skills" />
+          <MultiSelectDropdown
             id="profile-skills"
-            type="text"
-            inputMode="text"
-            value={skillsText}
-            onChange={(e) => { setSkillsText(e.target.value); update({ skills: split(e.target.value) }) }}
-            placeholder="Sales, RCPA, Detailing, Excel"
+            value={p.skills ?? []}
+            options={[...PROFILE_SKILLS]}
+            placeholder="Select skills"
+            onChange={(skills) => update({ skills })}
           />
         </div>
         <div>
@@ -337,17 +328,8 @@ export const ProfileEditor = forwardRef<
 
 function EditLabel({ label, inputId }: { label: string; inputId: string }) {
   return (
-    <div className="mb-1 flex items-center justify-between gap-2">
+    <div className="mb-1">
       <label htmlFor={inputId} className="text-sm font-bold tracking-wide text-slate-700">{label}</label>
-      <button
-        type="button"
-        aria-label={`Edit ${label}`}
-        title={`Edit ${label}`}
-        onClick={() => document.getElementById(inputId)?.focus()}
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700 ring-1 ring-brand-100 hover:bg-brand-100 active:scale-95"
-      >
-        <PencilIcon />
-      </button>
     </div>
   )
 }

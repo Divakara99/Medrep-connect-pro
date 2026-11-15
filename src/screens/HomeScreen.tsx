@@ -76,7 +76,7 @@ export function HomeScreen({
   if (aboutOpen) return <AboutPage onClose={() => setAboutOpen(false)} />
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 px-4 pb-8 pt-4">
+    <div className="mx-auto max-w-3xl space-y-3 px-4 pb-8 pt-4">
       {/* Compact welcome banner: the greeting, one-line purpose and quick counts
           share a shallow card so the first few vacancies stay on screen. */}
       <section className="hero-mesh hairline relative overflow-hidden rounded-xl px-2.5 py-2 text-white shadow-[0_12px_24px_-22px_rgba(23,37,84,0.8)]">
@@ -106,10 +106,10 @@ export function HomeScreen({
       </section>
 
       {/* Search + filters live in one floating sheet. */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-2 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.6)]">
+      <div className="rounded-2xl border border-slate-300 bg-white/95 p-1.5 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.55)]">
         <div className="flex items-center gap-1.5">
-          <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-700">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.2-3.2" />
             </svg>
@@ -119,11 +119,11 @@ export function HomeScreen({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search role, company, city…"
             aria-label="Search vacancies"
-            className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-base font-medium text-slate-900 outline-none placeholder:text-slate-400"
+            className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
           />
           <Button
             variant={showFilters || activeFilterCount > 0 ? 'primary' : 'secondary'}
-            className="shrink-0 px-3"
+            className="shrink-0 rounded-xl px-2.5 py-2 text-sm"
             aria-expanded={showFilters}
             onClick={() => setShowFilters((v) => !v)}
           >
@@ -179,7 +179,7 @@ export function HomeScreen({
       </div>
 
       {/* Category chips */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5">
         {CATEGORIES.map((c) => {
           const active = category === c
           return (
@@ -187,7 +187,7 @@ export function HomeScreen({
               key={c}
               onClick={() => setCategory(c)}
               aria-pressed={active}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition ${
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
                 active
                   ? 'bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-[0_10px_22px_-14px_rgba(29,78,216,0.95)] ring-1 ring-brand-700/30'
                   : 'bg-white/90 text-slate-700 ring-1 ring-slate-200 hover:bg-white hover:ring-slate-300'
@@ -204,10 +204,10 @@ export function HomeScreen({
 
       <div className="flex items-end justify-between gap-2">
         <div>
-          <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-slate-900">
+          <h2 className="text-lg font-extrabold leading-tight tracking-tight text-slate-900">
             {category === 'All' ? 'Apply to these jobs' : `${category} openings`}
           </h2>
-          <p className="mt-0.5 text-sm font-medium italic text-slate-500">
+          <p className="mt-0.5 text-xs font-medium italic text-slate-500">
             {category === 'All' ? `Top ${list.length} job${list.length === 1 ? '' : 's'} that match your profile` : 'Newest first'}
           </p>
         </div>

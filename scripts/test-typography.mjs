@@ -68,7 +68,8 @@ assert.match(card, /h-8 min-w-0 flex-1 items-center justify-center gap-1 whitesp
 assert.match(card, /const applyLabel = 'Apply'/, 'the card action is labeled Apply before channel selection')
 assert.match(card, /'Watch video'/, 'the rewarded action has a short label for the shared row')
 assert.match(card, /border-t border-\[#eef1f8\] px-2\.5 py-1/, 'the compact metadata strip closes the card body')
-assert.match(card, /rounded-xl border-\[#e4e8f0\]/, 'the card uses a smaller soft rounded sheet')
+assert.match(card, /rounded-xl border-2 border-slate-300/, 'the card has a clearly visible outline')
+assert.doesNotMatch(card, /job\.manager|job\.contact|Manager:|Contact:/, 'manager and contact details appear only in Job Details')
 assert.match(card, /<LockIcon/, 'locked company details are identified without a large tile')
 assert.match(card, /<MoneyIcon/, 'the salary row has its own icon')
 assert.match(card, /<PinIcon/, 'and so does the city')
@@ -81,7 +82,10 @@ assert.match(card, /\\u2713 Unlocked|✓ Unlocked/, 'and unlocked is still state
 // 5. The feed header reads like the reference --------------------------------
 const home = await read('src/screens/HomeScreen.tsx')
 assert.match(home, /Apply to these jobs/, 'the feed is headed plainly')
-assert.match(home, /text-2xl font-extrabold leading-tight tracking-tight text-slate-900/, 'the heading is large and upright')
-assert.match(home, /text-sm font-medium italic text-slate-500/, 'the line under it is italic')
+assert.match(home, /text-lg font-extrabold leading-tight tracking-tight text-slate-900/, 'the results heading is compact and upright')
+assert.match(home, /space-y-3 px-4 pb-8 pt-4/, 'the home screen uses tighter vertical spacing around the search and category controls')
+assert.match(home, /rounded-2xl border border-slate-300 bg-white\/95 p-1\.5/, 'the search sheet is compact with a visible edge')
+assert.match(home, /px-3 py-1\.5 text-xs font-bold transition/, 'category chips use compact sizing')
+assert.match(home, /text-xs font-medium italic text-slate-500/, 'the line under it is italic and compact')
 
 console.log('typography: one bundled typeface, one larger scale, the reference job card — passed')

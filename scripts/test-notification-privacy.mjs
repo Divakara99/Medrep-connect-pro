@@ -28,9 +28,16 @@ const {
   isBroadcastNotification,
   isRefundNotification,
   notificationAudience,
+  notificationIsWithinRetention,
   notificationVisibleToEmail,
   privateNotificationTarget,
 } = await import(pathToFileURL(moduleFile).href)
+
+const nowMs = Date.now()
+const dayMs = 24 * 60 * 60 * 1000
+assert.equal(notificationIsWithinRetention(nowMs - 15 * dayMs, nowMs), true, 'the exact 15-day cutoff remains visible')
+assert.equal(notificationIsWithinRetention(nowMs - 15 * dayMs - 1, nowMs), false, 'older notices expire from the list')
+assert.equal(notificationIsWithinRetention(Number.NaN, nowMs), false, 'invalid timestamps fail closed')
 
 assert.deepEqual(privateNotificationTarget(' Alice@Example.org '), ['alice@example.org'])
 assert.equal(privateNotificationTarget('not-an-email'), null)
@@ -97,6 +104,9 @@ try {
   const privacyPatch = await readFile(new URL('../supabase/private_refund_notifications.sql', import.meta.url), 'utf8')
   await db.exec(privacyPatch)
   await db.exec(privacyPatch) // Re-running the privacy patch is safe.
+  const retentionPatch = await readFile(new URL('../supabase/notification_retention_15_days.sql', import.meta.url), 'utf8')
+  await db.exec(retentionPatch)
+  await db.exec(retentionPatch) // Re-running the retention migration is safe.
 
   const { rows: [privileges] } = await db.query(`SELECT
     has_function_privilege('anon', 'public.list_visible_notifications()', 'EXECUTE') AS anon_can_read,
@@ -105,16 +115,19 @@ try {
   assert.equal(privileges.user_can_read, true)
 
   const notices = [
-    { id: 'broadcast', title: 'New vacancy', body: 'An opening is live.', type: 'job', createdAt: 500, from: 'Admin', target: 'all' },
-    { id: 'refund-alice', title: 'Refund approved & processed ✅', body: '₹1,234 · REF-ALICE', type: 'payment', createdAt: 400, from: 'Admin', target: ['Alice@Example.org'], meta: { paymentId: 'payment-alice' } },
-    { id: 'refund-bob', title: 'Refund approved & processed ✅', body: '₹9,876 · REF-BOB', type: 'payment', createdAt: 300, from: 'Admin', target: ['bob@example.org'], meta: { paymentId: 'payment-bob' } },
-    { id: 'refund-multi', title: 'Refund approved & processed ✅', body: '₹9,876 · REF-SHARED', type: 'payment', createdAt: 250, from: 'Admin', target: ['alice@example.org', 'bob@example.org'], meta: { paymentId: 'payment-bob' } },
-    { id: 'legacy-refund', title: 'Refund approved & processed ✅', body: '₹9,876 · REF-BOB', type: 'payment', createdAt: 200, from: 'Admin', target: 'all', meta: { paymentId: 'payment-bob' } },
-    { id: 'legacy-title-refund', title: 'Refund processed', body: '₹4,321 · REF-LEAK', type: 'payment', createdAt: 100, from: 'Admin', target: 'all' },
+    { id: 'broadcast', title: 'New vacancy', body: 'An opening is live.', type: 'job', createdAt: nowMs, from: 'Admin', target: 'all' },
+    { id: 'refund-alice', title: 'Refund approved & processed ✅', body: '₹1,234 · REF-ALICE', type: 'payment', createdAt: nowMs - 1, from: 'Admin', target: ['Alice@Example.org'], meta: { paymentId: 'payment-alice' } },
+    { id: 'refund-bob', title: 'Refund approved & processed ✅', body: '₹9,876 · REF-BOB', type: 'payment', createdAt: nowMs - 2, from: 'Admin', target: ['bob@example.org'], meta: { paymentId: 'payment-bob' } },
+    { id: 'refund-multi', title: 'Refund approved & processed ✅', body: '₹9,876 · REF-SHARED', type: 'payment', createdAt: nowMs - 3, from: 'Admin', target: ['alice@example.org', 'bob@example.org'], meta: { paymentId: 'payment-bob' } },
+    { id: 'legacy-refund', title: 'Refund approved & processed ✅', body: '₹9,876 · REF-BOB', type: 'payment', createdAt: nowMs - 4, from: 'Admin', target: 'all', meta: { paymentId: 'payment-bob' } },
+    { id: 'legacy-title-refund', title: 'Refund processed', body: '₹4,321 · REF-LEAK', type: 'payment', createdAt: nowMs - 5, from: 'Admin', target: 'all' },
+    { id: 'expired-broadcast', title: 'Old notice', body: 'This should not appear.', type: 'update', createdAt: nowMs - 16 * dayMs, from: 'Admin', target: 'all' },
   ]
   for (const notice of notices) {
     await db.query('INSERT INTO public.notifications (id, data) VALUES ($1, $2::jsonb)', [notice.id, JSON.stringify(notice)])
   }
+  assert.equal((await db.query('SELECT count(*)::int AS total FROM public.notifications')).rows[0].total, notices.length,
+    'expired notices are hidden from the list but retained in the database')
 
   async function asUser(id, email) {
     await db.exec(`RESET ROLE; SET ROLE authenticated;
@@ -146,7 +159,7 @@ try {
   await db.exec('RESET ROLE; SET ROLE anon')
   await assert.rejects(db.query('SELECT public.list_visible_notifications()'), /permission denied/)
 
-  console.log('notification privacy: recipient-only refunds, safe local filtering, RPC audience and legacy cleanup passed')
+  console.log('notifications: recipient privacy, 15-day retention filtering, local cache expiry, and non-destructive row retention passed')
 } finally {
   await db.close()
 }

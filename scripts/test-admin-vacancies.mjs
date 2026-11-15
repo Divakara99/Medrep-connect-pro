@@ -52,7 +52,7 @@ assert.deepEqual(groupDuplicateVacancies([]), [])
 
 // ------------------------------------------------------------- CSV batches
 assert.deepEqual(VACANCY_CSV_HEADERS.slice(4, 7), ['Contact number', 'Alternate contact', 'Manager email'], 'phone and email fields have separate template columns')
-const csvRows = parseCsv('Title,Company,Category,Contact number,Alternate contact,Manager email,City,HQ,Job description\r\nMR,Acme,MR,9876543210,9123456780,hr@acme.com,Hyderabad,Hyderabad HO,"Doctors, clinics and stockists"\r\n')
+const csvRows = parseCsv('Title,Company,Category,Contact number,Alternate contact,Manager email,City,HQ / Area,Job description\r\nMR,Acme,MR,9876543210,9123456780,hr@acme.com,Hyderabad,Hyderabad HO,"Doctors, clinics and stockists"\r\n')
 assert.equal(csvRows.length, 1, 'one vacancy is parsed per CSV data row')
 assert.equal(csvRows[0].contact, '9876543210')
 assert.equal(csvRows[0].alternateContact, '9123456780')
@@ -85,6 +85,11 @@ assert.match(jobs, /export async function loadDeletedVacancies/, 'the bin can be
 
 // ------------------------------------------------------------- back navigation
 const admin = await read('src/screens/AdminScreen.tsx')
+const app = await read('src/App.tsx')
+const auth = await read('src/data/auth.ts')
+assert.match(admin, /onClick=\{\(\) => \{\s*setAdminMenuOpen\(false\)\s*onExit\(\)\s*\}\}/, 'the admin-menu logout button reaches the app exit handler')
+assert.match(app, /function onLogout\(\) \{[\s\S]*?setView\(portalLoginView\)[\s\S]*?void doLogout\(\)\.catch/, 'logout returns to the correct portal immediately and handles sign-out failure')
+assert.match(auth, /supabase\.auth\.signOut\(\{ scope: 'local' \}\)/, 'logout clears this device without waiting on a global sign-out request')
 const dashboardStart = admin.indexOf('function DashboardTab(')
 const dashboardEnd = admin.indexOf('function SupabaseSyncStatus()', dashboardStart)
 const dashboard = admin.slice(dashboardStart, dashboardEnd)
@@ -157,12 +162,16 @@ assert.match(form, /templates\/vacancy-template\.docx/, 'vacancy upload offers a
 assert.deepEqual([...docxTemplate.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'the editable Word template is a real DOCX ZIP package')
 assert.match(docxText, /<w:t[^>]*>Data<\/w:t>/, 'the Word template has a Data column')
 assert.match(docxText, /<w:t[^>]*>Entry<\/w:t>/, 'the Word template has an editable Entry column')
+assert.match(docxText, /<w:t[^>]*>HQ \/ Area<\/w:t>/, 'the editable Word template uses the HQ / Area label')
+assert.doesNotMatch(docxText, /HQ \/ territory|HQ \(MR \/ ABM\)/, 'the editable Word template has no obsolete HQ label')
 assert.match(docxText, /Contact number/, 'the Word template covers contact details')
 assert.match(docxText, /Alternate contact number/, 'the alternate contact has its own field')
 assert.match(docxText, /Manager email/, 'email has its own field')
 assert.match(docxText, /50 characters/, 'each Word entry box is sized for a long response')
 assert.match(imageTemplate, />Data</, 'the image template has a Data column')
 assert.match(imageTemplate, />Entry</, 'the image template has an Entry column')
+assert.match(imageTemplate, />HQ \/ Area</, 'the image template source uses the HQ / Area label')
+assert.doesNotMatch(imageTemplate, /HQ \(MR \/ ABM\)/, 'the image template source has no obsolete HQ label')
 assert.match(imageTemplate, /Contact number/i, 'the image template covers contact details')
 assert.match(imageTemplate, /50 characters/i, 'the image template advertises the entry capacity')
 assert.match(form, /room for at least 50 characters in each Entry box/, 'admins are told the entry capacity')
@@ -189,4 +198,4 @@ assert.match(admin, /sm:grid-cols-\[minmax\(0,2\.2fr\)_minmax\(0,1fr\)_minmax\(0
 assert.match(admin, /function postedOn\(ms: number\): string/, 'the Posted column has one shared date format')
 assert.doesNotMatch(admin, /w-10 h-10 rounded-lg bg-brand-100/, 'the stacked avatar card is gone')
 
-console.log('admin vacancies: single compact dashboard and page-history back buttons, payment boxes, one-row delete/undo, opt-in text review, duplicates previewed, image template — passed')
+console.log('admin vacancies: single compact dashboard and page-history back buttons, payment boxes, one-row delete/undo, opt-in text review, duplicate preview, and consistent HQ / Area template labels — passed')
