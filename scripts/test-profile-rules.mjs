@@ -65,7 +65,10 @@ assert.match(account, /onProfileReady=\{onProfileReady\}/, 'the account enables 
 assert.match(account, /onRequestEdit=\{\(\) => setProfileEditing\(true\)\}/, 'the external edit affordance explicitly enables later editing')
 assert.match(account, /onSaved=\{\(profile\) => \{\s*setProfileEditing\(false\)/, 'saving returns an existing profile to read-only mode')
 assert.match(account, /!keyboardOpen && <>[\s\S]*💾 Save profile[\s\S]*🚪 Logout/, 'Save and Logout are hidden while the keyboard is open')
-assert.match(account, /<span>MedRep Connect Pro<\/span>[\s\S]*PR #47/, 'the profile footer shows a one-line app name and its pull request id')
+assert.match(account, /whitespace-nowrap text-sm font-bold text-slate-900">MedRep Connect Pro/, 'the profile footer shows the app name on one line')
+assert.match(account, /<Badge color="brand">\{APP_VERSION_LABEL\}<\/Badge>/, 'the profile footer shows the app version')
+const accountBranding = account.slice(account.indexOf('About card:'), account.indexOf('{/* The paragraphs behind this card'))
+assert.doesNotMatch(accountBranding, /PR #|CREATOR\.|APP_BUILD_LABEL|pull request|request id|code/i, 'the profile branding footer does not show an ID, code, or build stamp')
 assert.match(account, /onClick=\{\(\) => editorRef\.current\?\.save\(\)\}/, 'the existing single profile-wide save action persists all profile changes')
 assert.match(app, /setSelectedJob\(job\)[\s\S]*Profile saved — back to the job[\s\S]*'success'/, 'a completed profile returns to the job with a green success toast')
 

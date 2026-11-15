@@ -8,7 +8,6 @@ import { AboutPage } from './AboutPage'
 import { HelpPage } from './HelpPage'
 import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
-import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import { getProfile, refreshProfile, saveProfile, type Profile } from '../data/profile'
 import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
@@ -299,20 +298,11 @@ export function AccountScreen({
           <div className="flex items-center gap-3 min-w-0">
             <Logo size={40} />
             <div className="min-w-0">
-              <div className="flex items-center gap-1 whitespace-nowrap text-xs font-bold text-slate-900">
-                <span>MedRep Connect Pro</span>
-                <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-extrabold text-brand-700">PR #47</span>
-              </div>
-              <div className="text-xs text-slate-500 truncate">{CREATOR.tagline}</div>
-              <div className="text-[11px] text-slate-500 truncate">Operated by {CREATOR.owner} · {CREATOR.location}</div>
-              <a href={`mailto:${CREATOR.contactEmail}`} className="text-[11px] font-semibold text-blue-600 underline underline-offset-2 truncate block">
-                {CREATOR.contactEmail}
-              </a>
+              <div className="whitespace-nowrap text-sm font-bold text-slate-900">MedRep Connect Pro</div>
             </div>
           </div>
           <button type="button" onClick={onVersionTap} aria-label="App version. Tap five times to open diagnostics." title="Tap 5 times to open diagnostics" className="min-h-11 min-w-20 shrink-0 rounded-xl px-2 py-1 text-right">
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
-            <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
         </div>
         {/* The paragraphs behind this card live on their own pages. */}
