@@ -18,11 +18,13 @@ const activity = await readFile(
   new URL('../android/app/src/main/java/in/medrepconnect/app/MainActivity.java', import.meta.url),
   'utf8',
 )
-const [vacancyForm, bulkUpload, resumeCard, jobDetail] = await Promise.all([
+const [vacancyForm, bulkUpload, resumeCard, jobDetail, nativePlugin, nativeBridge] = await Promise.all([
   '../src/components/VacancyForm.tsx',
   '../src/components/BulkVacancyUpload.tsx',
   '../src/components/ResumeCard.tsx',
   '../src/components/JobDetail.tsx',
+  '../android/app/src/main/java/in/medrepconnect/app/NativeDownloadsPlugin.java',
+  '../src/data/nativeDownloads.ts',
 ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')))
 
 // 1. The application theme must be a NoActionBar one. AppTheme inherits from
@@ -82,7 +84,13 @@ assert.doesNotMatch(
 // 5. WebView download attributes need a native handler on Android. The native
 //    bridge saves packaged templates directly into Downloads and routes signed
 //    remote files through Android DownloadManager.
-assert.match(activity, /setDownloadListener/, 'MainActivity handles WebView download links')
+assert.match(activity, /setDownloadListener/, 'MainActivity handles remote WebView downloads')
+assert.match(activity, /registerPlugin\(NativeDownloadsPlugin\.class\)/, 'the native template download plugin is registered before the bridge starts')
+assert.match(nativePlugin, /saveTemplateFromBridge\(assetPath, fileName, mimeType, call\)/, 'native template download requests reach the Android asset writer')
+assert.match(nativeBridge, /nativeDownloads\.saveTemplate\(/, 'Android template clicks call the native download plugin directly')
+assert.match(vacancyForm, /onClick=\{\(event\) => downloadTemplateInAndroid\(event, 'templates\/vacancy-template\.jpg'/, 'the JPG link bypasses WebView download handling on Android')
+assert.match(vacancyForm, /onClick=\{\(event\) => downloadTemplateInAndroid\(event, 'templates\/vacancy-template\.docx'/, 'the DOCX link bypasses WebView download handling on Android')
+assert.match(bulkUpload, /onClick=\{\(event\) => downloadTemplateInAndroid\(event, 'templates\/vacancy-bulk-template\.csv'/, 'the CSV link bypasses WebView download handling on Android')
 assert.match(activity, /getAssets\(\)\.open\(assetName\)/, 'packaged templates are read from the APK assets')
 assert.match(activity, /MediaStore\.Downloads\.EXTERNAL_CONTENT_URI/, 'bundled files are saved in the public Downloads collection')
 assert.match(activity, /new DownloadManager\.Request\(Uri\.parse\(url\)\)/, 'remote file links use Android DownloadManager')

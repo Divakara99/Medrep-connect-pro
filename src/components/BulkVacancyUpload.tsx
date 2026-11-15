@@ -5,6 +5,7 @@ import { digitsOnly, mobileNumberProblem, normalizeIndianMobile, requiredHeadqua
 import { parseCsv, type VacancyCsvRow } from '../data/vacancyCsv'
 import { checkVacancyDuplicates, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
 import { Button, Card } from './ui'
+import { downloadTemplateInAndroid } from '../data/nativeDownloads'
 
 type JobDraft = Omit<Job, 'id' | 'postedAt'>
 type PreparedRow = { rowNumber: number; title: string; draft?: JobDraft; errors: string[] }
@@ -178,6 +179,7 @@ export function BulkVacancyUpload({ onComplete }: { onComplete: (count: number) 
         <a
           href={`${import.meta.env.BASE_URL}templates/vacancy-bulk-template.csv`}
           download="medrep-vacancy-bulk-template.csv"
+          onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-bulk-template.csv', 'medrep-vacancy-bulk-template.csv', 'text/csv')}
           className="shrink-0 rounded-lg bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-100"
         >
           Download CSV template

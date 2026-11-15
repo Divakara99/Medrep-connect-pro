@@ -8,6 +8,7 @@ import { teamPostVacancy } from '../data/vacancyTeam'
 import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
 import { readVacancyImageText } from '../data/vacancyOcr'
 import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplicateCheck, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
+import { downloadTemplateInAndroid } from '../data/nativeDownloads'
 
 /**
  * The vacancy form, shared by the administrator (post, edit, pin) and the
@@ -434,6 +435,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                   <a
                     href={`${import.meta.env.BASE_URL}templates/vacancy-template.jpg`}
                     download="medrep-vacancy-template.jpg"
+                    onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-template.jpg', 'medrep-vacancy-template.jpg', 'image/jpeg')}
                     className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
                   >
                     ⬇ Download JPG template
@@ -441,6 +443,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                   <a
                     href={`${import.meta.env.BASE_URL}templates/vacancy-template.docx`}
                     download="medrep-vacancy-template.docx"
+                    onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-template.docx', 'medrep-vacancy-template.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
                     className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
                   >
                     ⬇ Download editable Word template

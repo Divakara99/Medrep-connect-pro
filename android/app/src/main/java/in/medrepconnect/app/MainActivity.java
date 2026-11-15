@@ -31,6 +31,8 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PluginCall;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -70,6 +72,7 @@ public class MainActivity extends BridgeActivity {
 
     private static final int DOWNLOAD_STORAGE_PERMISSION_REQUEST = 7406;
     private Runnable pendingDownloadAfterPermission;
+    private PluginCall pendingDownloadCall;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -81,6 +84,7 @@ public class MainActivity extends BridgeActivity {
         // Must run before super.onCreate(): BridgeActivity inflates its content
         // view there, and the window flags have to be in place first.
         enableEdgeToEdge();
+        registerPlugin(NativeDownloadsPlugin.class);
         super.onCreate(savedInstanceState);
         // Belt and braces: a title bar would sit between the status bar and the
         // WebView, pushing the whole app down and eating the inset we reserve for
@@ -143,6 +147,10 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void runWithLegacyStoragePermission(Runnable action) {
+        runWithLegacyStoragePermission(action, null);
+    }
+
+    private void runWithLegacyStoragePermission(Runnable action, PluginCall pluginCall) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                 || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -150,10 +158,30 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         pendingDownloadAfterPermission = action;
+        pendingDownloadCall = pluginCall;
         ActivityCompat.requestPermissions(
                 this,
                 new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
                 DOWNLOAD_STORAGE_PERMISSION_REQUEST);
+    }
+
+    public void saveTemplateFromBridge(String assetPath, String fileName, String mimeType, PluginCall call) {
+        if (assetPath == null || !(assetPath.equals("templates/vacancy-template.jpg")
+                || assetPath.equals("templates/vacancy-template.docx")
+                || assetPath.equals("templates/vacancy-bulk-template.csv"))) {
+            call.reject("That template is not available for download.");
+            return;
+        }
+        String safeName = safeFileName(fileName);
+        runWithLegacyStoragePermission(() -> {
+            if (!saveBundledTemplate("/" + assetPath, safeName, mimeType)) {
+                call.reject("Could not save the template. Please try again.");
+                return;
+            }
+            JSObject result = new JSObject();
+            result.put("fileName", safeName);
+            call.resolve(result);
+        }, call);
     }
 
     @Override
@@ -161,15 +189,18 @@ public class MainActivity extends BridgeActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode != DOWNLOAD_STORAGE_PERMISSION_REQUEST) return;
         Runnable action = pendingDownloadAfterPermission;
+        PluginCall pluginCall = pendingDownloadCall;
         pendingDownloadAfterPermission = null;
+        pendingDownloadCall = null;
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && action != null) {
             action.run();
         } else {
+            if (pluginCall != null) pluginCall.reject("Storage permission is needed to save this file.");
             showDownloadMessage("Storage permission is needed to save this file.");
         }
     }
 
-    private void saveBundledTemplate(String assetPath, String fileName, String mimeType) {
+    private boolean saveBundledTemplate(String assetPath, String fileName, String mimeType) {
         String assetName = "public" + assetPath;
         try (InputStream input = getAssets().open(assetName)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -199,8 +230,10 @@ public class MainActivity extends BridgeActivity {
                 }
             }
             showDownloadMessage("Saved to Downloads: " + fileName);
+            return true;
         } catch (Exception failure) {
             showDownloadMessage("Could not save this template. Please try again.");
+            return false;
         }
     }
 

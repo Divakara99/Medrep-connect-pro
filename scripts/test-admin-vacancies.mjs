@@ -168,6 +168,8 @@ assert.match(docxText, /Contact number/, 'the Word template covers contact detai
 assert.match(docxText, /Alternate contact number/, 'the alternate contact has its own field')
 assert.match(docxText, /Manager email/, 'email has its own field')
 assert.match(docxText, /50 characters/, 'each Word entry box is sized for a long response')
+assert.equal((docxText.match(/w:trHeight w:val="720" w:hRule="atLeast"/g) ?? []).length, 15, 'the compact Word template keeps all standard fields within its single-page layout')
+assert.match(docxText, /w:trHeight w:val="1500" w:hRule="atLeast"/, 'the single-page Word template still gives the job description a larger entry area')
 assert.match(imageTemplate, />Data</, 'the image template has a Data column')
 assert.match(imageTemplate, />Entry</, 'the image template has an Entry column')
 assert.match(imageTemplate, />HQ \/ Area</, 'the image template source uses the HQ / Area label')
