@@ -1,7 +1,7 @@
 import type { Job } from './jobs'
 import type { User } from './auth'
 import type { ResumeRecord } from './resume'
-import { profileCompletionIssues, refreshProfile, type Profile } from './profile'
+import { getProfile, profileCompletionIssues, type Profile } from './profile'
 import { CREATOR } from './creator'
 import { PLAY_STORE_URL } from './jobShareText'
 import { normalizeWhatsAppNumber } from './vacancyRules'
@@ -127,15 +127,15 @@ function buildTextContent(user: User, job: Job, profile: Profile, format: 'email
 }
 
 /**
- * Open the mail/WhatsApp composer WITHOUT unloading the app, so the user stays
- * on the applications screen and still sees the confirmation. A detached anchor
- * click hands the URL to the OS instead of navigating this document.
+ * Hand the URL to the OS while the channel button's user gesture is still
+ * active. `mailto:` must use the current WebView/tab: `_blank` can be ignored by
+ * Android WebView and some mobile browsers. WhatsApp uses a new tab on web.
  */
-function openComposer(href: string): void {
+function openComposer(href: string, channel: 'email' | 'whatsapp'): void {
   const anchor = document.createElement('a')
   anchor.href = href
   anchor.rel = 'noopener'
-  anchor.target = '_blank'
+  anchor.target = channel === 'email' ? '_self' : '_blank'
   anchor.style.display = 'none'
   document.body.appendChild(anchor)
   anchor.click()
@@ -152,7 +152,11 @@ export async function openApplication(
   resume?: ResumeRecord | null,
   preferredChannel?: 'email' | 'whatsapp',
 ): Promise<OpenApplicationResult> {
-  const profile = await refreshProfile(user.email)
+  // requestApplication() refreshed this account's profile before showing the
+  // channel picker. Read that already-loaded session copy synchronously here:
+  // the composer must be launched before any network await or mobile browsers
+  // may block the external mail app as an unsolicited navigation.
+  const profile = getProfile(user.email)
   const missingProfileDetails = profileCompletionIssues(profile, user.phone)
   if (missingProfileDetails.length > 0) {
     return {
@@ -175,7 +179,9 @@ export async function openApplication(
   const to = channel === 'email' ? emailTo : phoneTo
   const { subject, body } = buildTextContent(user, job, profile, channel)
   const href = channel === 'email'
-    ? `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(CREATOR.adminEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    // Keep the @ delimiter in the mailto recipient (some Android mail handlers
+    // treat an encoded %40 in the address path as part of the literal address).
+    ? `mailto:${to}?cc=${encodeURIComponent(CREATOR.adminEmail)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     : `https://wa.me/${to}?text=${encodeURIComponent(body)}`
 
   const record: ApplicationRecord = {
@@ -194,6 +200,11 @@ export async function openApplication(
     resumeFileName: resume?.fileName,
     sentAt: Date.now(),
   }
+
+  // Launch before the first network await so the OS mail handler receives the
+  // original tap gesture. The history save is important, but must not block it.
+  openComposer(href, channel)
+  myApplicationCache = null
 
   // The server assigns the id and stamps the verified identity. If the
   // applications migration is not live yet we still open the composer — the
@@ -215,8 +226,6 @@ export async function openApplication(
   // Admin-side mirror for the dashboard listing; the RPC row is authoritative.
   if (stored) mirror('applications', record)
 
-  myApplicationCache = null
-  openComposer(href)
   return { ok: true, channel, to, record, historyError }
 }
 
