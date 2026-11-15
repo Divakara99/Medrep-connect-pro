@@ -26,7 +26,7 @@
 <line x1="80" y1="870" x2="1120" y2="870" stroke="#94a3b8" stroke-width="2"/>
 <line x1="468" y1="810" x2="1096" y2="810" stroke="#d1d9e6" stroke-width="2"/>
 <line x1="468" y1="851" x2="1096" y2="851" stroke="#d1d9e6" stroke-width="2"/>
-<text x="105" y="942" font-size="25" font-weight="700">HQ (MR / ABM)</text>
+<text x="105" y="942" font-size="25" font-weight="700">HQ / Area</text>
 <line x1="80" y1="1005" x2="1120" y2="1005" stroke="#94a3b8" stroke-width="2"/>
 <line x1="468" y1="945" x2="1096" y2="945" stroke="#d1d9e6" stroke-width="2"/>
 <line x1="468" y1="986" x2="1096" y2="986" stroke="#d1d9e6" stroke-width="2"/>
