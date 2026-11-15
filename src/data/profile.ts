@@ -54,6 +54,7 @@ const LEGACY_PROFILES_KEY = 'mrc_profiles_v1'
  * sure it is reading the server's copy awaits `refreshProfile()` first.
  */
 const profiles = new Map<string, Profile>()
+const persistedProfileKeys = new Set<string>()
 
 // Remove the old browser copy on start-up; the server row is the profile now.
 remove(LEGACY_PROFILES_KEY)
@@ -75,6 +76,12 @@ export function getProfile(email: string): Profile {
 /** Forget every cached profile (sign-out, account switch). */
 export function clearProfileCache(): void {
   profiles.clear()
+  persistedProfileKeys.clear()
+}
+
+/** Whether this account already has a profile row, including incomplete saved profiles. */
+export function hasPersistedProfile(email: string): boolean {
+  return persistedProfileKeys.has(profileKey(email))
 }
 
 function normalise(value: unknown, email: string): Profile | null {
@@ -109,6 +116,8 @@ export async function refreshProfile(email: string): Promise<Profile> {
     // Offline or the migration has not run: keep whatever this session has.
     return getProfile(key)
   }
+  if (data) persistedProfileKeys.add(key)
+  else persistedProfileKeys.delete(key)
   const loaded = normalise((data as { data?: unknown } | null)?.data, key)
   if (loaded) profiles.set(key, loaded)
   return getProfile(key)
@@ -137,6 +146,7 @@ export async function saveProfile(profile: Profile): Promise<Profile> {
   if (error) throw new Error('Your profile could not be saved online. Check your connection and try again.')
 
   profiles.set(key, next)
+  persistedProfileKeys.add(key)
   return next
 }
 

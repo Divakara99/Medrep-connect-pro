@@ -34,10 +34,11 @@ assert.doesNotMatch(editor, /Profile photo|Upload or change profile photo|photoI
 assert.doesNotMatch(editor, /\{name\}|Profile<\/div>/, 'the profile editor does not repeat the account name')
 assert.match(app, /label: 'Account & Profile'[\s\S]*whitespace-nowrap/, 'Account & Profile stays on one line in the menu')
 assert.match(account, /accept="image\/jpeg,image\/png,image\/webp"/, 'the account picture picker accepts only supported image formats')
-assert.match(editor, /aria-label="Enable profile editing"/, 'a single pencil action explicitly enables profile editing')
-assert.match(editor, /<fieldset disabled=\{readOnly\}/, 'all profile fields remain locked until the pencil is tapped')
+assert.match(editor, /aria-label="Edit profile"/, 'existing users have a separate edit action')
+assert.match(editor, /<fieldset disabled=\{readOnly\}/, 'existing profile fields remain locked until edit is requested')
+assert.match(editor, /onProfileReady\?\.\(hasPersistedProfile\(email\)\)/, 'new users can start entering a profile directly')
 for (const id of ['profile-phone', 'profile-city', 'profile-state', 'profile-address', 'profile-dob', 'profile-gender', 'profile-ctc', 'profile-notice', 'profile-languages', 'profile-skills', 'profile-roles', 'profile-bio']) {
   assert.ok(editor.includes(`inputId="${id}"`), `profile field ${id} remains labelled`)
 }
 
-console.log('profile photo: private owner-only uploads, one account name, 5 MB validation, pencil-gated editing — passed')
+console.log('profile photo: private owner-only uploads, one account name, 5 MB validation, first-entry and later-edit states — passed')
