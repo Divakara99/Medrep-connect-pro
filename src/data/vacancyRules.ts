@@ -6,6 +6,29 @@
 
 export const DELETE_REASON_MIN = 5
 export const DELETE_REASON_MAX = 300
+export const VACANCY_RESTORE_WINDOW_MS = 48 * 60 * 60 * 1000
+
+/** Restore is allowed for 48 hours, using the local timestamp on the tombstone. */
+export function isWithinVacancyRestoreWindow(deletedAt: number, now = Date.now()): boolean {
+  return Number.isFinite(deletedAt) && deletedAt > 0
+    && deletedAt <= now
+    && now - deletedAt < VACANCY_RESTORE_WINDOW_MS
+}
+
+/** Calendar month key for the admin revenue view, aligned to India business time. */
+export function paymentMonthKey(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date(timestamp))
+  const year = parts.find((part) => part.type === 'year')?.value ?? ''
+  const month = parts.find((part) => part.type === 'month')?.value ?? ''
+  return year && month ? `${year}-${month}` : ''
+}
+
+export function currentPaymentMonthKey(now = Date.now()): string {
+  return paymentMonthKey(now)
+}
 
 /** Returns a message when the reason is not acceptable, otherwise null. */
 export function deleteReasonProblem(reason: string): string | null {

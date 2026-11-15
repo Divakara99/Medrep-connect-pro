@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { duplicateRemovalIds, groupDuplicateVacancies } from '../src/data/vacancyDuplicateGroups.ts'
 import { parseCsv, VACANCY_CSV_HEADERS } from '../src/data/vacancyCsv.ts'
+import { generateVacancyDescriptionDraft, findConfidentialContact } from '../src/data/jobDescription.ts'
 
 /**
  * Admin vacancy list: one back step, one deleted row, no auto-created columns,
@@ -9,6 +10,16 @@ import { parseCsv, VACANCY_CSV_HEADERS } from '../src/data/vacancyCsv.ts'
  */
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
+
+const generatedDescription = generateVacancyDescriptionDraft({
+  title: 'Territory Sales Executive', rolePosition: 'Key Account Manager', category: 'Field',
+  location: 'Bengaluru', hq: 'Bengaluru HQ\nMysuru HQ', experience: '1-3 years',
+  qualification: 'B.Pharm', salary: '₹4 LPA', vacancyCount: '2 openings',
+})
+assert.match(generatedDescription, /Key Account Manager/)
+assert.match(generatedDescription, /Bengaluru HQ, Mysuru HQ/)
+assert.match(generatedDescription, /Qualification: B\.Pharm/)
+assert.equal(findConfidentialContact(generatedDescription), null, 'the generated public draft includes no contact details')
 
 // ---------------------------------------------------------------- duplicates
 const base = {
@@ -82,10 +93,9 @@ assert.match(deleteBody, /jobs = jobs\.filter\(\(job\) => job\.id !== id\)/, 'on
 const restoreStart = jobs.indexOf('export async function restoreJob')
 assert.ok(restoreStart > 0, 'a delete can be undone from the database')
 const restoreBody = jobs.slice(restoreStart, jobs.indexOf('\n}', restoreStart) + 2)
-assert.match(restoreBody, /\.eq\('id', id\)\.select\('id'\)/, 'a restore touches exactly one primary key')
-assert.match(restoreBody, /delete restored\.deleted/, 'the tombstone flag is what gets cleared')
-assert.match(restoreBody, /changed !== 1/, 'a restore is verified like a delete')
-assert.match(restoreBody, /before its details were kept, so it cannot be restored/, 'old empty tombstones are refused instead of restoring a blank card')
+assert.match(restoreBody, /supabase\.rpc\('restore_vacancy', \{ p_id: id \}\)/, 'restore uses the server-checked RPC')
+assert.doesNotMatch(restoreBody, /\.from\('vacancies'\)\.update/, 'the client cannot bypass the server restore deadline')
+assert.match(restoreBody, /if \(error\) throw new Error/, 'server-side restore failures are shown to the admin')
 assert.match(jobs, /export async function loadDeletedVacancies/, 'the bin can be listed')
 
 // ------------------------------------------------------------- back navigation
@@ -130,12 +140,19 @@ assert.match(bulkUpload, /rolePosition: validCategory \? undefined : rolePositio
 const vacancyForm = await read('src/components/VacancyForm.tsx')
 assert.match(vacancyForm, /Other — enter manually/, 'the form offers the requested manual Role/Position option')
 assert.match(vacancyForm, /rolePosition: manualRolePosition \? customRolePosition\.trim\(\) : undefined/, 'the form saves the manually entered Role/Position')
+assert.match(vacancyForm, /✨ Generate draft/, 'the form can draft a description from its vacancy details')
+assert.match(vacancyForm, /no external AI service is called/, 'description drafting does not leak data to an unconfigured AI service')
 assert.deepEqual(bulkTemplate.trim().split(','), VACANCY_CSV_HEADERS, 'the downloadable CSV template has distinct contact and email columns')
 const paymentsStart = admin.indexOf('function PaymentsTab(')
 const paymentsEnd = admin.indexOf('\nfunction ', paymentsStart + 1)
 const paymentsTab = admin.slice(paymentsStart, paymentsEnd)
+const paymentData = await read('src/data/payments.ts')
 assert.ok(paymentsStart >= 0 && paymentsEnd > paymentsStart, 'the payments page is available for layout checks')
 assert.doesNotMatch(paymentsTab, /<table|overflow-x-auto/, 'all payments no longer uses a wide table')
+assert.match(paymentsTab, /type="month"[\s\S]*?aria-label="Filter payments by month"/, 'admin payments can be filtered by calendar month')
+assert.match(paymentsTab, /const periodPayments = monthFilter === 'all'/, 'payment totals and lists use the chosen month')
+assert.match(paymentData, /\.range\(offset, offset \+ pageSize - 1\)/, 'monthly revenue loads every payment page instead of silently stopping at 200 rows')
+assert.match(admin, /REVENUE THIS MONTH/, 'the dashboard revenue card is monthly')
 assert.match(paymentsTab, /space-y-1\.5[\s\S]*?shown\.map\(\(payment\)/, 'all payments uses a compact stack of transaction boxes')
 assert.match(paymentsTab, /className="flex min-w-0 items-center gap-1\.5 rounded-lg border/, 'each all-payments transaction is a single-line box')
 assert.match(paymentsTab, /aria-label=\{`Payment details for \$\{customer\}`\}/, 'payment details remain available in each row')

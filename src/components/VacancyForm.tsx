@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Badge, Button, Input, Label, Modal, Select, Textarea } from './ui'
 import { addJob, CATEGORIES, descriptionPoints, updateJob, type Job } from '../data/jobs'
 import { cleanExtraFields, extraFieldProblem, EXTRA_FIELD_LIMIT, type ExtraField } from '../data/extraFields'
-import { findConfidentialContact } from '../data/jobDescription'
+import { findConfidentialContact, generateVacancyDescriptionDraft } from '../data/jobDescription'
 import { digitsOnly, hasNonPhoneCharacters, mobileNumberProblem, MOBILE_DIGITS, MOBILE_MAX_DIGITS, MAX_HQ_TEXT_LENGTH, isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters, requiredHeadquartersProblem, serializeHeadquarters } from '../data/vacancyRules'
 import { teamPostVacancy } from '../data/vacancyTeam'
 import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
@@ -833,8 +833,31 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
         <div className="rounded-xl ring-1 ring-amber-200 bg-amber-50/40 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <Label>Job description — one point per line</Label>
-            <Badge color="amber">PUBLIC · shown to every user</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-3 py-1.5 text-xs"
+                disabled={!title.trim() || !location.trim()}
+                onClick={() => setDescription(generateVacancyDescriptionDraft({
+                  title,
+                  rolePosition: manualRolePosition ? customRolePosition : category,
+                  category,
+                  location,
+                  hq: serializeHeadquarters(hqEntries),
+                  division,
+                  experience,
+                  qualification,
+                  salary,
+                  vacancyCount,
+                }))}
+              >
+                ✨ Generate draft
+              </Button>
+              <Badge color="amber">PUBLIC · shown to every user</Badge>
+            </div>
           </div>
+          <p className="text-xs text-slate-600">Builds an editable draft from entered vacancy details using a built-in prompt. Review it before saving; no external AI service is called.</p>
           <p className="text-xs font-medium text-amber-900">
             Free users read this description before subscribing, so it must not contain confidential contact details.
             Phone numbers and email addresses are rejected here and by the database — use the Manager, Contact,

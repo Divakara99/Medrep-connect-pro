@@ -27,7 +27,9 @@ import {
 } from '../data/jobs'
 import { fillCheckState, fillCheckWaiting, FILL_CHECK_LABELS, fillCheckWhatsAppUrl } from '../data/fillCheck'
 import {
+  currentPaymentMonthKey,
   deleteReasonProblem,
+  paymentMonthKey,
   paymentStatusLabel,
   paymentStatusTone,
   paymentTotals,
@@ -488,6 +490,7 @@ function VacanciesTab({ onMutate, onNotice }: {
   const [city, setCity] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
   const [fillFilter, setFillFilter] = useState<'all' | 'unasked' | 'asked' | 'open' | 'filled'>('all')
+  const now = useCurrentTime()
   const [askingId, setAskingId] = useState<string | null>(null)
   // What the table shows: the same rows the server returned, narrowed by the
   // filters above it. Nothing is hidden by default.
@@ -932,25 +935,29 @@ function VacanciesTab({ onMutate, onNotice }: {
           >
             <span className="text-sm font-bold text-slate-900">🗑 Deleted vacancies ({deleted.length})</span>
             <span className="text-xs font-semibold text-slate-500">
-              {deletedOpen ? 'Hide' : `Show · ${deleted.filter((item) => item.recoverable).length} can be restored`}
+              {deletedOpen ? 'Hide' : `Show · ${deleted.filter((item) => item.recoverable && item.restoreUntil > now).length} restorable within 48 hours`}
             </span>
           </button>
           {deletedOpen && (
             <div className="divide-y divide-slate-100 border-t border-slate-100">
               {deleted.map((item) => {
                 const open = previewId === item.id
+                const restoreAllowed = item.recoverable && now > 0 && now < item.restoreUntil
+                const restoreExpired = item.deletedAt > 0 && !restoreAllowed
                 return (
                   <div key={item.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
                         <div className="truncate text-xs text-slate-600">
-                          {[item.company, item.location, item.category].filter(Boolean).join(' · ') || 'No details recorded'}
+                          {[item.company, item.location, item.rolePosition || item.category].filter(Boolean).join(' · ') || 'No details recorded'}
                         </div>
                         <div className="text-xs text-slate-500">
                           {item.deletedAt
                             ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
                             : 'Deleted'}
+                          {restoreAllowed && ` · Restore until ${new Date(item.restoreUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`}
+                          {restoreExpired && ' · 48-hour restore period ended'}
                           {' · '}{item.deleteReason || 'No reason recorded'}
                           {item.deletedBy ? ` · by ${item.deletedBy}` : ''}
                         </div>
@@ -963,7 +970,7 @@ function VacanciesTab({ onMutate, onNotice }: {
                         >
                           {open ? 'Hide' : '👁 Preview'}
                         </Button>
-                        {item.recoverable ? (
+                        {restoreAllowed ? (
                           <Button
                             variant="secondary"
                             className="px-3 py-1.5 text-xs"
@@ -972,6 +979,8 @@ function VacanciesTab({ onMutate, onNotice }: {
                           >
                             {undoBusyId === item.id ? 'Restoring…' : '↩ Restore'}
                           </Button>
+                        ) : restoreExpired ? (
+                          <span className="self-center text-xs font-semibold text-slate-500">Permanently deleting…</span>
                         ) : (
                           <Button
                             variant="secondary"
@@ -1012,9 +1021,13 @@ function VacanciesTab({ onMutate, onNotice }: {
                             {item.description}
                           </p>
                         )}
-                        {item.recoverable ? (
+                        {restoreAllowed ? (
                           <p className="text-xs font-semibold text-emerald-800">
-                            Everything above is still stored. Restore puts it back exactly as it was.
+                            Everything above is still stored. Restore is available for 48 hours after deletion.
+                          </p>
+                        ) : restoreExpired ? (
+                          <p className="text-xs font-semibold text-slate-600">
+                            The 48-hour restore window has ended. The vacancy will be permanently removed by the database cleanup.
                           </p>
                         ) : (
                           <p className="text-xs font-semibold text-amber-900">
@@ -1251,6 +1264,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
   const [details, setDetails] = useState<PaymentRecord | null>(null)
   const [filter, setFilter] = useState<PaymentFilter>('all')
+  const [monthFilter, setMonthFilter] = useState(currentPaymentMonthKey())
 
   useEffect(() => {
     let active = true
@@ -1286,32 +1300,51 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
     }
   }
 
-  const totals = paymentTotals(payments)
+  const periodPayments = monthFilter === 'all'
+    ? payments
+    : payments.filter((payment) => paymentMonthKey(payment.createdAt) === monthFilter)
+  const totals = paymentTotals(periodPayments)
   const attention = (p: PaymentRecord) => Boolean(p.manualReview) || p.status === 'failed' || p.status === 'rejected'
-  const shown = payments.filter((p) => {
+  const shown = periodPayments.filter((p) => {
     if (filter === 'paid') return p.status === 'success' && !p.manualReview
     if (filter === 'pending') return p.status === 'pending' && !p.manualReview
     if (filter === 'attention') return attention(p)
     return true
   })
   const filters: { id: PaymentFilter; label: string; count: number }[] = [
-    { id: 'all', label: 'All', count: payments.length },
+    { id: 'all', label: 'All', count: periodPayments.length },
     { id: 'paid', label: 'Paid', count: totals.paidCount },
     { id: 'pending', label: 'Pending', count: totals.pendingCount },
-    { id: 'attention', label: 'Needs action', count: payments.filter(attention).length },
+    { id: 'attention', label: 'Needs action', count: periodPayments.filter(attention).length },
   ]
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-slate-900">Payments ({payments.length})</h2>
-        <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Payments · {monthFilter === 'all' ? 'All months' : monthFilter}</h2>
+          <p className="text-xs text-slate-500">{periodPayments.length} records · revenue counts successful payments only</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+            Month
+            <input
+              type="month"
+              aria-label="Filter payments by month"
+              value={monthFilter === 'all' ? '' : monthFilter}
+              onChange={(event) => setMonthFilter(event.target.value || currentPaymentMonthKey())}
+              className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-900"
+            />
+          </label>
+          <Button variant={monthFilter === 'all' ? 'primary' : 'secondary'} onClick={() => setMonthFilter('all')}>All months</Button>
+          <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+        </div>
       </div>
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <SummaryTile label="Paid" value={String(totals.paidCount)} detail={`₹${totals.paidAmount.toLocaleString('en-IN')} total`} tone="text-emerald-700" />
+        <SummaryTile label={monthFilter === 'all' ? 'Paid revenue · all time' : 'Paid revenue · selected month'} value={`₹${totals.paidAmount.toLocaleString('en-IN')}`} detail={`${totals.paidCount} successful payment${totals.paidCount === 1 ? '' : 's'}`} tone="text-emerald-700" />
         <SummaryTile label="Pending" value={String(totals.pendingCount)} detail="waiting for Razorpay" tone="text-amber-700" />
         <SummaryTile label="Waiting bank check" value={String(totals.waitingBankCheck)} detail="UPI transfers" tone="text-amber-700" />
         <SummaryTile label="Failed or rejected" value={String(totals.failedCount)} detail="no plan activated" tone="text-red-700" />
@@ -1940,7 +1973,8 @@ function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; on
   const active = users.filter((u) => u.subscribedUntil && u.subscribedUntil > now)
   const free = users.filter((u) => !u.subscribedUntil || u.subscribedUntil <= now)
   const expiringSoon = active.filter((u) => u.subscribedUntil && u.subscribedUntil - now < 7 * 24 * 3600_000)
-  const revenue = payments.filter((p) => p.status === 'success').reduce((s, p) => s + p.amount, 0)
+  const monthKey = currentPaymentMonthKey(now)
+  const revenue = payments.filter((p) => p.status === 'success' && paymentMonthKey(p.createdAt) === monthKey).reduce((s, p) => s + p.amount, 0)
   const todayStart = now ? new Date(now).setHours(0, 0, 0, 0) : 0
   const newToday = users.filter((u) => u.createdAt >= todayStart).length
   const openTickets = tickets.filter((t) => t.status !== 'resolved').length
@@ -1960,7 +1994,7 @@ function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; on
         <StatCard compactLabel="NEW TODAY" value={newToday} color="brand" icon="✨" hint="Open users" onClick={() => onNavigate('users', 'all')} />
         <StatCard compactLabel="OPEN REQUESTS" value={openTickets} color="red" icon="🎫" hint="Open requests" onClick={() => onNavigate('tickets')} />
         <StatCard compactLabel="APPLICATIONS" value={queue.length} color="purple" icon="✉️" hint="Open applications" onClick={() => onNavigate('applications')} />
-        <StatCard compactLabel="REVENUE" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Open payments" onClick={() => onNavigate('payments')} />
+        <StatCard compactLabel="REVENUE THIS MONTH" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Filter monthly payments" onClick={() => onNavigate('payments')} />
       </div>
 
       <Card className="p-3">
