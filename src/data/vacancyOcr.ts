@@ -1,4 +1,8 @@
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
+
+const NativeVacancyOcr = registerPlugin<{
+  recognizeFile(options: { path: string }): Promise<{ text: string }>
+}>('NativeVacancyOcr')
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024
 const OCR_WORKER_TIMEOUT_MS = 90_000
@@ -42,10 +46,7 @@ async function readNativeVacancyImageText(
   image: File,
   onProgress?: (status: string, progress: number) => void,
 ): Promise<string> {
-  const [{ Filesystem, Directory }, { TextRecognition, Script }] = await Promise.all([
-    import('@capacitor/filesystem'),
-    import('@capacitor-mlkit/text-recognition'),
-  ])
+  const { Filesystem, Directory } = await import('@capacitor/filesystem')
   const extension = image.type === 'image/png' ? 'png' : image.type === 'image/webp' ? 'webp' : 'jpg'
   const path = `vacancy-ocr-${Date.now()}.${extension}`
   onProgress?.('Preparing on-device text recognition…', 0.1)
@@ -63,7 +64,7 @@ async function readNativeVacancyImageText(
   try {
     onProgress?.('Reading text with on-device OCR…', 0.35)
     const result = await withTimeout(
-      TextRecognition.processImage({ path: uri, script: Script.Latin }),
+      NativeVacancyOcr.recognizeFile({ path: uri }),
       OCR_WORKER_TIMEOUT_MS,
       'Reading this image took too long. Try a clearer or smaller image, or use Paste text instead.',
     )

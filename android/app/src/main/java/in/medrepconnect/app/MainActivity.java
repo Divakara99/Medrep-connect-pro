@@ -85,6 +85,7 @@ public class MainActivity extends BridgeActivity {
         // view there, and the window flags have to be in place first.
         enableEdgeToEdge();
         registerPlugin(NativeDownloadsPlugin.class);
+        registerPlugin(NativeVacancyOcrPlugin.class);
         super.onCreate(savedInstanceState);
         // Belt and braces: a title bar would sit between the status bar and the
         // WebView, pushing the whole app down and eating the inset we reserve for
