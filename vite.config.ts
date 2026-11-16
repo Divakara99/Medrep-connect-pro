@@ -51,6 +51,10 @@ function localOcrRuntimeAssets(): Plugin {
       })
     },
     generateBundle() {
+      // Android uses its bundled Latin-only ML Kit plugin. Keep the Tesseract
+      // worker, WASM and English traineddata on web builds only; these assets
+      // are several megabytes and are never loaded by the native app.
+      if (process.env.VITE_ANDROID_BUILD === 'true') return
       for (const asset of OCR_ASSETS) {
         this.emitFile({
           type: 'asset',

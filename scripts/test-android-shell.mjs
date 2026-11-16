@@ -26,6 +26,11 @@ const [vacancyForm, bulkUpload, resumeCard, jobDetail, nativePlugin, nativeBridg
   '../android/app/src/main/java/in/medrepconnect/app/NativeDownloadsPlugin.java',
   '../src/data/nativeDownloads.ts',
 ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')))
+const [viteConfig, packageJson, androidWorkflow] = await Promise.all([
+  readFile(new URL('../vite.config.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  readFile(new URL('../.github/workflows/android.yml', import.meta.url), 'utf8'),
+])
 
 // 1. The application theme must be a NoActionBar one. AppTheme inherits from
 //    Theme.AppCompat.Light.DarkActionBar, which is exactly how a title bar
@@ -120,4 +125,11 @@ assert.match(
   'the launch icon is our own launcher mark',
 )
 
-console.log('android shell: no title bar, no stock splash, native downloads for templates and resumes — passed')
+// Native builds use ML Kit instead of browser Tesseract, so don't package the
+// multi-megabyte Tesseract WASM worker and language file into the APK.
+assert.match(viteConfig, /if \(process\.env\.VITE_ANDROID_BUILD === 'true'\) return/)
+assert.match(packageJson, /"build:android": "VITE_ANDROID_BUILD=true npm run build"/)
+assert.match(packageJson, /"android:sync": "npm run build:android && cap sync android"/)
+assert.equal((androidWorkflow.match(/run: npm run build:android/g) ?? []).length, 2)
+
+console.log('android shell: native downloads and Latin-only OCR without unused web OCR assets — passed')
