@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises'
 import { extractVacancyFields, vacancyDraftFingerprint } from '../src/data/vacancyExtraction.ts'
 
 const ocrSource = await readFile(new URL('../src/data/vacancyOcr.ts', import.meta.url), 'utf8')
-assert.match(ocrSource, /cacheMethod: Capacitor\.isNativePlatform\(\) \? 'none' : 'write'/)
+assert.match(ocrSource, /if \(Capacitor\.isNativePlatform\(\)\) return readNativeVacancyImageText/)
+assert.match(ocrSource, /Filesystem\.writeFile\(\{ path, data: base64, directory: Directory\.Cache \}\)/)
+assert.match(ocrSource, /TextRecognition\.processImage\(\{ path: uri, script: Script\.Latin \}\)/)
+assert.match(ocrSource, /Filesystem\.deleteFile\(\{ path, directory: Directory\.Cache \}\)/)
 assert.match(ocrSource, /OCR_WORKER_TIMEOUT_MS = 90_000/)
 assert.match(ocrSource, /worker\.recognize\(image, \{ rotateAuto: true \}\),\s*OCR_WORKER_TIMEOUT_MS/)
 assert.match(ocrSource, /Loading offline English OCR data/)
