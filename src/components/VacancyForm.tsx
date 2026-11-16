@@ -459,7 +459,14 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
           <section className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-indigo-50 p-3 space-y-3">
             <div>
               <div className="font-bold text-slate-900">✨ Fill fields from a vacancy poster or text</div>
-              <p className="text-xs text-slate-600 mt-1">OCR runs locally. Review and correct every value before posting. The selected image is attached securely to the vacancy and shown with contact details to eligible users.</p>
+              <p className="mt-1 text-xs text-slate-600">Upload a flyer or paste vacancy text, then review the detected values.</p>
+              <details className="mt-1.5 text-xs text-slate-600">
+                <summary className="cursor-pointer font-semibold text-brand-800">Read more</summary>
+                <div className="mt-1 space-y-1.5 leading-snug">
+                  <p>OCR runs locally. Review and correct every value before posting. If you post, the selected image is securely attached to the vacancy and shown with contact details to eligible users.</p>
+                  <p>Images can be JPG, PNG or WebP, up to 8 MB. You can download the JPG or editable Word template below. The templates have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the Word file directly, then paste its text here or upload a screenshot. Use the CSV batch template on the Vacancies page to post multiple roles together.</p>
+                </div>
+              </details>
             </div>
             <div className="flex gap-2">
               <Button type="button" variant={sourceMode === 'image' ? 'primary' : 'secondary'} className="flex-1" onClick={() => setSourceMode('image')} disabled={extracting}>
@@ -489,7 +496,6 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                     ⬇ Download editable Word template
                   </a>
                 </div>
-                <p className="text-xs leading-snug text-slate-600">The JPG and editable Word template have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the Word file directly, then copy its text into “Paste text” or upload a screenshot. Use the CSV batch template on the Vacancies page to post multiple roles together.</p>
                 <Input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -501,7 +507,6 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                   }}
                   disabled={extracting}
                 />
-                <p className="text-xs text-slate-600">JPG, PNG or WebP · up to 8 MB. OCR is local; if you post, the selected image is securely attached to the vacancy.</p>
                 {sourceImage && <p className="text-xs font-semibold text-slate-700 truncate">Selected: {sourceImage.name}</p>}
               </div>
             ) : (
@@ -529,11 +534,14 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
             {review && (
               <div className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
                 <div className="text-sm font-bold text-slate-900">Choose what to fill</div>
-                <p className="text-xs text-slate-600">
-                  Values are editable — correct anything the paste or scan read wrongly. Only the ticked ones are written
-                  into the form. Fields you have already typed start unticked, and HQ text fills the first HQ box without
-                  adding new ones.
-                </p>
+                <details className="text-xs text-slate-600">
+                  <summary className="cursor-pointer font-semibold text-brand-800">Read more</summary>
+                  <p className="mt-1">
+                    Values are editable — correct anything the paste or scan read wrongly. Only the ticked ones are written
+                    into the form. Fields you have already typed start unticked, and HQ text fills the first HQ box without
+                    adding new ones.
+                  </p>
+                </details>
                 <div className="space-y-2">
                   {EXTRACTED_FIELDS.map(({ key, label }) => {
                     const value = review.fields[key]
@@ -584,10 +592,13 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                       <div className="text-xs font-bold text-amber-950">
                         Extra details — new fields for this vacancy
                       </div>
-                      <p className="text-[11px] font-medium text-amber-900">
-                        These lines had no field of their own. Ticked ones are added to the vacancy as their own fields,
-                        and everyone can read them. Phone numbers and emails are never accepted here.
-                      </p>
+                      <details className="text-[11px] font-medium text-amber-900">
+                        <summary className="cursor-pointer font-bold">Read more</summary>
+                        <p className="mt-1">
+                          These lines had no field of their own. Ticked ones are added to the vacancy as their own fields,
+                          and everyone can read them. Phone numbers and emails are never accepted here.
+                        </p>
+                      </details>
                       {review.extras.map((extra, index) => {
                         const problem = extraFieldProblem(extra.label, extra.value)
                         return (
