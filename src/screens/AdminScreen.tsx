@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
+import { Badge, Button, Card, Input, Label, Modal, RefreshIconButton, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
@@ -216,19 +216,22 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
           <div className="min-w-0 flex-1">
             <Wordmark size="text-sm" />
           </div>
-          <button
-            type="button"
-            title="Open admin menu"
-            aria-label="Open admin menu"
-            aria-haspopup="dialog"
-            aria-expanded={adminMenuOpen}
-            onClick={() => setAdminMenuOpen(true)}
-            className="w-10 h-10 shrink-0 rounded-xl bg-slate-100 ring-1 ring-slate-200 hover:bg-slate-200 text-slate-700 grid place-items-center transition active:scale-95"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+          <div className="inline-flex shrink-0 items-center gap-2">
+            <RefreshIconButton onClick={() => window.location.reload()} />
+            <button
+              type="button"
+              title="Open admin menu"
+              aria-label="Open admin menu"
+              aria-haspopup="dialog"
+              aria-expanded={adminMenuOpen}
+              onClick={() => setAdminMenuOpen(true)}
+              className="w-10 h-10 shrink-0 rounded-xl bg-slate-100 ring-1 ring-slate-200 hover:bg-slate-200 text-slate-700 grid place-items-center transition active:scale-95"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
         </div>
       </header>
 

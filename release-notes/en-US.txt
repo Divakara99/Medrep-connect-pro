@@ -1,0 +1,2 @@
+Added a one-tap refresh button for job seekers, administrators, and vacancy teams.
+Improved sign-in session persistence when reopening the app.

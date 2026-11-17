@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BackButton, Badge, Button, Card, Input, Label, Modal, Textarea } from '../components/ui'
+import { BackButton, Badge, Button, Card, Input, Label, Modal, RefreshIconButton, Textarea } from '../components/ui'
 import { Wordmark } from '../components/Logo'
 import { VacancyForm } from '../components/VacancyForm'
 import { currentUser } from '../data/auth'
@@ -91,7 +91,10 @@ export function VacancyPortal({ onExit }: { onExit: () => void }) {
             <div className="flex items-center gap-2"><Wordmark size="text-sm" /><Badge color="green">Vacancy team</Badge></div>
             <div className="text-xs text-slate-500 truncate">{currentUser()?.email}</div>
           </div>
-          <Button variant="secondary" onClick={onExit}>Sign out</Button>
+          <div className="inline-flex shrink-0 items-center gap-2">
+            <RefreshIconButton onClick={() => window.location.reload()} />
+            <Button variant="secondary" onClick={onExit}>Sign out</Button>
+          </div>
         </div>
       </header>
 

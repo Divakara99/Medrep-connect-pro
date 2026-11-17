@@ -6,7 +6,7 @@ import { VacancyLoginScreen } from './screens/VacancyLoginScreen'
 import { VacancyPortal } from './screens/VacancyPortal'
 import { AdminScreen } from './screens/AdminScreen'
 import type { UserTab } from './data/tabs'
-import { TopBar, Button, Modal } from './components/ui'
+import { TopBar, Button, Modal, RefreshIconButton } from './components/ui'
 import { NotificationsPanel } from './components/NotificationsPanel'
 import { HomeScreen } from './screens/HomeScreen'
 import { PriorityScreen } from './screens/PriorityScreen'
@@ -681,19 +681,22 @@ export default function App() {
           </span>
         }
         right={
-          <button
-            type="button"
-            title="Open navigation menu"
-            aria-label="Open navigation menu"
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(true)}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+          <span className="inline-flex shrink-0 items-center gap-2">
+            <RefreshIconButton onClick={() => window.location.reload()} />
+            <button
+              type="button"
+              title="Open navigation menu"
+              aria-label="Open navigation menu"
+              aria-haspopup="dialog"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(true)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </span>
         }
       />
 
