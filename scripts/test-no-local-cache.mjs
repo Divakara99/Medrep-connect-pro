@@ -66,7 +66,7 @@ check(
 
 const supabase = read('src/data/supabase.ts')
 check(
-  'the Supabase session is the only persisted browser value',
+  'the Supabase session is the only persisted auth value',
   /storageKey:\s*'mrc_supabase_auth_v1'/.test(supabase),
   'storageKey missing from the Supabase client',
 )
@@ -76,8 +76,9 @@ check(
   'the saved refresh token must survive reloads and refresh access tokens automatically',
 )
 check(
-  'native auth sessions persist through Capacitor Preferences',
-  /@capacitor\/preferences/.test(supabase) && /Preferences\.get/.test(supabase) && /Preferences\.set/.test(supabase),
+  'native auth sessions persist through Capacitor Preferences and have a WebView fallback',
+  /@capacitor\/preferences/.test(supabase) && /Preferences\.get/.test(supabase) && /Preferences\.set/.test(supabase)
+    && /localStorage\.setItem\(key, value\)/.test(supabase),
 )
 check(
   'existing Android WebView sessions migrate into native storage',

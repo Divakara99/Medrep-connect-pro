@@ -13,9 +13,10 @@ export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL?.trim() || DEFAUL
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_ANON_KEY
 
 /**
- * Use native preferences for the Supabase refresh token in the Android/iOS app.
- * WebView storage can be cleared by Android maintenance; Preferences survives
- * app restarts and upgrades. Import any existing localStorage session once.
+ * Persist the Supabase refresh token in native Preferences, with localStorage as
+ * a second copy/fallback. Preferences survives app restarts and WebView cleanup;
+ * the browser copy also covers a cold-start race before the native bridge is
+ * ready. Import existing localStorage sessions into Preferences on first read.
  */
 export const supabaseAuthStorage = {
   async getItem(key: string): Promise<string | null> {
@@ -36,15 +37,22 @@ export const supabaseAuthStorage = {
     try { return localStorage.getItem(key) } catch { return null }
   },
   async setItem(key: string, value: string): Promise<void> {
+    let nativeWriteSucceeded = false
     if (Capacitor.isNativePlatform()) {
       try {
         await Preferences.set({ key, value })
-        return
+        nativeWriteSucceeded = true
       } catch {
-        // Retain browser fallback if the native plugin is temporarily unavailable.
+        // Keep the WebView copy as a fallback if the native bridge is not ready.
       }
     }
-    try { localStorage.setItem(key, value) } catch { /* storage may be disabled */ }
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      // Native storage is the durable source on mobile; web storage may be disabled.
+      if (!nativeWriteSucceeded && !Capacitor.isNativePlatform()) throw new Error('Auth session could not be persisted.')
+      if (!nativeWriteSucceeded) throw new Error('Auth session could not be persisted to native or web storage.')
+    }
   },
   async removeItem(key: string): Promise<void> {
     if (Capacitor.isNativePlatform()) {
