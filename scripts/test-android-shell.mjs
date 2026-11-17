@@ -26,10 +26,10 @@ const [vacancyForm, bulkUpload, resumeCard, jobDetail, nativePlugin, nativeBridg
   '../android/app/src/main/java/in/medrepconnect/app/NativeDownloadsPlugin.java',
   '../src/data/nativeDownloads.ts',
 ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')))
-const [viteConfig, packageJson, androidWorkflow] = await Promise.all([
-  readFile(new URL('../vite.config.ts', import.meta.url), 'utf8'),
+const [packageJson, androidWorkflow, androidAppBuild] = await Promise.all([
   readFile(new URL('../package.json', import.meta.url), 'utf8'),
   readFile(new URL('../.github/workflows/android.yml', import.meta.url), 'utf8'),
+  readFile(new URL('../android/app/build.gradle', import.meta.url), 'utf8'),
 ])
 
 // 1. The application theme must be a NoActionBar one. AppTheme inherits from
@@ -125,11 +125,14 @@ assert.match(
   'the launch icon is our own launcher mark',
 )
 
-// Native builds use ML Kit instead of browser Tesseract, so don't package the
-// multi-megabyte Tesseract WASM worker and language file into the APK.
-assert.match(viteConfig, /if \(process\.env\.VITE_ANDROID_BUILD === 'true'\) return/)
-assert.match(packageJson, /"build:android": "VITE_ANDROID_BUILD=true npm run build"/)
-assert.match(packageJson, /"android:sync": "npm run build:android && cap sync android"/)
-assert.equal((androidWorkflow.match(/run: npm run build:android/g) ?? []).length, 2)
+// Vacancy photo OCR is intentionally removed; the optional image attachment is
+// still supported and its poster upload remains independent of OCR.
+assert.doesNotMatch(vacancyForm, /readVacancyImageText|\bOCR\b|Upload flyer/i, 'vacancy photos are no longer read for text')
+assert.match(vacancyForm, /uploadVacancyPoster\(sourceImage\)/, 'optional vacancy poster attachments remain supported')
+assert.doesNotMatch(packageJson, /tesseract|capacitor\/filesystem/i, 'OCR-only web and filesystem packages are removed')
+assert.doesNotMatch(androidAppBuild, /com\.google\.mlkit:text-recognition/, 'the OCR-only ML Kit model is removed from Android')
+assert.doesNotMatch(activity, /NativeVacancyOcrPlugin/, 'the Android activity does not register an OCR plugin')
+assert.match(packageJson, /"android:sync": "npm run build && cap sync android"/)
+assert.equal((androidWorkflow.match(/run: npm run build\n/g) ?? []).length, 2)
 
-console.log('android shell: native downloads and Latin-only OCR without unused web OCR assets — passed')
+console.log('android shell: native downloads, optional posters, and photo OCR removal — passed')

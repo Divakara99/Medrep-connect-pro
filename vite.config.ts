@@ -1,9 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 
 // package.json is the single source of truth for the release version. It is
 // injected as a compile-time constant so the UI (src/data/version.ts) always
@@ -11,8 +9,6 @@ import { defineConfig, type Plugin } from 'vite'
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string
 }
-const projectRoot = fileURLToPath(new URL('.', import.meta.url))
-
 // Every build of 1.0.2 looks identical in the UI, so "did you install the new
 // one?" has cost us several rounds: the version badge cannot tell two APKs
 // apart. The commit and build time go into the bundle, and the app shows them,
@@ -22,55 +18,11 @@ const buildStamp = `${(process.env.GITHUB_SHA ?? 'local').slice(0, 7)} · ${new 
   .slice(0, 16)
   .replace('T', ' ')}Z`
 
-const OCR_ASSETS = [
-  { fileName: 'ocr/worker.min.js', source: 'node_modules/tesseract.js/dist/worker.min.js', contentType: 'text/javascript; charset=utf-8' },
-  { fileName: 'ocr/tesseract-core-lstm.js', source: 'node_modules/tesseract.js-core/tesseract-core-lstm.js', contentType: 'text/javascript; charset=utf-8' },
-  { fileName: 'ocr/tesseract-core-lstm.wasm', source: 'node_modules/tesseract.js-core/tesseract-core-lstm.wasm', contentType: 'application/wasm' },
-  { fileName: 'ocr/4.0.0_best_int/eng.traineddata.gz', source: 'node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz', contentType: 'application/gzip' },
-]
-
-function localOcrRuntimeAssets(): Plugin {
-  return {
-    name: 'local-vacancy-ocr-runtime-assets',
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        if (!request.url) return next()
-        const pathname = new URL(request.url, 'http://vite.local').pathname
-        const asset = OCR_ASSETS.find((item) => pathname.endsWith(`/${item.fileName}`))
-        if (!asset) return next()
-        try {
-          const content = readFileSync(resolve(projectRoot, asset.source))
-          response.statusCode = 200
-          response.setHeader('Content-Type', asset.contentType)
-          response.setHeader('Content-Length', content.byteLength)
-          response.setHeader('Cache-Control', 'no-cache')
-          response.end(content)
-        } catch (cause) {
-          next(cause instanceof Error ? cause : new Error('Could not serve local OCR assets.'))
-        }
-      })
-    },
-    generateBundle() {
-      // Android uses its bundled Latin-only ML Kit plugin. Keep the Tesseract
-      // worker, WASM and English traineddata on web builds only; these assets
-      // are several megabytes and are never loaded by the native app.
-      if (process.env.VITE_ANDROID_BUILD === 'true') return
-      for (const asset of OCR_ASSETS) {
-        this.emitFile({
-          type: 'asset',
-          fileName: asset.fileName,
-          source: readFileSync(resolve(projectRoot, asset.source)),
-        })
-      }
-    },
-  }
-}
-
 export default defineConfig({
   // Relative base: the built app works from ANY host or sub-path
   // (Netlify/Vercel root, GitHub Pages project site, any folder on a server).
   base: './',
-  plugins: [react(), tailwindcss(), localOcrRuntimeAssets()],
+  plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_STAMP__: JSON.stringify(buildStamp),

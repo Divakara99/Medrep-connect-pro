@@ -1,21 +1,48 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { extractVacancyFields, vacancyDraftFingerprint } from '../src/data/vacancyExtraction.ts'
+import { extractVacancyFields, normalizeVacancyEntryTableText, vacancyDraftFingerprint } from '../src/data/vacancyExtraction.ts'
 
-const ocrSource = await readFile(new URL('../src/data/vacancyOcr.ts', import.meta.url), 'utf8')
-assert.match(ocrSource, /if \(Capacitor\.isNativePlatform\(\)\) return readNativeVacancyImageText/)
-assert.match(ocrSource, /Filesystem\.writeFile\(\{ path, data: base64, directory: Directory\.Cache \}\)/)
-assert.match(ocrSource, /NativeVacancyOcr\.recognizeFile\(\{ path: uri \}\)/)
-assert.match(ocrSource, /Filesystem\.deleteFile\(\{ path, directory: Directory\.Cache \}\)/)
-const nativeOcrPlugin = await readFile(new URL('../android/app/src/main/java/in/medrepconnect/app/NativeVacancyOcrPlugin.java', import.meta.url), 'utf8')
-const appGradle = await readFile(new URL('../android/app/build.gradle', import.meta.url), 'utf8')
-const appPackage = await readFile(new URL('../package.json', import.meta.url), 'utf8')
-assert.match(nativeOcrPlugin, /TextRecognition\.getClient\(TextRecognizerOptions\.DEFAULT_OPTIONS\)/)
-assert.match(appGradle, /com\.google\.mlkit:text-recognition:16\.0\.1/)
-assert.doesNotMatch(appPackage, /@capacitor-mlkit\/text-recognition/, 'the app does not bundle the unrelated OCR language models')
-assert.match(ocrSource, /OCR_WORKER_TIMEOUT_MS = 90_000/)
-assert.match(ocrSource, /worker\.recognize\(image, \{ rotateAuto: true \}\),\s*OCR_WORKER_TIMEOUT_MS/)
-assert.match(ocrSource, /Loading offline English OCR data/)
+const copiedWordTable = [
+  'VACANCY DETAILS',
+  'Data\tEntry',
+  'Job title\tTerritory Sales Executive',
+  'Company\tAcme Pharma',
+  'Role/Position\tKey Account Manager',
+  'City / location\tBengaluru',
+  'HQ / Area\tBengaluru HQ',
+  'Division\tPharma',
+  'Salary / incentives\t₹4 LPA',
+  'Experience\t1-3 years',
+  'Qualification\tB.Pharm',
+  'Age limit\tBelow 30 years',
+  'Number of openings\t2',
+  'Manager name\tAsha Nair',
+  'Contact number\t9876543210',
+  'Alternate contact number\t9123456780',
+  'Manager email\tasha@example.com',
+  'Job description\tPromote products to healthcare professionals',
+].join(String.fromCharCode(10))
+const normalizedWordTable = normalizeVacancyEntryTableText(copiedWordTable)
+assert.doesNotMatch(normalizedWordTable, /Data|Entry|City \/ location|HQ \/ Area/i,
+  'pasted Word tables use Entry cells, not Data labels')
+const wordExtracted = extractVacancyFields(normalizedWordTable)
+assert.equal(wordExtracted.title, 'Territory Sales Executive')
+assert.equal(wordExtracted.company, 'Acme Pharma')
+assert.equal(wordExtracted.category, 'Field', 'custom pasted Role/Position uses the internal Field category')
+assert.equal(wordExtracted.location, 'Bengaluru')
+assert.equal(wordExtracted.hq, 'Bengaluru HQ')
+assert.equal(wordExtracted.division, 'Pharma')
+assert.equal(wordExtracted.salary, '₹4 LPA')
+assert.equal(wordExtracted.experience, '1-3 years')
+assert.equal(wordExtracted.qualification, 'B.Pharm')
+assert.equal(wordExtracted.ageLimit, 'Below 30 years')
+assert.equal(wordExtracted.vacancyCount, '2')
+assert.equal(wordExtracted.manager, 'Asha Nair')
+assert.equal(wordExtracted.contact, '9876543210')
+assert.equal(wordExtracted.managerAltPhone, '9123456780')
+assert.equal(wordExtracted.managerEmail, 'asha@example.com')
+assert.equal(wordExtracted.description, 'Promote products to healthcare professionals')
+assert.equal(normalizeVacancyEntryTableText('Title: A\nCompany: B'), 'Title: A\nCompany: B',
+  'plain pasted text without a Data/Entry table remains unchanged')
 
 const flyerText = `
 URGENTLY REQUIRED

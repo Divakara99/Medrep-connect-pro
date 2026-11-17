@@ -5,8 +5,7 @@ import { cleanExtraFields, extraFieldProblem, EXTRA_FIELD_LIMIT, type ExtraField
 import { findConfidentialContact, generateVacancyDescriptionDraft } from '../data/jobDescription'
 import { digitsOnly, hasNonPhoneCharacters, mobileNumberProblem, MOBILE_DIGITS, MOBILE_MAX_DIGITS, MAX_HQ_TEXT_LENGTH, isPharmaSalesCategory, normalizeIndianMobile, parseHeadquarters, requiredHeadquartersProblem, serializeHeadquarters } from '../data/vacancyRules'
 import { teamPostVacancy } from '../data/vacancyTeam'
-import { extractExtraFields, extractVacancyFields, type VacancyExtraction } from '../data/vacancyExtraction'
-import { readVacancyImageText } from '../data/vacancyOcr'
+import { extractExtraFields, extractVacancyFields, normalizeVacancyEntryTableText, type VacancyExtraction } from '../data/vacancyExtraction'
 import { checkVacancyDuplicates, vacancyDuplicateApprovalKey, type VacancyDuplicateCheck, type VacancyDuplicateFields } from '../data/vacancyDuplicates'
 import { downloadTemplateInAndroid } from '../data/nativeDownloads'
 import { deleteVacancyPoster, uploadVacancyPoster } from '../data/vacancyPoster'
@@ -85,21 +84,17 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
   const [pinned, setPinned] = useState(start?.pinned ?? false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [sourceMode, setSourceMode] = useState<'image' | 'text'>('image')
   const [sourceText, setSourceText] = useState('')
   const [sourceImage, setSourceImage] = useState<File | null>(null)
-  const [ocrText, setOcrText] = useState('')
   const [extracting, setExtracting] = useState(false)
-  const [extractProgress, setExtractProgress] = useState(0)
   const [extractStatus, setExtractStatus] = useState('')
   const [extractError, setExtractError] = useState<string | null>(null)
   const [extractNotice, setExtractNotice] = useState<string | null>(null)
   // Values found in the pasted text, waiting for the admin to choose them.
   // Details with no field of their own — created by a paste, or added here.
   const [extraFields, setExtraFields] = useState<ExtraField[]>(() => start?.extraFields ?? [])
-  // Every extracted value is editable before it is filled: OCR and pasted
-  // vacancy text are rarely perfect, and correcting it here is faster than
-  // filling the field and editing it afterwards.
+  // Every extracted value is editable before it is filled: pasted vacancy text
+  // can be imperfect, and correcting it here is faster than filling and editing later.
   type ReviewExtra = ExtraField & { checked: boolean }
   const [review, setReview] = useState<{
     fields: VacancyExtraction
@@ -259,23 +254,10 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
     setExtractNotice(null)
     setReview(null)
     setExtracting(true)
-    setExtractProgress(0)
-    setExtractStatus(sourceMode === 'image' ? 'Starting local OCR…' : 'Reading vacancy text…')
+    setExtractStatus('Reading vacancy text…')
     try {
-      let rawText = ''
-      if (sourceMode === 'image') {
-        if (!sourceImage) throw new Error('Choose a flyer or screenshot image first.')
-        rawText = await readVacancyImageText(sourceImage, (status, progress) => {
-          setExtractStatus(status)
-          setExtractProgress(progress)
-        })
-        setOcrText(rawText)
-      } else {
-        rawText = sourceText.trim()
-        if (!rawText) throw new Error('Paste the vacancy text first.')
-        setOcrText('')
-      }
-      if (!rawText) throw new Error('No readable text was found. Try a clearer image or paste the job text.')
+      const rawText = normalizeVacancyEntryTableText(sourceText.trim())
+      if (!rawText) throw new Error('Paste the vacancy text first.')
 
       const extracted = extractVacancyFields(rawText)
       const found = EXTRACTED_FIELDS.filter(({ key }) => {
@@ -309,7 +291,6 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
       setExtractError(cause instanceof Error ? cause.message : 'Could not read the vacancy source.')
     } finally {
       setExtracting(false)
-      setExtractProgress(0)
       setExtractStatus('')
     }
   }
@@ -347,12 +328,9 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
     setContactError(null)
     setAltPhoneError(null)
     setHqError(null)
-    setSourceMode('image')
     setSourceText('')
     setSourceImage(null)
-    setOcrText('')
     setExtracting(false)
-    setExtractProgress(0)
     setExtractStatus('')
     setExtractError(null)
     setExtractNotice(null)
@@ -458,77 +436,58 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
         {!job && (
           <section className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-indigo-50 p-3 space-y-3">
             <div>
-              <div className="font-bold text-slate-900">✨ Fill fields from a vacancy poster or text</div>
-              <p className="mt-1 text-xs text-slate-600">Upload a flyer or paste vacancy text, then review the detected values.</p>
+              <div className="font-bold text-slate-900">✨ Fill fields from vacancy text</div>
+              <p className="mt-1 text-xs text-slate-600">Paste vacancy notice text or a completed Word template, then review suggested values.</p>
               <details className="mt-1.5 text-xs text-slate-600">
                 <summary className="cursor-pointer font-semibold text-brand-800">Read more</summary>
                 <div className="mt-1 space-y-1.5 leading-snug">
-                  <p>OCR runs locally. Review and correct every value before posting. If you post, the selected image is securely attached to the vacancy and shown with contact details to eligible users.</p>
-                  <p>Images can be JPG, PNG or WebP, up to 8 MB. You can download the JPG or editable Word template below. The templates have Data and Entry columns, with room for at least 50 characters in each Entry box. Fill the Word file directly, then paste its text here or upload a screenshot. Use the CSV batch template on the Vacancies page to post multiple roles together.</p>
+                  <p>Photo reading is turned off. You can still attach a flyer to the vacancy; it will be shown with contact details to eligible users. Review and correct pasted values before posting.</p>
+                  <p>Download the JPG reference or editable Word template below. To use the Word template, fill the Entry column, copy the table, and paste it here. Use the CSV batch template on the Vacancies page to post multiple roles together.</p>
                 </div>
               </details>
             </div>
-            <div className="flex gap-2">
-              <Button type="button" variant={sourceMode === 'image' ? 'primary' : 'secondary'} className="flex-1" onClick={() => setSourceMode('image')} disabled={extracting}>
-                📷 Upload flyer
-              </Button>
-              <Button type="button" variant={sourceMode === 'text' ? 'primary' : 'secondary'} className="flex-1" onClick={() => setSourceMode('text')} disabled={extracting}>
-                📋 Paste text
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={`${import.meta.env.BASE_URL}templates/vacancy-template.jpg`}
+                download="medrep-vacancy-template.jpg"
+                onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-template.jpg', 'medrep-vacancy-template.jpg', 'image/jpeg')}
+                className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
+              >
+                ⬇ Download JPG reference
+              </a>
+              <a
+                href={`${import.meta.env.BASE_URL}templates/vacancy-template.docx`}
+                download="medrep-vacancy-template.docx"
+                onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-template.docx', 'medrep-vacancy-template.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+                className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
+              >
+                ⬇ Download editable Word template
+              </a>
             </div>
-            {sourceMode === 'image' ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  <a
-                    href={`${import.meta.env.BASE_URL}templates/vacancy-template.jpg`}
-                    download="medrep-vacancy-template.jpg"
-                    onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-template.jpg', 'medrep-vacancy-template.jpg', 'image/jpeg')}
-                    className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
-                  >
-                    ⬇ Download JPG template
-                  </a>
-                  <a
-                    href={`${import.meta.env.BASE_URL}templates/vacancy-template.docx`}
-                    download="medrep-vacancy-template.docx"
-                    onClick={(event) => downloadTemplateInAndroid(event, 'templates/vacancy-template.docx', 'medrep-vacancy-template.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
-                    className="inline-flex min-h-9 items-center rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 hover:bg-brand-50"
-                  >
-                    ⬇ Download editable Word template
-                  </a>
-                </div>
-                <Input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  aria-label="Upload vacancy flyer or screenshot"
-                  onChange={(event) => {
-                    setSourceImage(event.target.files?.[0] ?? null)
-                    setExtractError(null)
-                    setOcrText('')
-                  }}
-                  disabled={extracting}
-                />
-                {sourceImage && <p className="text-xs font-semibold text-slate-700 truncate">Selected: {sourceImage.name}</p>}
-              </div>
-            ) : (
-              <Textarea
-                rows={5}
-                maxLength={20000}
-                value={sourceText}
-                onChange={(event) => { setSourceText(event.target.value); setExtractError(null) }}
-                placeholder="Paste the vacancy poster text here…"
-                aria-label="Paste vacancy text for auto-fill"
+            <Textarea
+              rows={5}
+              maxLength={20000}
+              value={sourceText}
+              onChange={(event) => { setSourceText(event.target.value); setExtractError(null) }}
+              placeholder="Paste the vacancy notice text here…"
+              aria-label="Paste vacancy text for auto-fill"
+              disabled={extracting}
+            />
+            <label className="block space-y-1 text-xs font-semibold text-slate-700">
+              <span>Attach vacancy flyer (optional; photo reading is off)</span>
+              <Input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                aria-label="Attach vacancy flyer to this post"
+                onChange={(event) => setSourceImage(event.target.files?.[0] ?? null)}
                 disabled={extracting}
               />
-            )}
+            </label>
+            {sourceImage && <p className="text-xs font-semibold text-slate-700 truncate">Poster to attach: {sourceImage.name}</p>}
             <Button type="button" className="w-full" variant="secondary" onClick={() => { void readSource() }} disabled={extracting}>
-              {extracting ? 'Reading…' : '🔍 Read the text & show what was found'}
+              {extracting ? 'Reading…' : '🔍 Read pasted text & show what was found'}
             </Button>
-            {extracting && (
-              <div role="status" className="text-xs font-semibold text-brand-800">
-                {extractStatus || 'Reading vacancy source…'}
-                {sourceMode === 'image' && <div className="mt-1 h-2 overflow-hidden rounded-full bg-white"><div className="h-full bg-brand-600 transition-all" style={{ width: `${Math.round(extractProgress * 100)}%` }} /></div>}
-              </div>
-            )}
+            {extracting && <div role="status" className="text-xs font-semibold text-brand-800">{extractStatus || 'Reading vacancy text…'}</div>}
             {extractError && <p role="alert" className="text-xs font-bold text-red-700">{extractError}</p>}
             {extractNotice && <p role="status" className="text-xs font-semibold text-emerald-800">{extractNotice}</p>}
             {review && (
@@ -537,7 +496,7 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                 <details className="text-xs text-slate-600">
                   <summary className="cursor-pointer font-semibold text-brand-800">Read more</summary>
                   <p className="mt-1">
-                    Values are editable — correct anything the paste or scan read wrongly. Only the ticked ones are written
+                    Values are editable — correct anything the pasted text was read wrongly. Only the ticked ones are written
                     into the form. Fields you have already typed start unticked, and HQ text fills the first HQ box without
                     adding new ones.
                   </p>
@@ -663,12 +622,6 @@ export function VacancyForm({ job, seed, open, onClose, onSaved, mode = 'admin' 
                   </Button>
                 </div>
               </div>
-            )}
-            {sourceMode === 'image' && ocrText && (
-              <details className="rounded-lg bg-white/80 p-2 text-xs text-slate-700">
-                <summary className="cursor-pointer font-semibold">Review the text OCR found</summary>
-                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-sans">{ocrText}</pre>
-              </details>
             )}
           </section>
         )}

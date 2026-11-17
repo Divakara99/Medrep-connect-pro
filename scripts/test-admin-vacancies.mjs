@@ -68,6 +68,13 @@ const rolePositionRows = parseCsv('Title,Company,Role/Position,Contact number,Ci
 assert.equal(rolePositionRows[0].rolePosition, 'MR', 'Role/Position is the visible CSV label')
 const customPositionRows = parseCsv('Title,Company,Role/Position,Contact number,City\nArea Sales Lead,Acme,Key Account Manager,9876543210,Hyderabad\n')
 assert.equal(customPositionRows[0].rolePosition, 'Key Account Manager', 'CSV Role/Position preserves a manually entered value')
+const completeCsvValues = ['Territory Sales Executive', 'Acme Pharma', 'Key Account Manager', 'Asha Nair', '9876543210', '9123456780', 'asha@example.com', 'Bengaluru', 'Bengaluru HQ', 'Pharma', '₹4 LPA', '1-3 years', 'B.Pharm', 'Below 30 years', '2', 'Promote products']
+const completeCsv = parseCsv(`${VACANCY_CSV_HEADERS.join(',')}\n${completeCsvValues.map((value) => `"${value.replaceAll('"', '""')}"`).join(',')}\n`)[0]
+assert.deepEqual(
+  [completeCsv.title, completeCsv.company, completeCsv.rolePosition, completeCsv.manager, completeCsv.contact, completeCsv.alternateContact, completeCsv.managerEmail, completeCsv.city, completeCsv.hq, completeCsv.division, completeCsv.salary, completeCsv.experience, completeCsv.qualification, completeCsv.ageLimit, completeCsv.vacancyCount, completeCsv.description],
+  completeCsvValues,
+  'every CSV template column is mapped to the intended field in header order',
+)
 assert.equal(csvRows.length, 1, 'one vacancy is parsed per CSV data row')
 assert.equal(csvRows[0].contact, '9876543210')
 assert.equal(csvRows[0].alternateContact, '9123456780')
@@ -142,8 +149,8 @@ assert.match(vacancyForm, /Other — enter manually/, 'the form offers the reque
 assert.match(vacancyForm, /rolePosition: manualRolePosition \? customRolePosition\.trim\(\) : undefined/, 'the form saves the manually entered Role/Position')
 assert.match(vacancyForm, /✨ Generate draft/, 'the form can draft a description from its vacancy details')
 assert.match(vacancyForm, /no external AI service is called/, 'description drafting does not leak data to an unconfigured AI service')
-assert.ok((vacancyForm.match(/<summary[^>]*>Read more<\/summary>/g) ?? []).length >= 3, 'vacancy upload guidance, scan-review help and extra-field help are collapsible under Read more')
-assert.match(vacancyForm, /Upload a flyer or paste vacancy text, then review the detected values/)
+assert.ok((vacancyForm.match(/<summary[^>]*>Read more<\/summary>/g) ?? []).length >= 3, 'vacancy upload guidance, paste-review help and extra-field help are collapsible under Read more')
+assert.match(vacancyForm, /Paste vacancy notice text or a completed Word template, then review suggested values/)
 assert.deepEqual(bulkTemplate.trim().split(','), VACANCY_CSV_HEADERS, 'the downloadable CSV template has distinct contact and email columns')
 const paymentsStart = admin.indexOf('function PaymentsTab(')
 const paymentsEnd = admin.indexOf('\nfunction ', paymentsStart + 1)
@@ -208,8 +215,8 @@ assert.match(imageTemplate, />Role\/Position</, 'the image template source uses 
 assert.doesNotMatch(imageTemplate, /HQ \(MR \/ ABM\)/, 'the image template source has no obsolete HQ label')
 assert.match(imageTemplate, /Contact number/i, 'the image template covers contact details')
 assert.match(imageTemplate, /50 characters/i, 'the image template advertises the entry capacity')
-assert.match(form, /room for at least 50 characters in each Entry box/, 'admins are told the entry capacity')
-assert.match(form, /Fill the Word file directly, then paste its text here or upload a screenshot/, 'admins are told how to complete and upload the editable document')
+assert.match(form, /fill the Entry column, copy the table, and paste it here/, 'admins are told how to use the Word template without photo OCR')
+assert.match(form, /normalizeVacancyEntryTableText\(sourceText\.trim\(\)\)/, 'pasted Word tables are normalized from Data/Entry columns before extraction')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
 assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')

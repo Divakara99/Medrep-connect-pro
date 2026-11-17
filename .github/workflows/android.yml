@@ -67,8 +67,8 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Build Android bundle without unused web OCR assets
-        run: npm run build:android
+      - name: Build web bundle
+        run: npm run build
       - name: Sync into Android
         run: npx cap sync android
       - name: Check the Android toolchain
@@ -146,8 +146,8 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" || echo "::warning::sdkmanager install skipped/failed — Gradle will fetch what it needs"
       - name: Install dependencies
         run: npm ci
-      - name: Build Android bundle without unused web OCR assets
-        run: npm run build:android
+      - name: Build web bundle
+        run: npm run build
       - name: Sync into Android
         run: npx cap sync android
       - name: Check the Android toolchain
