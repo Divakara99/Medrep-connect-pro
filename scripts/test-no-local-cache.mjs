@@ -37,6 +37,7 @@ const sources = walk('src')
 // ---------- 1. Nothing is written to browser storage ----------
 
 const dataFiles = sources.filter((file) => !file.endsWith('src/data/storage.ts'))
+const authStorageFile = join('src', 'data', 'supabase.ts')
 
 // Storage writes used to go through `write(key, value)` from storage.ts, and a
 // few modules kept their own copy. Neither is allowed any more: the only
@@ -45,6 +46,7 @@ const writers = dataFiles.filter((file) => {
   const text = read(file)
   if (/import\s*\{[^}]*\bwrite\b[^}]*\}\s*from\s*'(\.\.?\/)+data\/storage'/.test(text)) return true
   if (/import\s*\{[^}]*\bwrite\b[^}]*\}\s*from\s*'\.\/storage'/.test(text)) return true
+  if (file === authStorageFile) return false // Supabase session adapter only
   return text.split('\n').some((line) => line.includes('localStorage.setItem') && !/^\s*(\/\/|\*)/.test(line))
 })
 check(
@@ -64,14 +66,30 @@ check(
 
 const supabase = read('src/data/supabase.ts')
 check(
-  'the Supabase session is the only persisted browser value',
+  'the Supabase session is the only persisted auth value',
   /storageKey:\s*'mrc_supabase_auth_v1'/.test(supabase),
   'storageKey missing from the Supabase client',
 )
 check(
-  'the client does not fall back to the default storage key',
-  !/persistSession:\s*false/.test(supabase),
-  'session persistence was switched off; users would be signed out on reload',
+  'the Supabase session persists until local logout',
+  /persistSession:\s*true/.test(supabase) && /autoRefreshToken:\s*true/.test(supabase),
+  'the saved refresh token must survive reloads and refresh access tokens automatically',
+)
+check(
+  'native auth sessions persist through Capacitor Preferences and have a WebView fallback',
+  /@capacitor\/preferences/.test(supabase) && /Preferences\.get/.test(supabase) && /Preferences\.set/.test(supabase)
+    && /localStorage\.setItem\(key, value\)/.test(supabase),
+)
+check(
+  'existing Android WebView sessions migrate into native storage',
+  /localStorage\.getItem\(key\)/.test(supabase) && /Preferences\.set\(\{ key, value: legacy \}\)/.test(supabase),
+)
+const authSource = read('src/data/auth.ts')
+check('logout explicitly clears the local Supabase session', /signOut\(\{ scope: 'local' \}\)/.test(authSource))
+const app = read('src/App.tsx')
+check(
+  'a failed session check does not send the user to sign-in',
+  /A failed session\/profile check is not a logout[\s\S]*?setAuthTimedOut\(true\)/.test(app),
 )
 
 const storage = read('src/data/storage.ts')
@@ -121,6 +139,7 @@ check(
 const readers = dataFiles.filter((file) => {
   if (file.endsWith('src/data/resume.ts')) return false // sweeps old resume blobs to delete them
   const text = read(file)
+  if (file === authStorageFile) return false // Supabase session adapter migrates legacy session only
   return text.split('\n').some((line) => {
     if (!/localStorage\.(getItem|length|key)\b/.test(line)) return false
     return !/^\s*(\/\/|\*|\/\*)/.test(line)

@@ -20,6 +20,7 @@ export type TeamVacancy = {
   company: string
   location: string
   category: string
+  rolePosition?: string
   qualification?: string
   ageLimit?: string
   vacancyCount?: string
@@ -115,6 +116,7 @@ type AuditDbRow = {
   company: string
   location: string
   category: string
+  role_position: string
   actor_role: ActorRole
   actor_email: string
   reason: string | null
@@ -125,7 +127,7 @@ export async function listVacancyAudit(limit = 1000): Promise<AuditRow[]> {
   await requireAdminSession()
   const { data, error } = await supabase
     .from('vacancy_audit')
-    .select('id,action,vacancy_id,title,company,location,category,actor_role,actor_email,reason,created_at')
+    .select('id,action,vacancy_id,title,company,location,category,role_position,actor_role,actor_email,reason,created_at')
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(error.message || 'The vacancy activity could not be loaded.')
@@ -137,6 +139,7 @@ export async function listVacancyAudit(limit = 1000): Promise<AuditRow[]> {
     company: row.company,
     location: row.location,
     category: row.category,
+    rolePosition: row.role_position ?? '',
     actorRole: row.actor_role,
     actorEmail: row.actor_email,
     reason: row.reason,
@@ -162,12 +165,14 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
     hq: fields.hq ?? '',
     division: fields.division ?? '',
     category: fields.category,
+    rolePosition: fields.rolePosition ?? '',
     salary: fields.salary ?? '',
     experience: fields.experience ?? '',
     qualification: fields.qualification ?? '',
     ageLimit: fields.ageLimit ?? '',
     vacancyCount: fields.vacancyCount ?? '',
     description: fields.description ?? '',
+    posterPath: fields.posterPath ?? '',
   }
   const { data, error } = await supabase.rpc('employee_post_vacancy', { p_fields: payload })
   if (error) return { ok: false, error: error.message || 'The vacancy could not be posted.' }
@@ -181,13 +186,14 @@ export async function teamPostVacancy(fields: TeamPostFields): Promise<Result<{ 
 export async function teamListVacancies(): Promise<TeamVacancy[]> {
   const { data, error } = await supabase.rpc('employee_list_vacancies')
   if (error) throw new Error(error.message || 'Vacancies could not be loaded.')
-  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string; fillCheck?: unknown }[])
+  return ((data ?? []) as unknown as { id: string; title: string; company: string; location: string; category: string; rolePosition?: string; qualification?: string; ageLimit?: string; vacancyCount?: string; postedAt: number; postedBy: string; fillCheck?: unknown }[])
     .map((row) => ({
       id: row.id,
       title: row.title,
       company: row.company,
       location: row.location,
       category: row.category,
+      rolePosition: row.rolePosition,
       qualification: row.qualification,
       ageLimit: row.ageLimit,
       vacancyCount: row.vacancyCount,

@@ -1,8 +1,21 @@
 package in.medrepconnect.app;
 
-import android.graphics.Color;
+import android.Manifest;
+import android.app.DownloadManager;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
+import android.webkit.MimeTypeMap;
+import android.webkit.URLUtil;
+import android.widget.Toast;
+import android.graphics.Color;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -10,12 +23,22 @@ import android.view.WindowInsetsController;
 
 import androidx.activity.EdgeToEdge;
 import androidx.core.splashscreen.SplashScreen;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.activity.SystemBarStyle;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PluginCall;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Locale;
 
 /**
  * MedRep Pro shell.
@@ -47,6 +70,10 @@ import com.getcapacitor.BridgeActivity;
  */
 public class MainActivity extends BridgeActivity {
 
+    private static final int DOWNLOAD_STORAGE_PERMISSION_REQUEST = 7406;
+    private Runnable pendingDownloadAfterPermission;
+    private PluginCall pendingDownloadCall;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // Hand the activity over from the splash theme to the NoActionBar theme.
@@ -57,6 +84,7 @@ public class MainActivity extends BridgeActivity {
         // Must run before super.onCreate(): BridgeActivity inflates its content
         // view there, and the window flags have to be in place first.
         enableEdgeToEdge();
+        registerPlugin(NativeDownloadsPlugin.class);
         super.onCreate(savedInstanceState);
         // Belt and braces: a title bar would sit between the status bar and the
         // WebView, pushing the whole app down and eating the inset we reserve for
@@ -66,6 +94,7 @@ public class MainActivity extends BridgeActivity {
         }
         applyEdgeToEdgeInsets();
         applySystemBarAppearance();
+        installDownloadHandler();
     }
 
     @Override
@@ -74,6 +103,175 @@ public class MainActivity extends BridgeActivity {
         // Re-assert once the activity is actually on screen: the startup path
         // resets the appearance flags after onCreate.
         applySystemBarAppearance();
+    }
+
+    /**
+     * Android WebView ignores the HTML download attribute unless the host
+     * Activity handles DownloadListener. Route remote/signed files through the
+     * system DownloadManager, and copy bundled template assets into Downloads.
+     */
+    private void installDownloadHandler() {
+        getBridge().getWebView().setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (url == null || url.trim().isEmpty()) {
+                showDownloadMessage("This file could not be downloaded.");
+                return;
+            }
+            String fileName = safeFileName(URLUtil.guessFileName(url, contentDisposition, mimeType));
+            Uri uri = Uri.parse(url);
+            if (isBundledTemplate(uri)) {
+                String assetPath = uri.getPath();
+                runWithLegacyStoragePermission(() -> saveBundledTemplate(assetPath, fileName, mimeType));
+            } else if ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) {
+                runWithLegacyStoragePermission(() -> enqueueDownload(url, userAgent, fileName, mimeType));
+            } else {
+                showDownloadMessage("This file type cannot be downloaded here.");
+            }
+        });
+    }
+
+    private boolean isBundledTemplate(Uri uri) {
+        String host = uri.getHost();
+        String path = uri.getPath();
+        return ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host))
+                && path != null
+                && path.startsWith("/templates/")
+                && !path.contains("..")
+                && path.matches("/templates/[A-Za-z0-9._/-]+");
+    }
+
+    private String safeFileName(String candidate) {
+        String value = candidate == null ? "download" : candidate.trim();
+        value = value.replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_");
+        if (value.isEmpty() || ".".equals(value) || "..".equals(value)) return "download";
+        return value;
+    }
+
+    private void runWithLegacyStoragePermission(Runnable action) {
+        runWithLegacyStoragePermission(action, null);
+    }
+
+    private void runWithLegacyStoragePermission(Runnable action, PluginCall pluginCall) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED) {
+            action.run();
+            return;
+        }
+        pendingDownloadAfterPermission = action;
+        pendingDownloadCall = pluginCall;
+        ActivityCompat.requestPermissions(
+                this,
+                new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
+                DOWNLOAD_STORAGE_PERMISSION_REQUEST);
+    }
+
+    public void saveTemplateFromBridge(String assetPath, String fileName, String mimeType, PluginCall call) {
+        if (assetPath == null || !(assetPath.equals("templates/vacancy-template.jpg")
+                || assetPath.equals("templates/vacancy-template.docx")
+                || assetPath.equals("templates/vacancy-bulk-template.csv"))) {
+            call.reject("That template is not available for download.");
+            return;
+        }
+        String safeName = safeFileName(fileName);
+        runWithLegacyStoragePermission(() -> {
+            if (!saveBundledTemplate("/" + assetPath, safeName, mimeType)) {
+                call.reject("Could not save the template. Please try again.");
+                return;
+            }
+            JSObject result = new JSObject();
+            result.put("fileName", safeName);
+            call.resolve(result);
+        }, call);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != DOWNLOAD_STORAGE_PERMISSION_REQUEST) return;
+        Runnable action = pendingDownloadAfterPermission;
+        PluginCall pluginCall = pendingDownloadCall;
+        pendingDownloadAfterPermission = null;
+        pendingDownloadCall = null;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && action != null) {
+            action.run();
+        } else {
+            if (pluginCall != null) pluginCall.reject("Storage permission is needed to save this file.");
+            showDownloadMessage("Storage permission is needed to save this file.");
+        }
+    }
+
+    private boolean saveBundledTemplate(String assetPath, String fileName, String mimeType) {
+        String assetName = "public" + assetPath;
+        try (InputStream input = getAssets().open(assetName)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, mimeTypeFor(fileName, mimeType));
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                Uri destination = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (destination == null) throw new IllegalStateException("Downloads folder is unavailable.");
+                try (OutputStream output = getContentResolver().openOutputStream(destination)) {
+                    if (output == null) throw new IllegalStateException("Could not open the Downloads file.");
+                    copy(input, output);
+                } catch (Exception failure) {
+                    getContentResolver().delete(destination, null, null);
+                    throw failure;
+                }
+                ContentValues completed = new ContentValues();
+                completed.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                getContentResolver().update(destination, completed, null, null);
+            } else {
+                File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!downloads.exists() && !downloads.mkdirs()) throw new IllegalStateException("Downloads folder is unavailable.");
+                File destination = new File(downloads, fileName);
+                try (OutputStream output = new FileOutputStream(destination)) {
+                    copy(input, output);
+                }
+            }
+            showDownloadMessage("Saved to Downloads: " + fileName);
+            return true;
+        } catch (Exception failure) {
+            showDownloadMessage("Could not save this template. Please try again.");
+            return false;
+        }
+    }
+
+    private void enqueueDownload(String url, String userAgent, String fileName, String mimeType) {
+        try {
+            DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url))
+                    .setTitle(fileName)
+                    .setDescription("Downloading MedRep Pro file")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+            String resolvedMime = mimeTypeFor(fileName, mimeType);
+            if (resolvedMime != null) request.setMimeType(resolvedMime);
+            if (userAgent != null && !userAgent.isEmpty()) request.addRequestHeader("User-Agent", userAgent);
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null && !cookie.isEmpty()) request.addRequestHeader("Cookie", cookie);
+            manager.enqueue(request);
+            showDownloadMessage("Download started: " + fileName);
+        } catch (Exception failure) {
+            showDownloadMessage("Could not start this download. Please try again.");
+        }
+    }
+
+    private String mimeTypeFor(String fileName, String supplied) {
+        if (supplied != null && !supplied.isEmpty() && !"application/octet-stream".equals(supplied)) return supplied;
+        String extension = MimeTypeMap.getFileExtensionFromUrl(fileName);
+        String mapped = extension == null ? null : MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension.toLowerCase(Locale.ROOT));
+        return mapped == null ? "application/octet-stream" : mapped;
+    }
+
+    private void copy(InputStream input, OutputStream output) throws java.io.IOException {
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+    }
+
+    private void showDownloadMessage(String message) {
+        runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
     }
 
     /**

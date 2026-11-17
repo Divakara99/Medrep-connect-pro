@@ -6,7 +6,7 @@ import { VacancyLoginScreen } from './screens/VacancyLoginScreen'
 import { VacancyPortal } from './screens/VacancyPortal'
 import { AdminScreen } from './screens/AdminScreen'
 import type { UserTab } from './data/tabs'
-import { TopBar, Button, Modal } from './components/ui'
+import { TopBar, Button, Modal, RefreshIconButton } from './components/ui'
 import { NotificationsPanel } from './components/NotificationsPanel'
 import { HomeScreen } from './screens/HomeScreen'
 import { PriorityScreen } from './screens/PriorityScreen'
@@ -206,8 +206,18 @@ export default function App() {
     const restore = (resetTab = false) => {
       const request = ++generation
       void getAuthSnapshot()
-        .then((snapshot) => { if (mounted && request === generation) applyAuthSnapshot(snapshot, resetTab) })
-        .catch(() => { if (mounted && request === generation) setView(portalLoginView) })
+        .then((snapshot) => {
+          if (!mounted || request !== generation) return
+          setAuthTimedOut(false)
+          applyAuthSnapshot(snapshot, resetTab)
+        })
+        .catch(() => {
+          // A failed session/profile check is not a logout. Keep the auth
+          // storage untouched and let the connection/retry screen handle it.
+          // Showing the sign-in screen here makes a transient network or MFA
+          // lookup error look like the saved session was discarded.
+          if (mounted && request === generation) setAuthTimedOut(true)
+        })
     }
     const unsubscribe = onAuthStateChange((event) => {
       if (!mounted) return
@@ -588,10 +598,12 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setView(portalLoginView)}
+              onClick={() => {
+                void doLogout().then(() => setView(portalLoginView)).catch(() => undefined)
+              }}
               className="w-full rounded-2xl bg-white/10 px-4 py-3 text-base font-bold text-white ring-1 ring-white/30 transition hover:bg-white/15 active:scale-95"
             >
-              Go to sign in
+              Log out
             </button>
           </div>
         ) : (
@@ -669,19 +681,22 @@ export default function App() {
           </span>
         }
         right={
-          <button
-            type="button"
-            title="Open navigation menu"
-            aria-label="Open navigation menu"
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(true)}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+          <span className="inline-flex shrink-0 items-center gap-2">
+            <RefreshIconButton onClick={() => window.location.reload()} />
+            <button
+              type="button"
+              title="Open navigation menu"
+              aria-label="Open navigation menu"
+              aria-haspopup="dialog"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(true)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </span>
         }
       />
 

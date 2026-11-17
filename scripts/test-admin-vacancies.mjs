@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { duplicateRemovalIds, groupDuplicateVacancies } from '../src/data/vacancyDuplicateGroups.ts'
 import { parseCsv, VACANCY_CSV_HEADERS } from '../src/data/vacancyCsv.ts'
+import { generateVacancyDescriptionDraft, findConfidentialContact } from '../src/data/jobDescription.ts'
 
 /**
  * Admin vacancy list: one back step, one deleted row, no auto-created columns,
@@ -9,6 +10,16 @@ import { parseCsv, VACANCY_CSV_HEADERS } from '../src/data/vacancyCsv.ts'
  */
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
+
+const generatedDescription = generateVacancyDescriptionDraft({
+  title: 'Territory Sales Executive', rolePosition: 'Key Account Manager', category: 'Field',
+  location: 'Bengaluru', hq: 'Bengaluru HQ\nMysuru HQ', experience: '1-3 years',
+  qualification: 'B.Pharm', salary: '₹4 LPA', vacancyCount: '2 openings',
+})
+assert.match(generatedDescription, /Key Account Manager/)
+assert.match(generatedDescription, /Bengaluru HQ, Mysuru HQ/)
+assert.match(generatedDescription, /Qualification: B\.Pharm/)
+assert.equal(findConfidentialContact(generatedDescription), null, 'the generated public draft includes no contact details')
 
 // ---------------------------------------------------------------- duplicates
 const base = {
@@ -53,12 +64,24 @@ assert.deepEqual(groupDuplicateVacancies([]), [])
 // ------------------------------------------------------------- CSV batches
 assert.deepEqual(VACANCY_CSV_HEADERS.slice(4, 7), ['Contact number', 'Alternate contact', 'Manager email'], 'phone and email fields have separate template columns')
 const csvRows = parseCsv('Title,Company,Category,Contact number,Alternate contact,Manager email,City,HQ / Area,Job description\r\nMR,Acme,MR,9876543210,9123456780,hr@acme.com,Hyderabad,Hyderabad HO,"Doctors, clinics and stockists"\r\n')
+const rolePositionRows = parseCsv('Title,Company,Role/Position,Contact number,City\nMR,Acme,MR,9876543210,Hyderabad\n')
+assert.equal(rolePositionRows[0].rolePosition, 'MR', 'Role/Position is the visible CSV label')
+const customPositionRows = parseCsv('Title,Company,Role/Position,Contact number,City\nArea Sales Lead,Acme,Key Account Manager,9876543210,Hyderabad\n')
+assert.equal(customPositionRows[0].rolePosition, 'Key Account Manager', 'CSV Role/Position preserves a manually entered value')
+const completeCsvValues = ['Territory Sales Executive', 'Acme Pharma', 'Key Account Manager', 'Asha Nair', '9876543210', '9123456780', 'asha@example.com', 'Bengaluru', 'Bengaluru HQ', 'Pharma', '₹4 LPA', '1-3 years', 'B.Pharm', 'Below 30 years', '2', 'Promote products']
+const completeCsv = parseCsv(`${VACANCY_CSV_HEADERS.join(',')}\n${completeCsvValues.map((value) => `"${value.replaceAll('"', '""')}"`).join(',')}\n`)[0]
+assert.deepEqual(
+  [completeCsv.title, completeCsv.company, completeCsv.rolePosition, completeCsv.manager, completeCsv.contact, completeCsv.alternateContact, completeCsv.managerEmail, completeCsv.city, completeCsv.hq, completeCsv.division, completeCsv.salary, completeCsv.experience, completeCsv.qualification, completeCsv.ageLimit, completeCsv.vacancyCount, completeCsv.description],
+  completeCsvValues,
+  'every CSV template column is mapped to the intended field in header order',
+)
 assert.equal(csvRows.length, 1, 'one vacancy is parsed per CSV data row')
 assert.equal(csvRows[0].contact, '9876543210')
 assert.equal(csvRows[0].alternateContact, '9123456780')
 assert.equal(csvRows[0].managerEmail, 'hr@acme.com')
 assert.equal(csvRows[0].description, 'Doctors, clinics and stockists', 'quoted commas inside cell data are preserved')
 assert.throws(() => parseCsv('Title,Company\nA,B'), /Missing required columns/, 'the batch importer refuses incomplete templates')
+assert.throws(() => parseCsv('Title,Company\nA,B'), /Role\/Position/, 'CSV validation uses the user-facing Role/Position label')
 
 // ------------------------------------------------------------ one row delete
 const jobs = await read('src/data/jobs.ts')
@@ -77,10 +100,9 @@ assert.match(deleteBody, /jobs = jobs\.filter\(\(job\) => job\.id !== id\)/, 'on
 const restoreStart = jobs.indexOf('export async function restoreJob')
 assert.ok(restoreStart > 0, 'a delete can be undone from the database')
 const restoreBody = jobs.slice(restoreStart, jobs.indexOf('\n}', restoreStart) + 2)
-assert.match(restoreBody, /\.eq\('id', id\)\.select\('id'\)/, 'a restore touches exactly one primary key')
-assert.match(restoreBody, /delete restored\.deleted/, 'the tombstone flag is what gets cleared')
-assert.match(restoreBody, /changed !== 1/, 'a restore is verified like a delete')
-assert.match(restoreBody, /before its details were kept, so it cannot be restored/, 'old empty tombstones are refused instead of restoring a blank card')
+assert.match(restoreBody, /supabase\.rpc\('restore_vacancy', \{ p_id: id \}\)/, 'restore uses the server-checked RPC')
+assert.doesNotMatch(restoreBody, /\.from\('vacancies'\)\.update/, 'the client cannot bypass the server restore deadline')
+assert.match(restoreBody, /if \(error\) throw new Error/, 'server-side restore failures are shown to the admin')
 assert.match(jobs, /export async function loadDeletedVacancies/, 'the bin can be listed')
 
 // ------------------------------------------------------------- back navigation
@@ -119,12 +141,27 @@ assert.match(bulkUpload, /await addJob\(draft\)/, 'one batch submission posts ea
 assert.match(bulkUpload, /await checkVacancyDuplicates\(duplicateFields\(row\.draft\)\)/, 'batch posts pass the existing duplicate review first')
 assert.match(bulkUpload, /one number per phone column/, 'phone columns accept one number each')
 assert.match(bulkUpload, /HQ is required for MR\/ABM under the current posting rules/, 'batch upload preserves the MR/ABM HQ rule')
+assert.match(bulkUpload, /const rolePosition = row\.rolePosition\.trim\(\) \|\| category/, 'batch import supports current and legacy Role/Position columns')
+assert.match(bulkUpload, /findConfidentialContact\(rolePosition\)/, 'custom CSV Role/Position rejects contact details')
+assert.match(bulkUpload, /rolePosition: validCategory \? undefined : rolePosition/, 'custom CSV roles persist apart from the internal filter group')
+const vacancyForm = await read('src/components/VacancyForm.tsx')
+assert.match(vacancyForm, /Other — enter manually/, 'the form offers the requested manual Role/Position option')
+assert.match(vacancyForm, /rolePosition: manualRolePosition \? customRolePosition\.trim\(\) : undefined/, 'the form saves the manually entered Role/Position')
+assert.match(vacancyForm, /✨ Generate draft/, 'the form can draft a description from its vacancy details')
+assert.match(vacancyForm, /no external AI service is called/, 'description drafting does not leak data to an unconfigured AI service')
+assert.ok((vacancyForm.match(/<summary[^>]*>Read more<\/summary>/g) ?? []).length >= 3, 'vacancy upload guidance, paste-review help and extra-field help are collapsible under Read more')
+assert.match(vacancyForm, /Paste vacancy notice text or a completed Word template, then review suggested values/)
 assert.deepEqual(bulkTemplate.trim().split(','), VACANCY_CSV_HEADERS, 'the downloadable CSV template has distinct contact and email columns')
 const paymentsStart = admin.indexOf('function PaymentsTab(')
 const paymentsEnd = admin.indexOf('\nfunction ', paymentsStart + 1)
 const paymentsTab = admin.slice(paymentsStart, paymentsEnd)
+const paymentData = await read('src/data/payments.ts')
 assert.ok(paymentsStart >= 0 && paymentsEnd > paymentsStart, 'the payments page is available for layout checks')
 assert.doesNotMatch(paymentsTab, /<table|overflow-x-auto/, 'all payments no longer uses a wide table')
+assert.match(paymentsTab, /type="month"[\s\S]*?aria-label="Filter payments by month"/, 'admin payments can be filtered by calendar month')
+assert.match(paymentsTab, /const periodPayments = monthFilter === 'all'/, 'payment totals and lists use the chosen month')
+assert.match(paymentData, /\.range\(offset, offset \+ pageSize - 1\)/, 'monthly revenue loads every payment page instead of silently stopping at 200 rows')
+assert.match(admin, /REVENUE THIS MONTH/, 'the dashboard revenue card is monthly')
 assert.match(paymentsTab, /space-y-1\.5[\s\S]*?shown\.map\(\(payment\)/, 'all payments uses a compact stack of transaction boxes')
 assert.match(paymentsTab, /className="flex min-w-0 items-center gap-1\.5 rounded-lg border/, 'each all-payments transaction is a single-line box')
 assert.match(paymentsTab, /aria-label=\{`Payment details for \$\{customer\}`\}/, 'payment details remain available in each row')
@@ -163,19 +200,23 @@ assert.deepEqual([...docxTemplate.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'th
 assert.match(docxText, /<w:t[^>]*>Data<\/w:t>/, 'the Word template has a Data column')
 assert.match(docxText, /<w:t[^>]*>Entry<\/w:t>/, 'the Word template has an editable Entry column')
 assert.match(docxText, /<w:t[^>]*>HQ \/ Area<\/w:t>/, 'the editable Word template uses the HQ / Area label')
+assert.match(docxText, /<w:t[^>]*>Role\/Position<\/w:t>/, 'the editable Word template uses Role/Position, not Category')
 assert.doesNotMatch(docxText, /HQ \/ territory|HQ \(MR \/ ABM\)/, 'the editable Word template has no obsolete HQ label')
 assert.match(docxText, /Contact number/, 'the Word template covers contact details')
 assert.match(docxText, /Alternate contact number/, 'the alternate contact has its own field')
 assert.match(docxText, /Manager email/, 'email has its own field')
 assert.match(docxText, /50 characters/, 'each Word entry box is sized for a long response')
+assert.equal((docxText.match(/w:trHeight w:val="720" w:hRule="atLeast"/g) ?? []).length, 15, 'the compact Word template keeps all standard fields within its single-page layout')
+assert.match(docxText, /w:trHeight w:val="1500" w:hRule="atLeast"/, 'the single-page Word template still gives the job description a larger entry area')
 assert.match(imageTemplate, />Data</, 'the image template has a Data column')
 assert.match(imageTemplate, />Entry</, 'the image template has an Entry column')
 assert.match(imageTemplate, />HQ \/ Area</, 'the image template source uses the HQ / Area label')
+assert.match(imageTemplate, />Role\/Position</, 'the image template source uses Role/Position, not Category')
 assert.doesNotMatch(imageTemplate, /HQ \(MR \/ ABM\)/, 'the image template source has no obsolete HQ label')
 assert.match(imageTemplate, /Contact number/i, 'the image template covers contact details')
 assert.match(imageTemplate, /50 characters/i, 'the image template advertises the entry capacity')
-assert.match(form, /room for at least 50 characters in each Entry box/, 'admins are told the entry capacity')
-assert.match(form, /Fill the Word file directly, then copy its text into “Paste text”/, 'admins are told how to complete and upload the editable document')
+assert.match(form, /fill the Entry column, copy the table, and paste it here/, 'admins are told how to use the Word template without photo OCR')
+assert.match(form, /normalizeVacancyEntryTableText\(sourceText\.trim\(\)\)/, 'pasted Word tables are normalized from Data/Entry columns before extraction')
 assert.doesNotMatch(form, /applyExtractedFields\((?:extracted|fields)\)(?!\s*\))/, 'reading text must not fill the form by itself')
 assert.match(form, /setReview\(\{ fields: extracted, picked, extras \}\)/, 'the reader only lists what it found, with any extra details')
 assert.match(form, /for \(const \{ key \} of found\) picked\[key\] = !draftValue\(key\)\.trim\(\)/, 'fields the admin already typed start unticked')
@@ -193,7 +234,7 @@ assert.match(admin, /const restoredTitle = await restoreJob\(target\.id\)/, 'Und
 assert.match(admin, /action\?: \{ label: string; run: \(\) => void \}/, 'the notice can carry one action')
 
 // ------------------------------------------------- the list reads as a table
-assert.match(admin, />\s*Vacancy\s*<\/span>\s*<span>City<\/span>\s*<span>Category<\/span>\s*<span>Posted<\/span>/, 'the vacancy list has column headings')
+assert.match(admin, />\s*Vacancy\s*<\/span>\s*<span>City<\/span>\s*<span>Role\/Position<\/span>\s*<span>Posted<\/span>/, 'the vacancy list has user-facing Role/Position column headings')
 assert.match(admin, /sm:grid-cols-\[minmax\(0,2\.2fr\)_minmax\(0,1fr\)_minmax\(0,1fr\)_minmax\(0,0\.8fr\)_auto\]/, 'each row uses the same column tracks as the heading')
 assert.match(admin, /function postedOn\(ms: number\): string/, 'the Posted column has one shared date format')
 assert.doesNotMatch(admin, /w-10 h-10 rounded-lg bg-brand-100/, 'the stacked avatar card is gone')

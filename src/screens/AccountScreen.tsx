@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button, Card, Badge } from '../components/ui'
 import { Logo } from '../components/Logo'
 import { ProfileEditor, type ProfileEditorHandle } from '../components/ProfileEditor'
@@ -8,7 +8,6 @@ import { AboutPage } from './AboutPage'
 import { HelpPage } from './HelpPage'
 import { isSubscribed, type User } from '../data/auth'
 import { isAndroidApp } from '../data/platform'
-import { CREATOR } from '../data/creator'
 import type { ResumeRecord } from '../data/resume'
 import { getProfile, refreshProfile, saveProfile, type Profile } from '../data/profile'
 import { deleteProfilePhoto, profilePhotoUrl, uploadProfilePhoto } from '../data/profilePhoto'
@@ -39,6 +38,10 @@ export function AccountScreen({
   const photoInput = useRef<HTMLInputElement>(null)
   const [photoPath, setPhotoPath] = useState(() => getProfile(user.email).photoPath ?? '')
   const [profileEditing, setProfileEditing] = useState(false)
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const onProfileReady = useCallback((hasExistingProfile: boolean) => {
+    setProfileEditing(!hasExistingProfile)
+  }, [])
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const visiblePhotoUrl = photoPath ? photoUrl : null
   const [photoBusy, setPhotoBusy] = useState(false)
@@ -63,6 +66,44 @@ export function AccountScreen({
   const [pingBusy, setPingBusy] = useState(false)
   const [unlockNote, setUnlockNote] = useState('')
   const [unlockBusy, setUnlockBusy] = useState(false)
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    let previousHeight = viewport?.height ?? window.innerHeight
+    let blurTimer = 0
+    const mobileTouchDevice = navigator.maxTouchPoints > 0 && Math.min(window.innerWidth, window.screen.width) < 900
+    const isTextEntry = (target: EventTarget | null) => target instanceof HTMLElement
+      && target.matches('input:not([type="button"]):not([type="checkbox"]), textarea, select, [contenteditable="true"]')
+    const syncKeyboardVisibility = () => {
+      const height = viewport?.height ?? window.innerHeight
+      if (height < previousHeight - 120) {
+        setKeyboardOpen(true)
+      } else if (height > previousHeight - 40) {
+        setKeyboardOpen(false)
+        previousHeight = height
+      }
+    }
+    const onFocusIn = (event: FocusEvent) => {
+      if (mobileTouchDevice && isTextEntry(event.target)) setKeyboardOpen(true)
+    }
+    const onFocusOut = () => {
+      window.clearTimeout(blurTimer)
+      blurTimer = window.setTimeout(() => {
+        if (!isTextEntry(document.activeElement)) setKeyboardOpen(false)
+      }, 120)
+    }
+    viewport?.addEventListener('resize', syncKeyboardVisibility)
+    window.addEventListener('resize', syncKeyboardVisibility)
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
+    return () => {
+      viewport?.removeEventListener('resize', syncKeyboardVisibility)
+      window.removeEventListener('resize', syncKeyboardVisibility)
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('focusout', onFocusOut)
+      window.clearTimeout(blurTimer)
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -217,6 +258,7 @@ export function AccountScreen({
         phone={user.phone}
         readOnly={!profileEditing}
         onRequestEdit={() => setProfileEditing(true)}
+        onProfileReady={onProfileReady}
         onSaved={(profile) => {
           setProfileEditing(false)
           onSubscribed({ ...user, phone: profile.phone })
@@ -256,17 +298,11 @@ export function AccountScreen({
           <div className="flex items-center gap-3 min-w-0">
             <Logo size={40} />
             <div className="min-w-0">
-              <div className="text-sm font-bold text-slate-900">MedRep Connect Pro</div>
-              <div className="text-xs text-slate-500 truncate">{CREATOR.tagline}</div>
-              <div className="text-[11px] text-slate-500 truncate">Operated by {CREATOR.owner} · {CREATOR.location}</div>
-              <a href={`mailto:${CREATOR.contactEmail}`} className="text-[11px] font-semibold text-blue-600 underline underline-offset-2 truncate block">
-                {CREATOR.contactEmail}
-              </a>
+              <div className="whitespace-nowrap text-sm font-bold text-slate-900">MedRep Connect Pro</div>
             </div>
           </div>
           <button type="button" onClick={onVersionTap} aria-label="App version. Tap five times to open diagnostics." title="Tap 5 times to open diagnostics" className="min-h-11 min-w-20 shrink-0 rounded-xl px-2 py-1 text-right">
             <Badge color="brand">{APP_VERSION_LABEL}</Badge>
-            <div className="mt-1 text-[10px] font-mono text-slate-400">{APP_BUILD_LABEL}</div>
           </button>
         </div>
         {/* The paragraphs behind this card live on their own pages. */}
@@ -426,9 +462,9 @@ export function AccountScreen({
         </section>
       )}
 
-      {/* Unified frozen (sticky) action bar: Save primary, Logout secondary.
-          Both buttons are anchored together so users don't accidentally hit Logout
-          when trying to save, and they can't miss either action. */}
+      {/* Keep account actions out of the way of the on-screen keyboard. */}
+      {!keyboardOpen && <>
+      {/* Unified frozen (sticky) action bar: Save primary, Logout secondary. */}
       <div
         className="fixed inset-x-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 pt-2.5"
         // The native banner always sits at the very bottom of the screen, so
@@ -455,6 +491,7 @@ export function AccountScreen({
         </div>
       </div>
       <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+      </>}
     </div>
   )
 }

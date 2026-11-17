@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+import { Preferences } from '@capacitor/preferences'
 import { createClient, type User as SupabaseUser } from '@supabase/supabase-js'
 
 /**
@@ -10,11 +12,62 @@ const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4uiy6UZHkIjzAZssMfLWKQ_TwG6x7f
 export const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL).replace(/\/+$/, '')
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || DEFAULT_SUPABASE_ANON_KEY
 
+/**
+ * Persist the Supabase refresh token in native Preferences, with localStorage as
+ * a second copy/fallback. Preferences survives app restarts and WebView cleanup;
+ * the browser copy also covers a cold-start race before the native bridge is
+ * ready. Import existing localStorage sessions into Preferences on first read.
+ */
+export const supabaseAuthStorage = {
+  async getItem(key: string): Promise<string | null> {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const stored = await Preferences.get({ key })
+        if (stored.value !== null) return stored.value
+        const legacy = localStorage.getItem(key)
+        if (legacy !== null) {
+          await Preferences.set({ key, value: legacy })
+          localStorage.removeItem(key)
+        }
+        return legacy
+      } catch {
+        try { return localStorage.getItem(key) } catch { return null }
+      }
+    }
+    try { return localStorage.getItem(key) } catch { return null }
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    let nativeWriteSucceeded = false
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Preferences.set({ key, value })
+        nativeWriteSucceeded = true
+      } catch {
+        // Keep the WebView copy as a fallback if the native bridge is not ready.
+      }
+    }
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      // Native storage is the durable source on mobile; web storage may be disabled.
+      if (!nativeWriteSucceeded && !Capacitor.isNativePlatform()) throw new Error('Auth session could not be persisted.')
+      if (!nativeWriteSucceeded) throw new Error('Auth session could not be persisted to native or web storage.')
+    }
+  },
+  async removeItem(key: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      try { await Preferences.remove({ key }) } catch { /* continue with web fallback */ }
+    }
+    try { localStorage.removeItem(key) } catch { /* storage may be disabled */ }
+  },
+}
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     persistSession: true,
+    storage: supabaseAuthStorage,
     storageKey: 'mrc_supabase_auth_v1',
   },
 })

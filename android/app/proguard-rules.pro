@@ -41,6 +41,8 @@
 -keep class com.capacitorjs.plugins.app.** { *; }
 # Share plugin (system share sheet for passing a vacancy on).
 -keep class com.capacitorjs.plugins.share.** { *; }
+# Preferences plugin (durable native Supabase auth-session storage).
+-keep class com.capacitorjs.plugins.preferences.** { *; }
 
 # --------------------------------------------------------------- Google Mobile Ads ---
 -keep class com.google.android.gms.ads.** { *; }

@@ -18,7 +18,7 @@
 <line x1="80" y1="600" x2="1120" y2="600" stroke="#94a3b8" stroke-width="2"/>
 <line x1="468" y1="540" x2="1096" y2="540" stroke="#d1d9e6" stroke-width="2"/>
 <line x1="468" y1="581" x2="1096" y2="581" stroke="#d1d9e6" stroke-width="2"/>
-<text x="105" y="672" font-size="25" font-weight="700">Category</text>
+<text x="105" y="672" font-size="25" font-weight="700">Role/Position</text>
 <line x1="80" y1="735" x2="1120" y2="735" stroke="#94a3b8" stroke-width="2"/>
 <line x1="468" y1="675" x2="1096" y2="675" stroke="#d1d9e6" stroke-width="2"/>
 <line x1="468" y1="716" x2="1096" y2="716" stroke="#d1d9e6" stroke-width="2"/>

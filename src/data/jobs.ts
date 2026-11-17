@@ -1,7 +1,7 @@
 import { read, remove } from './storage'
 import { supabase } from './supabase'
 import { broadcast, publish } from './notifications'
-import { deleteReasonProblem } from './vacancyRules'
+import { deleteReasonProblem, isWithinVacancyRestoreWindow, VACANCY_RESTORE_WINDOW_MS } from './vacancyRules'
 import { matchesCity, matchesHq } from './jobFilters'
 import { cleanExtraFields, type ExtraField } from './extraFields'
 import { parseFillCheck, type FillCheck } from './fillCheck'
@@ -58,13 +58,18 @@ export type Job = {
   location: string
   hq?: string
   division?: string
+  /** Internal filter group; custom positions use Field plus rolePosition. */
   category: Exclude<JobCategory, 'All'>
+  /** Optional public free-text role label when Other/manual entry is selected. */
+  rolePosition?: string
   salary?: string
   experience?: string
   qualification?: string
   ageLimit?: string
   vacancyCount?: string
   description?: string
+  /** Private Supabase Storage object; revealed only with full contact access. */
+  posterPath?: string
   pinned?: boolean
   postedAt: number
   postedBy?: string
@@ -72,6 +77,10 @@ export type Job = {
   extraFields?: ExtraField[]
   /** "Is this still open?" — the ask to the team and their answer. */
   fillCheck?: FillCheck
+}
+
+export function rolePositionLabel(job: Pick<Job, 'category' | 'rolePosition'>): string {
+  return job.rolePosition?.trim() || job.category
 }
 
 const LEGACY_JOBS_KEY = 'mrc_jobs_v1'
@@ -117,10 +126,12 @@ function parseJob(value: unknown): Job | null {
     managerAltPhone: typeof row.managerAltPhone === 'string' ? row.managerAltPhone : undefined,
     managerEmail: typeof row.managerEmail === 'string' ? row.managerEmail : undefined,
     description: typeof row.description === 'string' ? row.description : undefined,
+    posterPath: typeof row.posterPath === 'string' ? row.posterPath : undefined,
     location: row.location,
     hq: typeof row.hq === 'string' ? row.hq : undefined,
     division: typeof row.division === 'string' ? row.division : undefined,
     category: row.category as Job['category'],
+    rolePosition: typeof row.rolePosition === 'string' ? row.rolePosition : undefined,
     salary: typeof row.salary === 'string' ? row.salary : undefined,
     experience: typeof row.experience === 'string' ? row.experience : undefined,
     qualification: typeof row.qualification === 'string' ? row.qualification : undefined,
@@ -191,7 +202,7 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
   const notice = broadcast({
     kind: 'job-posted',
     jobTitle: job.title,
-    category: job.category,
+    category: rolePositionLabel(job),
     location: job.location,
     pinned: job.pinned,
   }, { meta: { jobId: job.id } })
@@ -201,7 +212,7 @@ export async function addJob(input: Omit<Job, 'id' | 'postedAt'>): Promise<Job> 
 
 const CONTENT_FIELDS: (keyof Job)[] = [
   'title', 'company', 'manager', 'contact', 'managerAltPhone', 'managerEmail',
-  'location', 'hq', 'division', 'category', 'salary', 'experience', 'qualification', 'ageLimit', 'vacancyCount', 'description',
+  'location', 'hq', 'division', 'category', 'rolePosition', 'salary', 'experience', 'qualification', 'ageLimit', 'vacancyCount', 'description',
   'extraFields',
 ]
 
@@ -264,6 +275,7 @@ export type DeletedVacancy = {
   company: string
   location: string
   category: string
+  rolePosition?: string
   salary?: string
   experience?: string
   qualification?: string
@@ -272,16 +284,18 @@ export type DeletedVacancy = {
   description?: string
   postedAt: number
   deletedAt: number
+  restoreUntil: number
+  restoreExpired: boolean
   deletedBy: string
   deleteReason: string
-  /** True only when the tombstone still carries the vacancy, so it can return. */
+  /** True only when the row has its body and remains inside the 48-hour window. */
   recoverable: boolean
   /** True when title and friends came from the activity log, not the row. */
   detailsFromAudit: boolean
 }
 
 type DeletedRow = { id: string; data: unknown }
-type AuditSnapshot = { title: string; company: string; location: string; category: string }
+type AuditSnapshot = { title: string; company: string; location: string; category: string; rolePosition: string; deletedAt: number }
 
 /**
  * The last thing the activity log knows about each deleted vacancy. Used only
@@ -292,17 +306,19 @@ async function auditSnapshots(): Promise<Map<string, AuditSnapshot>> {
   const snapshots = new Map<string, AuditSnapshot>()
   const { data, error } = await supabase
     .from('vacancy_audit')
-    .select('vacancy_id,title,company,location,category,created_at')
+    .select('vacancy_id,title,company,location,category,role_position,action,created_at')
     .order('created_at', { ascending: false })
     .limit(500)
   if (error) return snapshots
-  for (const row of (data ?? []) as { vacancy_id: string; title: string; company: string; location: string; category: string }[]) {
+  for (const row of (data ?? []) as { vacancy_id: string; title: string; company: string; location: string; category: string; role_position?: string; action: string; created_at: string }[]) {
     const current = snapshots.get(row.vacancy_id)
     const next = {
       title: row.title ?? '',
       company: row.company ?? '',
       location: row.location ?? '',
       category: row.category ?? '',
+      rolePosition: row.role_position ?? '',
+      deletedAt: row.action === 'deleted' ? new Date(row.created_at).getTime() : 0,
     }
     // Newest first: keep the first row that actually carries a title.
     if (!current || (!current.title && next.title)) snapshots.set(row.vacancy_id, next)
@@ -329,10 +345,14 @@ export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
     const keptTitle = text('title').trim()
     const keptLocation = text('location').trim()
     const keptCategory = text('category').trim()
-    // A restorable tombstone must carry the three fields a vacancy cannot live
-    // without; anything less is an old delete.
-    const recoverable = Boolean(keptTitle && keptLocation && keptCategory)
     const audit = snapshots.get(row.id)
+    const deletedAt = typeof from.deletedAt === 'number' ? from.deletedAt : audit?.deletedAt ?? 0
+    const restoreUntil = deletedAt ? deletedAt + VACANCY_RESTORE_WINDOW_MS : 0
+    const withinRestoreWindow = isWithinVacancyRestoreWindow(deletedAt)
+    // A restorable tombstone needs its original body and must still be inside
+    // the 48-hour period enforced by the database.
+    const recoverable = Boolean(keptTitle && keptLocation && keptCategory) && withinRestoreWindow
+    const restoreExpired = Boolean(deletedAt) && !withinRestoreWindow
     const detailsFromAudit = !keptTitle && Boolean(audit?.title)
     return {
       id: row.id,
@@ -340,6 +360,7 @@ export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
       company: text('company') || audit?.company || '',
       location: keptLocation || audit?.location || '',
       category: keptCategory || audit?.category || '',
+      rolePosition: text('rolePosition') || audit?.rolePosition || undefined,
       salary: text('salary') || undefined,
       experience: text('experience') || undefined,
       qualification: text('qualification') || undefined,
@@ -347,7 +368,9 @@ export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
       vacancyCount: text('vacancyCount') || undefined,
       description: text('description') || undefined,
       postedAt: typeof from.postedAt === 'number' ? from.postedAt : 0,
-      deletedAt: typeof from.deletedAt === 'number' ? from.deletedAt : 0,
+      deletedAt,
+      restoreUntil,
+      restoreExpired,
       deletedBy: text('deletedBy'),
       deleteReason: text('deleteReason'),
       recoverable,
@@ -357,56 +380,18 @@ export async function loadDeletedVacancies(): Promise<DeletedVacancy[]> {
 }
 
 /**
- * Undo a delete: one server call (`restore_vacancy`), which clears the
- * tombstone, checks the caller's role, and writes a "restored" line to the
- * activity log. The older client-side update is kept as a fallback for a
- * database that has not had `vacancy_restore.sql` applied yet, so Undo still
- * works during a deployment.
+ * Restore goes through the database so the role, retained body and 48-hour
+ * deadline are checked atomically. Never fall back to a client-side write.
  */
 export async function restoreJob(id: string): Promise<string> {
   if (!id) throw new Error('Choose the vacancy to restore and try again.')
 
   const { data, error } = await supabase.rpc('restore_vacancy', { p_id: id })
-  if (!error) {
-    const payload = (data ?? {}) as { ok?: boolean; title?: string; error?: string }
-    if (payload.error) throw new Error(payload.error)
-    await loadAdminJobs().catch(() => undefined)
-    return typeof payload.title === 'string' ? payload.title : ''
-  }
-
-  const missingFunction = error.code === 'PGRST202' || /restore_vacancy/.test(error.message || '')
-  if (!missingFunction) throw new Error(error.message || 'The vacancy could not be restored. Try again.')
-
-  // Fallback: the pre-migration path, scoped to one row and verified.
-  const { data: row, error: readError } = await supabase
-    .from('vacancies')
-    .select('id,data')
-    .eq('id', id)
-    .maybeSingle()
-  if (readError) throw new Error('That vacancy could not be read. Reload and try again.')
-  if (!row) throw new Error('That vacancy no longer exists.')
-  const previous = (row.data ?? {}) as Record<string, unknown>
-  if (previous.deleted !== true) throw new Error('That vacancy is already live.')
-  if (typeof previous.title !== 'string' || !previous.title.trim()
-    || typeof previous.location !== 'string' || !previous.location.trim()
-    || typeof previous.category !== 'string') {
-    throw new Error('This vacancy was deleted before its details were kept, so it cannot be restored. Post it again instead.')
-  }
-  const restored: Record<string, unknown> = { ...previous }
-  delete restored.deleted
-  delete restored.deletedAt
-  delete restored.deleteReason
-  delete restored.deletedBy
-  restored.restoredAt = Date.now()
-  const { data: updated, error: updateError } = await supabase.from('vacancies').update({
-    data: restored,
-    synced_at: new Date().toISOString(),
-  }).eq('id', id).select('id')
-  if (updateError) throw new Error('The vacancy could not be restored. Check permissions and try again.')
-  const changed = Array.isArray(updated) ? updated.length : 0
-  if (changed !== 1) throw new Error(`The database changed ${changed} rows for one restore. Reload the list before trying again.`)
+  if (error) throw new Error(error.message || 'The vacancy could not be restored. Update the Supabase vacancy restore migration and try again.')
+  const payload = (data ?? {}) as { ok?: boolean; title?: string; error?: string }
+  if (payload.error) throw new Error(payload.error)
   await loadAdminJobs().catch(() => undefined)
-  return typeof previous.title === 'string' ? previous.title : ''
+  return typeof payload.title === 'string' ? payload.title : ''
 }
 
 /**
@@ -470,7 +455,7 @@ export function filterJobs(
   return jobs.filter((j) => {
     if (opts.category && opts.category !== 'All' && j.category !== opts.category) return false
     if (q) {
-      const hay = `${j.title} ${j.company ?? ''} ${j.category} ${j.description ?? ''}`.toLowerCase()
+      const hay = `${j.title} ${j.company ?? ''} ${rolePositionLabel(j)} ${j.description ?? ''}`.toLowerCase()
       if (!hay.includes(q)) return false
     }
     if (loc && !j.location.toLowerCase().includes(loc)) return false

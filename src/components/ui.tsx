@@ -10,6 +10,23 @@ import { useBackHandler } from './useBackHandler'
  * for thumbs on a phone and for the tablet the app is mostly used on.
  */
 
+export function RefreshIconButton({ onClick, label = 'Refresh app' }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 7v5h-5M4 17v-5h5" />
+        <path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" />
+      </svg>
+    </button>
+  )
+}
+
 export function Button({
   children,
   variant = 'primary',

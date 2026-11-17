@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Badge, Button, Card, Input, Label, Modal, Select, Textarea } from '../components/ui'
+import { Badge, Button, Card, Input, Label, Modal, RefreshIconButton, Select, Textarea } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useBackHandler } from '../components/useBackHandler'
 import { VacancyForm } from '../components/VacancyForm'
@@ -11,6 +11,7 @@ import { APP_VERSION_LABEL } from '../data/version'
 import { currentUser, deleteUserAccount, getUsers, grantManualAccess, refreshAdminUsers, type User } from '../data/auth'
 import {
   CATEGORIES,
+  rolePositionLabel,
   deleteJob,
   getJobs,
   getLegacyJobs,
@@ -26,7 +27,9 @@ import {
 } from '../data/jobs'
 import { fillCheckState, fillCheckWaiting, FILL_CHECK_LABELS, fillCheckWhatsAppUrl } from '../data/fillCheck'
 import {
+  currentPaymentMonthKey,
   deleteReasonProblem,
+  paymentMonthKey,
   paymentStatusLabel,
   paymentStatusTone,
   paymentTotals,
@@ -213,19 +216,22 @@ export function AdminScreen({ onExit }: { onExit: () => void }) {
           <div className="min-w-0 flex-1">
             <Wordmark size="text-sm" />
           </div>
-          <button
-            type="button"
-            title="Open admin menu"
-            aria-label="Open admin menu"
-            aria-haspopup="dialog"
-            aria-expanded={adminMenuOpen}
-            onClick={() => setAdminMenuOpen(true)}
-            className="w-10 h-10 shrink-0 rounded-xl bg-slate-100 ring-1 ring-slate-200 hover:bg-slate-200 text-slate-700 grid place-items-center transition active:scale-95"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+          <div className="inline-flex shrink-0 items-center gap-2">
+            <RefreshIconButton onClick={() => window.location.reload()} />
+            <button
+              type="button"
+              title="Open admin menu"
+              aria-label="Open admin menu"
+              aria-haspopup="dialog"
+              aria-expanded={adminMenuOpen}
+              onClick={() => setAdminMenuOpen(true)}
+              className="w-10 h-10 shrink-0 rounded-xl bg-slate-100 ring-1 ring-slate-200 hover:bg-slate-200 text-slate-700 grid place-items-center transition active:scale-95"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -487,6 +493,7 @@ function VacanciesTab({ onMutate, onNotice }: {
   const [city, setCity] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
   const [fillFilter, setFillFilter] = useState<'all' | 'unasked' | 'asked' | 'open' | 'filled'>('all')
+  const now = useCurrentTime()
   const [askingId, setAskingId] = useState<string | null>(null)
   // What the table shows: the same rows the server returned, narrowed by the
   // filters above it. Nothing is hidden by default.
@@ -497,7 +504,7 @@ function VacanciesTab({ onMutate, onNotice }: {
   const visibleJobs = useMemo(() => {
     const text = query.trim().toLowerCase()
     return jobs.filter((job) => {
-      if (text && !`${job.title} ${job.company} ${job.location} ${job.category} ${job.manager ?? ''} ${job.postedBy ?? ''}`.toLowerCase().includes(text)) return false
+      if (text && !`${job.title} ${job.company} ${job.location} ${rolePositionLabel(job)} ${job.manager ?? ''} ${job.postedBy ?? ''}`.toLowerCase().includes(text)) return false
       if (city !== 'all' && job.location !== city) return false
       if (filterCategory !== 'all' && job.category !== filterCategory) return false
       if (fillFilter === 'unasked' && fillCheckState(job.fillCheck) !== 'none') return false
@@ -572,6 +579,7 @@ function VacanciesTab({ onMutate, onNotice }: {
       company: item.company,
       location: item.location,
       category: (item.category || 'MR') as Job['category'],
+      rolePosition: item.rolePosition,
     })
     setFormSeq((value) => value + 1)
     setOpen(true)
@@ -770,8 +778,8 @@ function VacanciesTab({ onMutate, onNotice }: {
             <option value="all">All cities</option>
             {cityChoices.map((option) => <option key={option} value={option}>{option}</option>)}
           </Select>
-          <Select aria-label="Filter by category" className="w-auto text-sm" value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
-            <option value="all">All categories</option>
+          <Select aria-label="Filter by Role/Position" className="w-auto text-sm" value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
+            <option value="all">All Role/Positions</option>
             {CATEGORIES.filter((option) => option !== 'All').map((option) => <option key={option} value={option}>{option}</option>)}
           </Select>
           <Select
@@ -818,7 +826,7 @@ function VacanciesTab({ onMutate, onNotice }: {
         <div className="hidden items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]">
           <span>Vacancy</span>
           <span>City</span>
-          <span>Category</span>
+          <span>Role/Position</span>
           <span>Posted</span>
           <span className="text-right">Actions</span>
         </div>
@@ -857,14 +865,14 @@ function VacanciesTab({ onMutate, onNotice }: {
                 )}
                 {/* Phone-only meta, so no column is lost on a small screen. */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
-                  <Badge color="brand">{j.category}</Badge>
+                  <Badge color="brand">{rolePositionLabel(j)}</Badge>
                   <span className="text-xs font-medium text-slate-600">📍 {j.location}</span>
                   <span className="text-xs text-slate-400">· {postedOn(j.postedAt)}</span>
                 </div>
               </div>
               <div className="hidden truncate text-sm text-slate-700 sm:block">{j.location}</div>
               <div className="hidden sm:block">
-                <Badge color="brand">{j.category}</Badge>
+                <Badge color="brand">{rolePositionLabel(j)}</Badge>
               </div>
               <div className="hidden text-xs font-medium text-slate-500 sm:block">{postedOn(j.postedAt)}</div>
               <div className="mt-2.5 flex items-center gap-1.5 sm:mt-0 sm:justify-end">
@@ -930,25 +938,29 @@ function VacanciesTab({ onMutate, onNotice }: {
           >
             <span className="text-sm font-bold text-slate-900">🗑 Deleted vacancies ({deleted.length})</span>
             <span className="text-xs font-semibold text-slate-500">
-              {deletedOpen ? 'Hide' : `Show · ${deleted.filter((item) => item.recoverable).length} can be restored`}
+              {deletedOpen ? 'Hide' : `Show · ${deleted.filter((item) => item.recoverable && item.restoreUntil > now).length} restorable within 48 hours`}
             </span>
           </button>
           {deletedOpen && (
             <div className="divide-y divide-slate-100 border-t border-slate-100">
               {deleted.map((item) => {
                 const open = previewId === item.id
+                const restoreAllowed = item.recoverable && now > 0 && now < item.restoreUntil
+                const restoreExpired = item.deletedAt > 0 && !restoreAllowed
                 return (
                   <div key={item.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-start gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>
                         <div className="truncate text-xs text-slate-600">
-                          {[item.company, item.location, item.category].filter(Boolean).join(' · ') || 'No details recorded'}
+                          {[item.company, item.location, item.rolePosition || item.category].filter(Boolean).join(' · ') || 'No details recorded'}
                         </div>
                         <div className="text-xs text-slate-500">
                           {item.deletedAt
                             ? `Deleted ${new Date(item.deletedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`
                             : 'Deleted'}
+                          {restoreAllowed && ` · Restore until ${new Date(item.restoreUntil).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`}
+                          {restoreExpired && ' · 48-hour restore period ended'}
                           {' · '}{item.deleteReason || 'No reason recorded'}
                           {item.deletedBy ? ` · by ${item.deletedBy}` : ''}
                         </div>
@@ -961,7 +973,7 @@ function VacanciesTab({ onMutate, onNotice }: {
                         >
                           {open ? 'Hide' : '👁 Preview'}
                         </Button>
-                        {item.recoverable ? (
+                        {restoreAllowed ? (
                           <Button
                             variant="secondary"
                             className="px-3 py-1.5 text-xs"
@@ -970,6 +982,8 @@ function VacanciesTab({ onMutate, onNotice }: {
                           >
                             {undoBusyId === item.id ? 'Restoring…' : '↩ Restore'}
                           </Button>
+                        ) : restoreExpired ? (
+                          <span className="self-center text-xs font-semibold text-slate-500">Permanently deleting…</span>
                         ) : (
                           <Button
                             variant="secondary"
@@ -989,7 +1003,7 @@ function VacanciesTab({ onMutate, onNotice }: {
                             ['Title', item.title],
                             ['Company', item.company],
                             ['City', item.location],
-                            ['Category', item.category],
+                            ['Role/Position', item.rolePosition || item.category],
                             ['Salary', item.salary ?? ''],
                             ['Experience', item.experience ?? ''],
                             ['Qualification', item.qualification ?? ''],
@@ -1010,9 +1024,13 @@ function VacanciesTab({ onMutate, onNotice }: {
                             {item.description}
                           </p>
                         )}
-                        {item.recoverable ? (
+                        {restoreAllowed ? (
                           <p className="text-xs font-semibold text-emerald-800">
-                            Everything above is still stored. Restore puts it back exactly as it was.
+                            Everything above is still stored. Restore is available for 48 hours after deletion.
+                          </p>
+                        ) : restoreExpired ? (
+                          <p className="text-xs font-semibold text-slate-600">
+                            The 48-hour restore window has ended. The vacancy will be permanently removed by the database cleanup.
                           </p>
                         ) : (
                           <p className="text-xs font-semibold text-amber-900">
@@ -1249,6 +1267,7 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
   const [decision, setDecision] = useState<{ payment: PaymentRecord; approve: boolean } | null>(null)
   const [details, setDetails] = useState<PaymentRecord | null>(null)
   const [filter, setFilter] = useState<PaymentFilter>('all')
+  const [monthFilter, setMonthFilter] = useState(currentPaymentMonthKey())
 
   useEffect(() => {
     let active = true
@@ -1284,32 +1303,51 @@ function PaymentsTab({ onMutate }: { onMutate: () => void }) {
     }
   }
 
-  const totals = paymentTotals(payments)
+  const periodPayments = monthFilter === 'all'
+    ? payments
+    : payments.filter((payment) => paymentMonthKey(payment.createdAt) === monthFilter)
+  const totals = paymentTotals(periodPayments)
   const attention = (p: PaymentRecord) => Boolean(p.manualReview) || p.status === 'failed' || p.status === 'rejected'
-  const shown = payments.filter((p) => {
+  const shown = periodPayments.filter((p) => {
     if (filter === 'paid') return p.status === 'success' && !p.manualReview
     if (filter === 'pending') return p.status === 'pending' && !p.manualReview
     if (filter === 'attention') return attention(p)
     return true
   })
   const filters: { id: PaymentFilter; label: string; count: number }[] = [
-    { id: 'all', label: 'All', count: payments.length },
+    { id: 'all', label: 'All', count: periodPayments.length },
     { id: 'paid', label: 'Paid', count: totals.paidCount },
     { id: 'pending', label: 'Pending', count: totals.pendingCount },
-    { id: 'attention', label: 'Needs action', count: payments.filter(attention).length },
+    { id: 'attention', label: 'Needs action', count: periodPayments.filter(attention).length },
   ]
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-slate-900">Payments ({payments.length})</h2>
-        <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Payments · {monthFilter === 'all' ? 'All months' : monthFilter}</h2>
+          <p className="text-xs text-slate-500">{periodPayments.length} records · revenue counts successful payments only</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-xs font-semibold text-slate-600">
+            Month
+            <input
+              type="month"
+              aria-label="Filter payments by month"
+              value={monthFilter === 'all' ? '' : monthFilter}
+              onChange={(event) => setMonthFilter(event.target.value || currentPaymentMonthKey())}
+              className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-900"
+            />
+          </label>
+          <Button variant={monthFilter === 'all' ? 'primary' : 'secondary'} onClick={() => setMonthFilter('all')}>All months</Button>
+          <Button variant="secondary" onClick={() => { void reload() }} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+        </div>
       </div>
 
       {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-900 ring-1 ring-red-300">{error}</div>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <SummaryTile label="Paid" value={String(totals.paidCount)} detail={`₹${totals.paidAmount.toLocaleString('en-IN')} total`} tone="text-emerald-700" />
+        <SummaryTile label={monthFilter === 'all' ? 'Paid revenue · all time' : 'Paid revenue · selected month'} value={`₹${totals.paidAmount.toLocaleString('en-IN')}`} detail={`${totals.paidCount} successful payment${totals.paidCount === 1 ? '' : 's'}`} tone="text-emerald-700" />
         <SummaryTile label="Pending" value={String(totals.pendingCount)} detail="waiting for Razorpay" tone="text-amber-700" />
         <SummaryTile label="Waiting bank check" value={String(totals.waitingBankCheck)} detail="UPI transfers" tone="text-amber-700" />
         <SummaryTile label="Failed or rejected" value={String(totals.failedCount)} detail="no plan activated" tone="text-red-700" />
@@ -1938,7 +1976,8 @@ function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; on
   const active = users.filter((u) => u.subscribedUntil && u.subscribedUntil > now)
   const free = users.filter((u) => !u.subscribedUntil || u.subscribedUntil <= now)
   const expiringSoon = active.filter((u) => u.subscribedUntil && u.subscribedUntil - now < 7 * 24 * 3600_000)
-  const revenue = payments.filter((p) => p.status === 'success').reduce((s, p) => s + p.amount, 0)
+  const monthKey = currentPaymentMonthKey(now)
+  const revenue = payments.filter((p) => p.status === 'success' && paymentMonthKey(p.createdAt) === monthKey).reduce((s, p) => s + p.amount, 0)
   const todayStart = now ? new Date(now).setHours(0, 0, 0, 0) : 0
   const newToday = users.filter((u) => u.createdAt >= todayStart).length
   const openTickets = tickets.filter((t) => t.status !== 'resolved').length
@@ -1958,7 +1997,7 @@ function DashboardTab({ requests, onNavigate }: { requests: SupportRequest[]; on
         <StatCard compactLabel="NEW TODAY" value={newToday} color="brand" icon="✨" hint="Open users" onClick={() => onNavigate('users', 'all')} />
         <StatCard compactLabel="OPEN REQUESTS" value={openTickets} color="red" icon="🎫" hint="Open requests" onClick={() => onNavigate('tickets')} />
         <StatCard compactLabel="APPLICATIONS" value={queue.length} color="purple" icon="✉️" hint="Open applications" onClick={() => onNavigate('applications')} />
-        <StatCard compactLabel="REVENUE" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Open payments" onClick={() => onNavigate('payments')} />
+        <StatCard compactLabel="REVENUE THIS MONTH" value={`₹${revenue.toLocaleString('en-IN')}`} color="green" icon="💰" hint="Filter monthly payments" onClick={() => onNavigate('payments')} />
       </div>
 
       <Card className="p-3">

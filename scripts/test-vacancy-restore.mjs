@@ -16,6 +16,7 @@ import { readFile } from 'node:fs/promises'
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 const sql = await read('supabase/vacancy_restore.sql')
+const retention = await read('supabase/vacancy_retention_48_hours.sql')
 const jobs = await read('src/data/jobs.ts')
 const admin = await read('src/screens/AdminScreen.tsx')
 const form = await read('src/components/VacancyForm.tsx')
@@ -42,19 +43,26 @@ assert.match(sql, /REVOKE ALL ON FUNCTION public\.restore_vacancy\(text\) FROM P
 assert.match(sql, /'restored'/, 'the activity log records a restore')
 assert.match(sql, /action IN \('added', 'deleted', 'restored'\)/, 'the audit action check accepts it')
 assert.match(sql, /cannot be restored\. Post it again instead\./, 'a body-less tombstone is refused with a reason')
+assert.match(retention, /deleted_at_ms <= now_ms - 172800000/, 'the database enforces the full 48-hour restore window')
+assert.match(retention, /CREATE OR REPLACE FUNCTION public\.purge_expired_deleted_vacancies\(\)/, 'expired rows have a privileged physical purge')
+assert.match(retention, /DELETE FROM public\.vacancies AS v[\s\S]*data ->> 'deleted'[\s\S]*vacancy_deleted_at_ms/, 'only expired tombstones are permanently deleted')
+assert.match(retention, /cron\.schedule\([\s\S]*'\*\/5 \* \* \* \*'/, 'Supabase runs cleanup every five minutes')
 
 // 3. The client uses it ------------------------------------------------------
 assert.match(jobs, /export async function restoreJob\(id: string\): Promise<string>/, 'restoreJob returns what it restored')
 assert.match(jobs, /supabase\.rpc\('restore_vacancy', \{ p_id: id \}\)/, 'it calls the server function')
-assert.match(jobs, /missingFunction/, 'a database without the migration still undoes the delete')
+assert.doesNotMatch(jobs, /missingFunction|Fallback: the pre-migration path/, 'the client cannot bypass the database restore deadline')
 assert.match(jobs, /recoverable: boolean/, 'the bin says whether a row can come back')
+assert.match(jobs, /restoreUntil: number/, 'the bin exposes the 48-hour deadline')
+assert.match(jobs, /restoreExpired: boolean/, 'the bin reports when the restore period has ended')
 assert.match(jobs, /detailsFromAudit: boolean/, 'and where the details came from')
 assert.match(jobs, /async function auditSnapshots/, 'old tombstones are filled in from the activity log')
 
 // 4. The panel reads the restore back ---------------------------------------
 assert.match(admin, /const \[previewId, setPreviewId\] = useState<string \| null>\(null\)/, 'a row can be previewed')
 assert.match(admin, /👁 Preview/, 'the preview has a button')
-assert.match(admin, /\{item\.recoverable \? \(/, 'only a restorable row offers Restore')
+assert.match(admin, /restoreAllowed \? \(/, 'only a restorable row inside 48 hours offers Restore')
+assert.match(admin, /restoreExpired \? \(/, 'expired rows do not offer restore or repost')
 assert.match(admin, /'↩ Restore'/, 'the restore button is labelled')
 assert.match(admin, /Post it again/, 'an unrestorable row offers the form instead')
 assert.match(admin, /const \[list\] = await Promise\.all\(\[\s*reload\(\)/, 'a restore re-reads the catalogue')
@@ -68,6 +76,7 @@ assert.match(form, /const start = job \?\? seed \?\? null/, 'a saved vacancy win
 assert.doesNotMatch(form, /useState\(job\?\.title/, 'the initial values read through it')
 
 // 6. The migration is in the deployment list ---------------------------------
-assert.match(copy, /supabase\/vacancy_restore\.sql/, 'the SQL is part of the numbered deployment')
+assert.match(copy, /supabase\/vacancy_restore\.sql/, 'the original restore migration is deployed')
+assert.match(copy, /supabase\/vacancy_retention_48_hours\.sql/, 'the 48-hour retention migration is in the numbered deployment')
 
 console.log('vacancy restore: the tombstone keeps the row, restore is a checked server call, and the panel lists, previews and restores — passed')

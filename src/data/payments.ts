@@ -95,14 +95,21 @@ export function getPayments(): PaymentRecord[] {
 
 export async function refreshPayments(): Promise<PaymentRecord[]> {
   const requestGeneration = cacheGeneration
-  const { data, error } = await supabase
-    .from('subscription_payments')
-    .select('id,user_id,plan_id,plan_title,plan_days,amount_paise,payment_method,payment_status,razorpay_order_id,razorpay_payment_id,upi_reference,utr,created_at,paid_at,expires_at')
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (error) throw error
+  const pageSize = 1000
+  const rows: SubscriptionPaymentRow[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('subscription_payments')
+      .select('id,user_id,plan_id,plan_title,plan_days,amount_paise,payment_method,payment_status,razorpay_order_id,razorpay_payment_id,upi_reference,utr,created_at,paid_at,expires_at')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1)
+    if (error) throw error
+    const page = (data ?? []) as unknown as SubscriptionPaymentRow[]
+    rows.push(...page)
+    if (page.length < pageSize) break
+  }
 
-  const records = ((data ?? []) as unknown as SubscriptionPaymentRow[]).map(toPaymentRecord)
+  const records = rows.map(toPaymentRecord)
   if (requestGeneration === cacheGeneration) paymentCache = records
   return records
 }

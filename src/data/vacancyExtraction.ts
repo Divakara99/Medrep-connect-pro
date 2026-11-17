@@ -44,6 +44,47 @@ function cleanLines(text: string): string[] {
     .filter(Boolean)
 }
 
+const WORD_TEMPLATE_LABELS: Record<string, string> = {
+  'job title': 'Title',
+  company: 'Company',
+  'role position': 'Role/Position',
+  'city location': 'Location',
+  'hq area': 'HQ',
+  division: 'Division',
+  'salary incentives': 'Salary',
+  experience: 'Experience',
+  qualification: 'Qualification',
+  'age limit': 'Age limit',
+  'number of openings': 'Number of vacancies',
+  'manager name': 'Manager',
+  'contact number': 'Contact',
+  'alternate contact number': 'Alternate number',
+  'alternate email': 'Alternate number',
+  'manager email': 'Email',
+  'job description': 'Job description',
+}
+
+/** Convert copied Word-table rows (tab-separated Data and Entry columns) to labeled field lines. */
+export function normalizeVacancyEntryTableText(source: string): string {
+  const lines = source.replace(/\r\n?/g, '\n').split('\n')
+  const headerIndex = lines.findIndex((line) => {
+    const cells = line.split('\t').map((cell) => cell.trim().toLowerCase())
+    return cells.length >= 2 && cells[0] === 'data' && cells[1] === 'entry'
+  })
+  if (headerIndex < 0) return source
+
+  const normalized: string[] = []
+  for (const line of lines.slice(headerIndex + 1)) {
+    const cells = line.split('\t')
+    if (cells.length < 2) continue
+    const label = cells[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const field = WORD_TEMPLATE_LABELS[label]
+    const value = cells.slice(1).join(' ').replace(/\s+/g, ' ').trim()
+    if (field && value && value !== '—' && value !== '-') normalized.push(`${field}: ${value}`)
+  }
+  return normalized.length > 0 ? normalized.join('\n') : source
+}
+
 function cleanValue(value: string): string {
   return value
     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, ' ')
@@ -100,6 +141,15 @@ function findCategory(text: string): Exclude<JobCategory, 'All'> | undefined {
     ['Field', /\bfield\s+(?:sales|force|role)\b/i],
   ]
   return checks.find(([, pattern]) => pattern.test(text))?.[0]
+}
+
+function explicitRoleCategory(lines: string[]): Exclude<JobCategory, 'All'> | undefined {
+  for (const line of lines) {
+    const match = line.match(/^\s*(?:role\s*[/|]?\s*position|position|role)\s*[:：|·•–—-]\s*(.+)$/i)
+    if (!match) continue
+    return findCategory(match[1]) ?? 'Field'
+  }
+  return undefined
 }
 
 function categoryTitle(category?: Exclude<JobCategory, 'All'>): string | undefined {
@@ -237,7 +287,7 @@ export function extractVacancyFields(source: string): VacancyExtraction {
   const consumed = new Set<number>()
   const result: VacancyExtraction = {}
 
-  const category = findCategory(categorySourceText(lines))
+  const category = explicitRoleCategory(lines) ?? findCategory(categorySourceText(lines))
   if (category) result.category = category
 
   const titleValue = readFirst(lines, /^\s*(?:job\s+title|title|designation|role|position)\s*(?:[:：|·•–—-]\s*)?(.*)$/i, consumed)

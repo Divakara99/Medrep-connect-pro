@@ -159,8 +159,8 @@ export function HomeScreen({
                 <option value="All">HQ: All</option>
                 {headquarters.map((h) => <option key={h} value={h}>HQ: {h}</option>)}
               </Select>
-              <Select aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value as JobCategory)}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>Category: {c}</option>)}
+              <Select aria-label="Filter by Role/Position" value={category} onChange={(e) => setCategory(e.target.value as JobCategory)}>
+                {CATEGORIES.map((c) => <option key={c} value={c}>Role/Position: {c}</option>)}
               </Select>
               <Select aria-label="Filter by experience" value={experience} onChange={(e) => setExperience(e.target.value)}>
                 {EXP_OPTIONS.map((e) => <option key={e} value={e}>Exp: {e}</option>)}

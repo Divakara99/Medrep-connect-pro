@@ -1,7 +1,7 @@
 // The text that leaves the app when someone shares a vacancy.
 //
 // Anyone — free or subscribed — may share a job with a friend. What they share
-// is the vacancy as everybody can already see it: role, category, city, HQ,
+// is the vacancy as everybody can already see it: role, Role/Position, city, HQ,
 // division, experience, qualification, salary, vacancies, posted date and the
 // public description. Contact information never travels: no company name, no
 // manager name, no email, no phone numbers. Those stay behind the paywall and
@@ -19,6 +19,7 @@ export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=in.
 export type ShareableVacancy = {
   title?: string
   category?: string
+  rolePosition?: string
   location?: string
   hq?: string
   division?: string
@@ -58,7 +59,7 @@ function postedOn(ts?: number): string {
 export function shareJobText(job: ShareableVacancy): string {
   const rows: Array<[string, string | undefined]> = [
     ['Role', job.title],
-    ['Category', job.category],
+    ['Role/Position', job.rolePosition || job.category],
     ['City', job.location],
     ['HQ', (job.hq || '').split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean).join(', ')],
     ['Division', job.division],

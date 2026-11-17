@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Button, Input, Select, Textarea, Card, Badge } from './ui'
-import { getProfile, newEducation, newExperience, refreshProfile, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
+import { getProfile, hasPersistedProfile, newEducation, newExperience, refreshProfile, saveProfile, profileCompletionIssues, type Education, type Experience, type Profile } from '../data/profile'
 import { updateCurrentPhone } from '../data/auth'
 import type { ResumeRecord } from '../data/resume'
 import { ResumeCard } from './ResumeCard'
@@ -21,9 +21,10 @@ export const ProfileEditor = forwardRef<
     onResumeChange?: (resume: ResumeRecord | null) => void
     readOnly?: boolean
     onRequestEdit?: () => void
+    onProfileReady?: (hasExistingProfile: boolean) => void
   }
 >(function ProfileEditor(
-  { email, phone, onSaved, onResumeChange, readOnly = false, onRequestEdit },
+  { email, phone, onSaved, onResumeChange, readOnly = false, onRequestEdit, onProfileReady },
   ref,
 ) {
   const [p, setP] = useState<Profile>(() => {
@@ -37,6 +38,8 @@ export const ProfileEditor = forwardRef<
   const [rolesText, setRolesText] = useState(() => (p.preferredRoles ?? []).join(', '))
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(true)
+  const [profileStatusReady, setProfileStatusReady] = useState(false)
   // Never overwrite fields the user has already started typing into.
   const dirty = useRef(false)
 
@@ -51,9 +54,11 @@ export const ProfileEditor = forwardRef<
         ? INDIAN_CITY_SUGGESTIONS.some((city) => city.toLowerCase() === remote.city?.toLowerCase()) ? remote.city : '__other__'
         : '')
       setRolesText((remote.preferredRoles ?? []).join(', '))
+      onProfileReady?.(hasPersistedProfile(email))
+      setProfileStatusReady(true)
     })
     return () => { alive = false }
-  }, [email, phone])
+  }, [email, phone, onProfileReady])
 
 
   function update(patch: Partial<Profile>) {
@@ -124,17 +129,15 @@ export const ProfileEditor = forwardRef<
             <Badge color={completionIssues.length === 0 ? 'green' : 'amber'}>
               {completionIssues.length === 0 ? 'Ready to apply' : `${completionIssues.length} required item${completionIssues.length === 1 ? '' : 's'} left`}
             </Badge>
-            {readOnly && (
-              <button
-                type="button"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-800 ring-1 ring-brand-200 transition hover:bg-brand-100 active:scale-95"
-                onClick={onRequestEdit}
-                aria-label="Enable profile editing"
-                title="Edit profile"
-              >
-                <PencilIcon />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setExpanded((current) => !current)}
+              aria-expanded={expanded}
+              aria-controls="application-profile-fields"
+              className="rounded-lg px-2 py-1 text-xs font-bold text-brand-800 hover:bg-white/70"
+            >
+              {expanded ? 'Collapse' : 'Expand'}
+            </button>
           </div>
         </div>
         {completionIssues.length > 0 ? (
@@ -149,8 +152,23 @@ export const ProfileEditor = forwardRef<
         )}
       </Card>
 
-      <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-90">
-      <ResumeCard onResumeChange={onResumeChange} />
+      {expanded && (
+        <div id="application-profile-fields" className="space-y-4">
+          {readOnly && profileStatusReady && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-brand-50 px-3 text-sm font-bold text-brand-800 ring-1 ring-brand-200 transition hover:bg-brand-100 active:scale-95"
+                onClick={onRequestEdit}
+                aria-label="Edit profile"
+                title="Edit profile"
+              >
+                <PencilIcon /> Edit profile
+              </button>
+            </div>
+          )}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-90">
+          <ResumeCard onResumeChange={onResumeChange} />
 
       <Card className="p-4 space-y-3">
         <div className="font-bold text-slate-900">Personal</div>
@@ -313,7 +331,9 @@ export const ProfileEditor = forwardRef<
           </div>
         ))}
       </Card>
-      </fieldset>
+          </fieldset>
+        </div>
+      )}
 
       {/* Inline save status message above the sticky bar */}
       {saveError && (

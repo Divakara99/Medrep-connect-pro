@@ -4,6 +4,9 @@ import {
   actorLabel,
   deleteReasonProblem,
   headquartersProblem,
+  isWithinVacancyRestoreWindow,
+  paymentMonthKey,
+  VACANCY_RESTORE_WINDOW_MS,
   isPharmaSalesCategory,
   requiredHeadquartersProblem,
   normalizeIndianMobile,
@@ -28,6 +31,11 @@ assert.match(deleteReasonProblem('') ?? '', /at least 5/)
 assert.match(deleteReasonProblem('    ab  ') ?? '', /at least 5/)
 assert.equal(deleteReasonProblem('Position filled'), null)
 assert.match(deleteReasonProblem('x'.repeat(301)) ?? '', /under 300/)
+assert.equal(isWithinVacancyRestoreWindow(1_000, 1_000 + VACANCY_RESTORE_WINDOW_MS - 1), true)
+assert.equal(isWithinVacancyRestoreWindow(1_000, 1_000 + VACANCY_RESTORE_WINDOW_MS), false)
+assert.equal(isWithinVacancyRestoreWindow(2_000, 1_999), false, 'a future deletion timestamp cannot be restored')
+assert.equal(paymentMonthKey(Date.parse('2026-10-31T18:29:59Z')), '2026-10', 'month aggregation uses India time')
+assert.equal(paymentMonthKey(Date.parse('2026-10-31T18:30:00Z')), '2026-11', 'the Indian calendar month boundary is respected')
 
 assert.deepEqual(parseHeadquarters('Hyderabad HO'), ['Hyderabad HO'], 'existing single-string HQs remain supported')
 assert.deepEqual(parseHeadquarters('Hyderabad HO\r\nBengaluru HQ'), ['Hyderabad HO', 'Bengaluru HQ'])
