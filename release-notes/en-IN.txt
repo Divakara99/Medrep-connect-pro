@@ -1,0 +1,3 @@
+Added a quick refresh button for job seekers, administrators and vacancy teams.
+Improved sign-in persistence when reopening the app.
+Vacancy details now show the hiring manager’s email only when provided; your admin email is not shown as a fallback.

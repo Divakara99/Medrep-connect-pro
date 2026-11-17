@@ -103,6 +103,8 @@ assert.match(detail, /paidUnlock\?: \{ available: boolean; busy: boolean; onBuy:
 assert.match(detail, /paidUnlock\?\.available && \(/, 'the ₹5 button appears only when it is available')
 assert.match(detail, /jobUnlockLabel\(\)/, 'the button shows the price and the window')
 assert.match(detail, /Full contact unlocked for this job/, 'an active paid unlock is stated on the sheet')
+assert.match(detail, /<Field label="Manager email" value=\{job\.managerEmail \|\| ''\} \/>/, 'vacancies without a manager email show an empty value, never the app admin email')
+assert.doesNotMatch(detail, /CREATOR\.adminEmail/, 'the app administrator email is not used as a vacancy contact fallback')
 // Both unlock buttons must fit one line on a phone: short labels, no fillers.
 assert.match(buyer, /JOB_UNLOCK_VALIDITY_HOURS = 24/, 'single-job validity is centralized at 24 hours')
 assert.match(buyer, /Unlock this job \(\$\{JOB_UNLOCK_VALIDITY_HOURS\}h\)/, 'the ₹5 button states its 24-hour validity')
