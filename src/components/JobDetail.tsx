@@ -4,7 +4,6 @@ import { Button, Badge, Modal } from './ui'
 import { descriptionPoints, rolePositionLabel, type Job } from '../data/jobs'
 import { isPharmaSalesCategory, normalizeIndianMobile, normalizeWhatsAppNumber, parseHeadquarters } from '../data/vacancyRules'
 import type { ResumeRecord } from '../data/resume'
-import { CREATOR } from '../data/creator'
 import { resumeDownloadUrl } from '../data/resume'
 import { vacancyPosterSignedUrl } from '../data/vacancyPoster'
 import { usePaidUnlockWindow, useUnlockWindow } from './useUnlockWindow'
@@ -258,7 +257,7 @@ export function JobDetail({
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <SensitiveValue label="Company name" value={job.company} />
                 <SensitiveValue label="Manager name" value={job.manager || ''} />
-                <Field label="Manager email" value={job.managerEmail || CREATOR.adminEmail} />
+                <Field label="Manager email" value={job.managerEmail || ''} />
                 <SensitiveValue label="ABM/ASM number" value={job.contact || ''} />
                 <SensitiveValue label="Manager alternate number" value={normalizeIndianMobile(job.managerAltPhone || '')} plus />
                 <Field label="Posted on" value={postedOn(job.postedAt)} />
